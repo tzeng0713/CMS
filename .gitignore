@@ -1,0 +1,29 @@
+# Dependencies
+frontend/node_modules/
+
+# Build outputs
+frontend/dist/
+frontend/.angular/
+backend/target/
+
+# Runtime files
+logs/
+uploads/
+backend/uploads/
+
+# Local tools and generated artifacts
+tools/
+outputs/
+.agents/
+.codex/
+
+# Local documents and source spreadsheets
+*.docx
+*.xlsx
+PROJECT_AUDIT.md
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+*.log
+*.tmp

@@ -1,0 +1,254 @@
+-- CMS 客戶管理資訊系統 MySQL 建表與 Demo 假資料
+-- 使用方式：
+--   mysql -u root -p < table.txt
+--
+-- Demo 登入帳號：
+--   manager / password
+--   supervisor / password
+--   staff / password
+
+CREATE DATABASE IF NOT EXISTS cms
+  CHARACTER SET utf8mb4
+  COLLATE utf8mb4_unicode_ci;
+
+USE cms;
+
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS performance_bonuses;
+DROP TABLE IF EXISTS sales_targets;
+DROP TABLE IF EXISTS refunds;
+DROP TABLE IF EXISTS charge_lists;
+DROP TABLE IF EXISTS rent_payments;
+DROP TABLE IF EXISTS contracts;
+DROP TABLE IF EXISTS customers;
+DROP TABLE IF EXISTS office_contacts;
+DROP TABLE IF EXISTS staff;
+DROP TABLE IF EXISTS offices;
+DROP TABLE IF EXISTS branches;
+DROP TABLE IF EXISTS role_permissions;
+SET FOREIGN_KEY_CHECKS = 1;
+
+CREATE TABLE role_permissions (
+  role_permission_id BIGINT PRIMARY KEY,
+  role_name VARCHAR(50) NOT NULL,
+  scope VARCHAR(100)
+);
+
+CREATE TABLE branches (
+  branch_id BIGINT PRIMARY KEY,
+  branch_name VARCHAR(100) NOT NULL
+);
+
+CREATE TABLE offices (
+  office_id BIGINT PRIMARY KEY,
+  office_no VARCHAR(50),
+  branch_id BIGINT NOT NULL,
+  phone VARCHAR(80),
+  notes VARCHAR(500),
+  CONSTRAINT fk_offices_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
+);
+
+CREATE TABLE office_contacts (
+  office_contact_id BIGINT PRIMARY KEY,
+  office_id BIGINT NOT NULL,
+  person_name VARCHAR(100),
+  phone VARCHAR(80),
+  CONSTRAINT fk_office_contacts_office FOREIGN KEY (office_id) REFERENCES offices(office_id)
+);
+
+CREATE TABLE staff (
+  staff_id BIGINT PRIMARY KEY,
+  role_permission_id BIGINT NOT NULL,
+  branch_id BIGINT DEFAULT 1,
+  staff_name VARCHAR(80) NOT NULL,
+  account VARCHAR(80) NOT NULL,
+  password_hash VARCHAR(255),
+  CONSTRAINT fk_staff_role FOREIGN KEY (role_permission_id) REFERENCES role_permissions(role_permission_id),
+  CONSTRAINT fk_staff_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
+);
+
+CREATE TABLE customers (
+  customer_id BIGINT PRIMARY KEY,
+  company_name VARCHAR(255) NOT NULL,
+  tax_id VARCHAR(30),
+  status TINYINT DEFAULT 0,
+  rental_item VARCHAR(30),
+  rental_status TINYINT DEFAULT 1,
+  owner_name VARCHAR(100),
+  owner_birthday VARCHAR(30),
+  contact_person VARCHAR(100),
+  phone VARCHAR(100),
+  forwarding_address VARCHAR(255),
+  petty_cash DECIMAL(12,2),
+  referrer VARCHAR(100),
+  notes VARCHAR(1000),
+  registration_type VARCHAR(60),
+  updated_by BIGINT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_customers_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE contracts (
+  contract_id BIGINT PRIMARY KEY,
+  customer_id BIGINT NOT NULL,
+  office_id BIGINT,
+  rental_item VARCHAR(30),
+  rental_status VARCHAR(30),
+  signed_date_text VARCHAR(30),
+  signer_staff_id BIGINT,
+  payment_months INT,
+  start_date_text VARCHAR(30),
+  end_date_text VARCHAR(30),
+  termination_date_text VARCHAR(30),
+  rent DECIMAL(12,2),
+  deposit DECIMAL(12,2),
+  registration_type VARCHAR(60),
+  lease_status VARCHAR(30),
+  lease_image_path VARCHAR(500),
+  updated_by BIGINT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_contracts_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+  CONSTRAINT fk_contracts_office FOREIGN KEY (office_id) REFERENCES offices(office_id),
+  CONSTRAINT fk_contracts_signer_staff FOREIGN KEY (signer_staff_id) REFERENCES staff(staff_id),
+  CONSTRAINT fk_contracts_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE rent_payments (
+  rent_payment_id BIGINT PRIMARY KEY,
+  customer_id BIGINT NOT NULL,
+  contract_id BIGINT NOT NULL,
+  payment_month INT,
+  payment_date_text VARCHAR(30),
+  fee_start_date_text VARCHAR(30),
+  fee_end_date_text VARCHAR(30),
+  amount DECIMAL(12,2),
+  receipt_no VARCHAR(80),
+  note VARCHAR(500),
+  updated_by BIGINT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_rent_payments_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+  CONSTRAINT fk_rent_payments_contract FOREIGN KEY (contract_id) REFERENCES contracts(contract_id),
+  CONSTRAINT fk_rent_payments_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE charge_lists (
+  charge_list_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  customer_id BIGINT NOT NULL,
+  contract_id BIGINT NOT NULL,
+  fee_start_month VARCHAR(20),
+  fee_end_month VARCHAR(20),
+  management_fee DECIMAL(12,2),
+  electricity_fee DECIMAL(12,2),
+  printing_fee DECIMAL(12,2),
+  tax DECIMAL(12,2),
+  advance_payment DECIMAL(12,2),
+  issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_by BIGINT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_charge_lists_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+  CONSTRAINT fk_charge_lists_contract FOREIGN KEY (contract_id) REFERENCES contracts(contract_id),
+  CONSTRAINT fk_charge_lists_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE refunds (
+  refund_id BIGINT PRIMARY KEY,
+  customer_id BIGINT,
+  contract_id BIGINT,
+  company_name VARCHAR(255),
+  reason VARCHAR(500),
+  refund_amount DECIMAL(12,2),
+  note VARCHAR(1000),
+  updated_by BIGINT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_refunds_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
+  CONSTRAINT fk_refunds_contract FOREIGN KEY (contract_id) REFERENCES contracts(contract_id),
+  CONSTRAINT fk_refunds_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE sales_targets (
+  sales_target_id BIGINT PRIMARY KEY,
+  branch_id BIGINT NOT NULL,
+  target_month INT,
+  category VARCHAR(50),
+  target_count INT,
+  CONSTRAINT fk_sales_targets_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
+);
+
+CREATE TABLE performance_bonuses (
+  bonus_id BIGINT PRIMARY KEY,
+  staff_id BIGINT NOT NULL,
+  period VARCHAR(50),
+  net_count INT,
+  bonus_amount DECIMAL(12,2),
+  CONSTRAINT fk_performance_bonuses_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
+);
+
+INSERT INTO role_permissions (role_permission_id, role_name, scope) VALUES
+(1, '主管', '全部分館'),
+(2, '督導秘書', '客戶、合約、租金與退款'),
+(3, '一般秘書', '查詢與新增租金紀錄');
+
+INSERT INTO branches (branch_id, branch_name) VALUES
+(1, '敦化館'),
+(2, '信義館');
+
+INSERT INTO offices (office_id, office_no, branch_id, phone, notes) VALUES
+(1, '101', 1, '02-2776-9001', '主管室旁辦公室'),
+(2, '102', 1, '02-2776-9002 羅r', '標準辦公室'),
+(3, '103', 1, '02-2776-9003 羅r', '小型辦公室'),
+(4, 'S-201', 2, '02-8780-0201', '信義館座位區');
+
+INSERT INTO office_contacts (office_contact_id, office_id, person_name, phone) VALUES
+(1, 1, '櫃台', '02-2776-9000'),
+(2, 2, '羅先生', '0907637698');
+
+INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, password_hash) VALUES
+(1, 1, 1, '系統主管', 'manager', '{noop}password'),
+(2, 2, 1, '督導秘書', 'supervisor', '{noop}password'),
+(3, 3, 2, '一般秘書', 'staff', '{noop}password');
+
+INSERT INTO customers (
+  customer_id, company_name, tax_id, status, rental_item, rental_status,
+  owner_name, owner_birthday, contact_person, phone, forwarding_address,
+  petty_cash, referrer, notes, registration_type, updated_by
+) VALUES
+(1, '奧費斯有限公司', '53920532', 0, '辦公室', 3, '吳念壎', '1980-06-15', '吳念壎', '0930998049', '台北市大安區敦化南路一段 1 號', 2000, '官網洽詢', 'Demo：辦公室承租客戶', '辦公室', 1),
+(2, '金鋐源記帳士事務所', '77214901', 0, '辦公室', 3, '羅至鋐', '1979-07-20', '羅至鋐', '0907637698 羅r', '台北市大安區復興南路一段 2 號', 1000, '既有客戶介紹', 'Demo：同負責人群組主客戶', '辦公室', 1),
+(3, '澔博管理顧問有限公司', '82909732', 0, '登記', 1, '羅至鋐', '1979-07-20', '羅至鋐', '0907637698 羅r', '台北市大安區復興南路一段 2 號', NULL, '金鋐源轉介', 'Demo：同負責人登記地址', '登記', 1),
+(4, '羅氏數位服務有限公司', '90123456', 1, '座位', 3, '羅至鋐', '1979-07-20', '林小姐', '0911222333', '新北市板橋區文化路 10 號', 500, '同負責人新增', 'Demo：同負責人座位租約', '座位', 1),
+(5, '青禾品牌設計有限公司', '24567890', 0, '登記', 1, '陳怡君', '1988-06-28', '陳怡君', '0922000001', '台北市信義區松仁路 20 號', NULL, '網路搜尋', 'Demo：本月壽星提醒', '登記', 1);
+
+INSERT INTO contracts (
+  contract_id, customer_id, office_id, rental_item, rental_status, signed_date_text,
+  signer_staff_id, payment_months, start_date_text, end_date_text, termination_date_text,
+  rent, deposit, registration_type, lease_status, lease_image_path, updated_by
+) VALUES
+(1, 1, 1, '辦公室', '辦公室', '2026-01-02', 1, 6, '2026-01-01', '2026-12-31', NULL, 17000, 30000, '辦公室', '綁約中', 'uploads/contracts/demo-contract-1.png', 1),
+(2, 2, 2, '辦公室', '辦公室', '2026-01-05', 2, 6, '2026-01-01', '2026-12-31', NULL, 17000, 32000, '辦公室', '綁約中', 'uploads/contracts/demo-contract-2.png', 1),
+(3, 3, NULL, '登記', '登記', '2026-02-01', 2, 12, '2026-02-01', '2027-01-31', NULL, 3000, 3000, '登記', '綁約中', NULL, 1),
+(4, 4, 4, '座位', '辦公室', '2026-03-15', 3, 3, '2026-04-01', '2026-09-30', '2026-08-31', 6000, 12000, '座位', '已解約', NULL, 1),
+(5, 5, NULL, '登記', '登記', '2026-06-01', 1, 12, '2026-07-01', '2026-07-28', NULL, 2500, 2500, '登記', '綁約中', NULL, 1);
+
+INSERT INTO rent_payments (
+  rent_payment_id, customer_id, contract_id, payment_month, payment_date_text,
+  fee_start_date_text, fee_end_date_text, amount, receipt_no, note, updated_by
+) VALUES
+(1, 2, 2, 202607, '2026-07-02', '2026-07-01', '2026-12-31', 102000, 'R-202607-001', '半年租金', 1),
+(2, 3, 3, 202602, '2026-02-01', '2026-02-01', '2027-01-31', 36000, 'R-202602-001', '登記地址年繳', 1),
+(3, 1, 1, 202601, '2026-01-03', '2026-01-01', '2026-06-30', 102000, 'R-202601-001', '辦公室半年租金', 1);
+
+INSERT INTO charge_lists (
+  charge_list_id, customer_id, contract_id, fee_start_month, fee_end_month,
+  management_fee, electricity_fee, printing_fee, tax, advance_payment, updated_by
+) VALUES
+(1, 2, 2, '2026-07', '2026-12', 102000, 1800, 300, 5205, 0, 1);
+
+INSERT INTO refunds (refund_id, customer_id, contract_id, company_name, reason, refund_amount, note, updated_by) VALUES
+(1, 4, 4, '羅氏數位服務有限公司', '提前退租，退還部分押金', 5000, 'Demo 退款紀錄', 1);
+
+INSERT INTO sales_targets (sales_target_id, branch_id, target_month, category, target_count) VALUES
+(1, 1, 202607, '登記', 5),
+(2, 1, 202607, '辦公室', 2);
+
+INSERT INTO performance_bonuses (bonus_id, staff_id, period, net_count, bonus_amount) VALUES
+(1, 2, '2026-Q2', 3, 3000);

@@ -1,0 +1,335 @@
+{
+  "branches": [
+    {
+      "branchId": 1,
+      "branchName": "敦化館"
+    },
+    {
+      "branchId": 2,
+      "branchName": "信義館"
+    }
+  ],
+  "roles": [
+    {
+      "rolePermissionId": 1,
+      "roleName": "主管",
+      "scope": "全部分館"
+    },
+    {
+      "rolePermissionId": 2,
+      "roleName": "督導秘書",
+      "scope": "客戶、合約、租金與退款"
+    },
+    {
+      "rolePermissionId": 3,
+      "roleName": "一般秘書",
+      "scope": "查詢與新增租金紀錄"
+    }
+  ],
+  "staff": [
+    {
+      "staffId": 1,
+      "staffName": "系統主管",
+      "account": "manager",
+      "rolePermissionId": 1,
+      "branchId": 1
+    },
+    {
+      "staffId": 2,
+      "staffName": "督導秘書",
+      "account": "supervisor",
+      "rolePermissionId": 2,
+      "branchId": 1
+    },
+    {
+      "staffId": 3,
+      "staffName": "一般秘書",
+      "account": "staff",
+      "rolePermissionId": 3,
+      "branchId": 2
+    }
+  ],
+  "offices": [
+    {
+      "officeId": 1,
+      "officeNo": "101",
+      "branchId": 1,
+      "phone": "02-2776-9001",
+      "notes": "主管室旁辦公室"
+    },
+    {
+      "officeId": 2,
+      "officeNo": "102",
+      "branchId": 1,
+      "phone": "02-2776-9002 羅r",
+      "notes": "標準辦公室"
+    },
+    {
+      "officeId": 3,
+      "officeNo": "103",
+      "branchId": 1,
+      "phone": "02-2776-9003 羅r",
+      "notes": "小型辦公室"
+    },
+    {
+      "officeId": 4,
+      "officeNo": "S-201",
+      "branchId": 2,
+      "phone": "02-8780-0201",
+      "notes": "信義館座位區"
+    }
+  ],
+  "customers": [
+    {
+      "customerId": 1,
+      "companyName": "奧費斯有限公司",
+      "taxId": "53920532",
+      "status": "租賃中",
+      "rentalItem": "辦公室",
+      "rentalStatus": 3,
+      "ownerName": "吳念壎",
+      "ownerBirthday": "1980-06-15",
+      "contactPerson": "吳念壎",
+      "phone": "0930998049",
+      "forwardingAddress": "台北市大安區敦化南路一段 1 號",
+      "pettyCash": 2000,
+      "referrer": "官網洽詢",
+      "notes": "Demo：辦公室承租客戶",
+      "registrationType": "辦公室"
+    },
+    {
+      "customerId": 2,
+      "companyName": "金鋐源記帳士事務所",
+      "taxId": "77214901",
+      "status": "租賃中",
+      "rentalItem": "辦公室",
+      "rentalStatus": 3,
+      "ownerName": "羅至鋐",
+      "ownerBirthday": "1979-07-20",
+      "contactPerson": "羅至鋐",
+      "phone": "0907637698 羅r",
+      "forwardingAddress": "台北市大安區復興南路一段 2 號",
+      "pettyCash": 1000,
+      "referrer": "既有客戶介紹",
+      "notes": "Demo：同負責人群組主客戶",
+      "registrationType": "辦公室"
+    },
+    {
+      "customerId": 3,
+      "companyName": "澔博管理顧問有限公司",
+      "taxId": "82909732",
+      "status": "租賃中",
+      "rentalItem": "登記",
+      "rentalStatus": 1,
+      "ownerName": "羅至鋐",
+      "ownerBirthday": "1979-07-20",
+      "contactPerson": "羅至鋐",
+      "phone": "0907637698 羅r",
+      "forwardingAddress": "台北市大安區復興南路一段 2 號",
+      "pettyCash": null,
+      "referrer": "金鋐源轉介",
+      "notes": "Demo：同負責人登記地址",
+      "registrationType": "登記"
+    },
+    {
+      "customerId": 4,
+      "companyName": "羅氏數位服務有限公司",
+      "taxId": "90123456",
+      "status": "解約中",
+      "rentalItem": "座位",
+      "rentalStatus": 3,
+      "ownerName": "羅至鋐",
+      "ownerBirthday": "1979-07-20",
+      "contactPerson": "林小姐",
+      "phone": "0911222333",
+      "forwardingAddress": "新北市板橋區文化路 10 號",
+      "pettyCash": 500,
+      "referrer": "同負責人新增",
+      "notes": "Demo：同負責人座位租約",
+      "registrationType": "座位"
+    },
+    {
+      "customerId": 5,
+      "companyName": "青禾品牌設計有限公司",
+      "taxId": "24567890",
+      "status": "租賃中",
+      "rentalItem": "登記",
+      "rentalStatus": 1,
+      "ownerName": "陳怡君",
+      "ownerBirthday": "1988-06-28",
+      "contactPerson": "陳怡君",
+      "phone": "0922000001",
+      "forwardingAddress": "台北市信義區松仁路 20 號",
+      "pettyCash": null,
+      "referrer": "網路搜尋",
+      "notes": "Demo：本月壽星提醒",
+      "registrationType": "登記"
+    }
+  ],
+  "contracts": [
+    {
+      "contractId": 1,
+      "customerId": 1,
+      "officeId": 1,
+      "rentalItem": "辦公室",
+      "contractRentalStatus": "辦公室",
+      "signedDateText": "2026-01-02",
+      "signerStaffId": 1,
+      "paymentMonths": 6,
+      "startDateText": "2026-01-01",
+      "endDateText": "2026-12-31",
+      "terminationDateText": null,
+      "rent": 17000,
+      "deposit": 30000,
+      "registrationType": "辦公室",
+      "leaseStatus": "綁約中",
+      "leaseImagePath": "uploads/contracts/demo-contract-1.png"
+    },
+    {
+      "contractId": 2,
+      "customerId": 2,
+      "officeId": 2,
+      "rentalItem": "辦公室",
+      "contractRentalStatus": "辦公室",
+      "signedDateText": "2026-01-05",
+      "signerStaffId": 2,
+      "paymentMonths": 6,
+      "startDateText": "2026-01-01",
+      "endDateText": "2026-12-31",
+      "terminationDateText": null,
+      "rent": 17000,
+      "deposit": 32000,
+      "registrationType": "辦公室",
+      "leaseStatus": "綁約中",
+      "leaseImagePath": "uploads/contracts/demo-contract-2.png"
+    },
+    {
+      "contractId": 3,
+      "customerId": 3,
+      "officeId": null,
+      "rentalItem": "登記",
+      "contractRentalStatus": "登記",
+      "signedDateText": "2026-02-01",
+      "signerStaffId": 2,
+      "paymentMonths": 12,
+      "startDateText": "2026-02-01",
+      "endDateText": "2027-01-31",
+      "terminationDateText": null,
+      "rent": 3000,
+      "deposit": 3000,
+      "registrationType": "登記",
+      "leaseStatus": "綁約中",
+      "leaseImagePath": null
+    },
+    {
+      "contractId": 4,
+      "customerId": 4,
+      "officeId": 4,
+      "rentalItem": "座位",
+      "contractRentalStatus": "辦公室",
+      "signedDateText": "2026-03-15",
+      "signerStaffId": 3,
+      "paymentMonths": 3,
+      "startDateText": "2026-04-01",
+      "endDateText": "2026-09-30",
+      "terminationDateText": "2026-08-31",
+      "rent": 6000,
+      "deposit": 12000,
+      "registrationType": "座位",
+      "leaseStatus": "已解約",
+      "leaseImagePath": null
+    },
+    {
+      "contractId": 5,
+      "customerId": 5,
+      "officeId": null,
+      "rentalItem": "登記",
+      "contractRentalStatus": "登記",
+      "signedDateText": "2026-06-01",
+      "signerStaffId": 1,
+      "paymentMonths": 12,
+      "startDateText": "2026-07-01",
+      "endDateText": "2026-07-28",
+      "terminationDateText": null,
+      "rent": 2500,
+      "deposit": 2500,
+      "registrationType": "登記",
+      "leaseStatus": "綁約中",
+      "leaseImagePath": null
+    }
+  ],
+  "rentPayments": [
+    {
+      "rentPaymentId": 1,
+      "customerId": 2,
+      "contractId": 2,
+      "paymentMonth": 202607,
+      "paymentDateText": "2026-07-02",
+      "feeStartDateText": "2026-07-01",
+      "feeEndDateText": "2026-12-31",
+      "amount": 102000,
+      "receiptNo": "R-202607-001",
+      "note": "半年租金"
+    },
+    {
+      "rentPaymentId": 2,
+      "customerId": 3,
+      "contractId": 3,
+      "paymentMonth": 202602,
+      "paymentDateText": "2026-02-01",
+      "feeStartDateText": "2026-02-01",
+      "feeEndDateText": "2027-01-31",
+      "amount": 36000,
+      "receiptNo": "R-202602-001",
+      "note": "登記地址年繳"
+    },
+    {
+      "rentPaymentId": 3,
+      "customerId": 1,
+      "contractId": 1,
+      "paymentMonth": 202601,
+      "paymentDateText": "2026-01-03",
+      "feeStartDateText": "2026-01-01",
+      "feeEndDateText": "2026-06-30",
+      "amount": 102000,
+      "receiptNo": "R-202601-001",
+      "note": "辦公室半年租金"
+    }
+  ],
+  "refunds": [
+    {
+      "refundId": 1,
+      "customerId": 4,
+      "contractId": 4,
+      "companyName": "羅氏數位服務有限公司",
+      "reason": "提前退租，退還部分押金",
+      "refundAmount": 5000,
+      "note": "Demo 退款紀錄"
+    }
+  ],
+  "salesTargets": [
+    {
+      "salesTargetId": 1,
+      "branchId": 1,
+      "month": 202607,
+      "category": "登記",
+      "targetCount": 5
+    },
+    {
+      "salesTargetId": 2,
+      "branchId": 1,
+      "month": 202607,
+      "category": "辦公室",
+      "targetCount": 2
+    }
+  ],
+  "performanceBonuses": [
+    {
+      "bonusId": 1,
+      "staffId": 2,
+      "period": "2026-Q2",
+      "netCount": 3,
+      "bonusAmount": 3000
+    }
+  ]
+}
