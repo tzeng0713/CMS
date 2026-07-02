@@ -13,7 +13,6 @@ CREATE TABLE IF NOT EXISTS offices (
   office_id BIGINT PRIMARY KEY,
   office_no VARCHAR(50),
   branch_id BIGINT NOT NULL,
-  phone VARCHAR(80),
   notes VARCHAR(500),
   CONSTRAINT fk_offices_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
 );
