@@ -831,6 +831,26 @@ textarea {
   grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1fr) minmax(180px, 0.8fr);
 }
 
+.office-row {
+  grid-template-columns: 100px 140px 1fr 80px;
+}
+
+.branch-row {
+  grid-template-columns: 80px 1fr 80px;
+}
+
+.contact-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+
+  input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 .compact-select {
   width: 100%;
   min-width: 0;
@@ -892,6 +912,7 @@ textarea {
   .rent-row.can-edit,
   .contract-row,
   .staff-row,
+  .office-row,
   .customer-form,
   .row-main,
   .info-grid.compact {

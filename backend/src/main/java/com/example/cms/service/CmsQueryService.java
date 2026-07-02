@@ -1,9 +1,12 @@
 package com.example.cms.service;
 
+import com.example.cms.dto.BranchRequest;
 import com.example.cms.dto.CustomerRequest;
 import com.example.cms.dto.CustomerWithContractRequest;
 import com.example.cms.dto.ContractRequest;
 import com.example.cms.dto.LoginRequest;
+import com.example.cms.dto.OfficeContactRequest;
+import com.example.cms.dto.OfficeRequest;
 import com.example.cms.dto.RegisterRequest;
 import com.example.cms.dto.RentPaymentRequest;
 import com.example.cms.dto.StaffUpdateRequest;
@@ -375,13 +378,118 @@ public class CmsQueryService {
                 """, ownerName, excludeCustomerId);
     }
 
-    public List<Map<String, Object>> offices() {
-        return jdbc.queryForList("""
+    public List<Map<String, Object>> branches() {
+        return jdbc.queryForList("SELECT * FROM branches ORDER BY branch_id");
+    }
+
+    public Map<String, Object> createBranch(BranchRequest request) {
+        String name = requiredBranchName(request.branchName());
+        Long id = nextId("branches", "branch_id");
+        jdbc.update("INSERT INTO branches (branch_id, branch_name) VALUES (?, ?)", id, name);
+        return jdbc.queryForMap("SELECT * FROM branches WHERE branch_id = ?", id);
+    }
+
+    public Map<String, Object> updateBranch(long id, BranchRequest request) {
+        jdbc.update("UPDATE branches SET branch_name = ? WHERE branch_id = ?",
+                requiredBranchName(request.branchName()), id);
+        return jdbc.queryForMap("SELECT * FROM branches WHERE branch_id = ?", id);
+    }
+
+    public List<Map<String, Object>> offices(Long branchId) {
+        List<Map<String, Object>> rows;
+        if (branchId != null) {
+            rows = jdbc.queryForList("""
+                    SELECT o.*, b.branch_name
+                    FROM offices o
+                    JOIN branches b ON b.branch_id = o.branch_id
+                    WHERE o.branch_id = ?
+                    ORDER BY o.office_id
+                    """, branchId);
+        } else {
+            rows = jdbc.queryForList("""
+                    SELECT o.*, b.branch_name
+                    FROM offices o
+                    JOIN branches b ON b.branch_id = o.branch_id
+                    ORDER BY o.office_id
+                    """);
+        }
+        rows.forEach(row -> {
+            Long officeId = ((Number) row.get("office_id")).longValue();
+            row.put("contacts", jdbc.queryForList("""
+                    SELECT office_contact_id, person_name, phone
+                    FROM office_contacts
+                    WHERE office_id = ?
+                    ORDER BY office_contact_id
+                    """, officeId));
+        });
+        return rows;
+    }
+
+    public Map<String, Object> createOffice(OfficeRequest request) {
+        requiredId(request.branchId(), "branchId");
+        Long id = nextId("offices", "office_id");
+        jdbc.update("""
+                INSERT INTO offices (office_id, office_no, branch_id, notes)
+                VALUES (?, ?, ?, ?)
+                """,
+                id,
+                blankToNull(request.officeNo()),
+                request.branchId(),
+                blankToNull(request.notes()));
+        saveOfficeContacts(id, request.contacts());
+        return officeDetail(id);
+    }
+
+    public Map<String, Object> updateOffice(long id, OfficeRequest request) {
+        requiredId(request.branchId(), "branchId");
+        jdbc.update("""
+                UPDATE offices
+                SET office_no = ?,
+                    branch_id = ?,
+                    notes = ?
+                WHERE office_id = ?
+                """,
+                blankToNull(request.officeNo()),
+                request.branchId(),
+                blankToNull(request.notes()),
+                id);
+        saveOfficeContacts(id, request.contacts());
+        return officeDetail(id);
+    }
+
+    private Map<String, Object> officeDetail(long id) {
+        Map<String, Object> row = jdbc.queryForMap("""
                 SELECT o.*, b.branch_name
                 FROM offices o
                 JOIN branches b ON b.branch_id = o.branch_id
-                ORDER BY o.office_id
-                """);
+                WHERE o.office_id = ?
+                """, id);
+        row.put("contacts", jdbc.queryForList("""
+                SELECT office_contact_id, person_name, phone
+                FROM office_contacts
+                WHERE office_id = ?
+                ORDER BY office_contact_id
+                """, id));
+        return row;
+    }
+
+    private void saveOfficeContacts(long officeId, java.util.List<OfficeContactRequest> contacts) {
+        jdbc.update("DELETE FROM office_contacts WHERE office_id = ?", officeId);
+        if (contacts == null || contacts.isEmpty()) {
+            return;
+        }
+        Long baseId = nextId("office_contacts", "office_contact_id");
+        for (int i = 0; i < contacts.size(); i++) {
+            OfficeContactRequest c = contacts.get(i);
+            jdbc.update("""
+                    INSERT INTO office_contacts (office_contact_id, office_id, person_name, phone)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    baseId + i,
+                    officeId,
+                    blankToNull(c.personName()),
+                    blankToNull(c.phone()));
+        }
     }
 
     public List<Map<String, Object>> contracts(String search, String companyName, String startDateText, String endDateText, String leaseStatus) {
@@ -644,6 +752,13 @@ public class CmsQueryService {
         return max.longValue();
     }
 
+    private String requiredBranchName(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("branchName is required");
+        }
+        return value.trim();
+    }
+
     private String requiredCompanyName(String value) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("companyName is required");
@@ -870,5 +985,9 @@ public class CmsQueryService {
         user.put("canCreateRent", "主管".equals(roleName));
         user.put("canEditRent", !"一般秘書".equals(roleName));
         user.put("canEditStaff", "主管".equals(roleName));
+        user.put("canCreateOffice", true);
+        user.put("canEditAllBranches", "主管".equals(roleName));
+        user.put("canViewAllOffices", !"一般秘書".equals(roleName));
+        user.put("canManageBranch", "主管".equals(roleName));
     }
 }

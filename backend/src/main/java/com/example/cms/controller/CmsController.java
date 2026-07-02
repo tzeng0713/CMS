@@ -1,9 +1,11 @@
 package com.example.cms.controller;
 
+import com.example.cms.dto.BranchRequest;
 import com.example.cms.dto.CustomerRequest;
 import com.example.cms.dto.CustomerWithContractRequest;
 import com.example.cms.dto.ContractRequest;
 import com.example.cms.dto.LoginRequest;
+import com.example.cms.dto.OfficeRequest;
 import com.example.cms.dto.RegisterRequest;
 import com.example.cms.dto.RentPaymentRequest;
 import com.example.cms.dto.StaffUpdateRequest;
@@ -94,8 +96,18 @@ public class CmsController {
     }
 
     @GetMapping("/offices")
-    public List<Map<String, Object>> offices() {
-        return service.offices();
+    public List<Map<String, Object>> offices(@RequestParam(required = false) Long branchId) {
+        return service.offices(branchId);
+    }
+
+    @PostMapping("/offices")
+    public Map<String, Object> createOffice(@RequestBody OfficeRequest request) {
+        return service.createOffice(request);
+    }
+
+    @PutMapping("/offices/{id}")
+    public Map<String, Object> updateOffice(@PathVariable long id, @RequestBody OfficeRequest request) {
+        return service.updateOffice(id, request);
     }
 
     @GetMapping("/contracts")
@@ -150,6 +162,21 @@ public class CmsController {
     @GetMapping("/refunds")
     public List<Map<String, Object>> refunds() {
         return service.refunds();
+    }
+
+    @GetMapping("/branches")
+    public List<Map<String, Object>> branches() {
+        return service.branches();
+    }
+
+    @PostMapping("/branches")
+    public Map<String, Object> createBranch(@RequestBody BranchRequest request) {
+        return service.createBranch(request);
+    }
+
+    @PutMapping("/branches/{id}")
+    public Map<String, Object> updateBranch(@PathVariable long id, @RequestBody BranchRequest request) {
+        return service.updateBranch(id, request);
     }
 
     @GetMapping("/metadata")

@@ -942,6 +942,168 @@
       </section>
     </section>
 
+    <section class="single-view" *ngIf="activeView() === 'office-search'">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>查詢辦公室</h2>
+            <p>可依分館篩選；主管可直接在列表中修改辦公室資料。</p>
+          </div>
+          <label class="inline-filter" *ngIf="canViewAllOffices()">
+            分館
+            <select name="officeBranchFilter" [(ngModel)]="officeBranchFilter" (ngModelChange)="filterOfficeByBranch($event)">
+              <option [ngValue]="null">全部分館</option>
+              <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="rent-edit-panel" *ngIf="editingOffice() as editing">
+          <div class="panel-header">
+            <div>
+              <h3>修改辦公室</h3>
+              <p>{{ editing.office_no || '(未命名)' }} / {{ editing.branch_name }}</p>
+            </div>
+          </div>
+          <form class="customer-form" (ngSubmit)="saveOfficeEdit()">
+            <label>
+              房號
+              <input name="editOfficeNo" [(ngModel)]="officeEditForm.officeNo" />
+            </label>
+            <label>
+              分館
+              <select name="editOfficeBranch" [(ngModel)]="officeEditForm.branchId" required>
+                <option [ngValue]="null">請選擇分館</option>
+                <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+              </select>
+            </label>
+            <label class="wide">
+              備註
+              <textarea name="editOfficeNotes" rows="2" [(ngModel)]="officeEditForm.notes"></textarea>
+            </label>
+            <div class="form-actions wide">
+              <button type="submit" [disabled]="saving()">儲存修改</button>
+              <button type="button" class="ghost" (click)="cancelEditOffice()">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="simple-table">
+          <div class="simple-row header office-row">
+            <span>房號</span>
+            <span>分館</span>
+            <span>備註</span>
+            <span>操作</span>
+          </div>
+          <div class="simple-row office-row" *ngFor="let row of officeRows()">
+            <span>{{ row.office_no || '-' }}</span>
+            <span>{{ row.branch_name || '-' }}</span>
+            <span>{{ row.notes || '-' }}</span>
+            <span>
+              <button type="button" class="ghost compact-button" *ngIf="canEditOffice(row)" (click)="startEditOffice(row)">修改</button>
+            </span>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="single-view" *ngIf="activeView() === 'office-new'">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>新增辦公室</h2>
+            <p>填寫分館、房號與備註。</p>
+          </div>
+        </div>
+        <form class="customer-form" (ngSubmit)="createOffice()">
+          <label>
+            房號
+            <input name="newOfficeNo" [(ngModel)]="newOfficeForm.officeNo" />
+          </label>
+          <label>
+            分館
+            <select *ngIf="canEditAllBranches(); else ownBranchOnly" name="newOfficeBranch" [(ngModel)]="newOfficeForm.branchId" required>
+              <option [ngValue]="null">請選擇分館</option>
+              <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+            </select>
+            <ng-template #ownBranchOnly>
+              <input readonly [value]="currentUser()?.branch_name || ''" />
+            </ng-template>
+          </label>
+          <label class="wide">
+            備註
+            <textarea name="newOfficeNotes" rows="2" [(ngModel)]="newOfficeForm.notes"></textarea>
+          </label>
+          <div class="form-actions wide">
+            <button type="submit" [disabled]="saving()">新增辦公室</button>
+          </div>
+        </form>
+      </section>
+    </section>
+
+    <section class="single-view" *ngIf="activeView() === 'branch-management'">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>分館管理</h2>
+            <p>主管可新增或修改分館；其他角色僅能查詢所屬分館。</p>
+          </div>
+          <button type="button" *ngIf="canManageBranch() && !creatingBranch()" (click)="startCreateBranch()">新增分館</button>
+        </div>
+
+        <div class="rent-edit-panel" *ngIf="creatingBranch()">
+          <div class="panel-header">
+            <div><h3>新增分館</h3></div>
+          </div>
+          <form class="customer-form" (ngSubmit)="createBranch()">
+            <label>
+              分館名稱
+              <input name="newBranchName" [(ngModel)]="newBranchForm.branchName" required />
+            </label>
+            <div class="form-actions wide">
+              <button type="submit" [disabled]="saving()">新增</button>
+              <button type="button" class="ghost" (click)="cancelCreateBranch()">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="rent-edit-panel" *ngIf="editingBranch() as editing">
+          <div class="panel-header">
+            <div>
+              <h3>修改分館</h3>
+              <p>{{ editing.branch_name }}</p>
+            </div>
+          </div>
+          <form class="customer-form" (ngSubmit)="saveBranchEdit()">
+            <label>
+              分館名稱
+              <input name="editBranchName" [(ngModel)]="branchEditForm.branchName" required />
+            </label>
+            <div class="form-actions wide">
+              <button type="submit" [disabled]="saving()">儲存修改</button>
+              <button type="button" class="ghost" (click)="cancelEditBranch()">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="simple-table">
+          <div class="simple-row header branch-row">
+            <span>編號</span>
+            <span>分館名稱</span>
+            <span *ngIf="canManageBranch()">操作</span>
+          </div>
+          <div class="simple-row branch-row" *ngFor="let row of branchRows()">
+            <span>{{ row.branch_id }}</span>
+            <span>{{ row.branch_name }}</span>
+            <span *ngIf="canManageBranch()">
+              <button type="button" class="ghost compact-button" (click)="startEditBranch(row)">修改</button>
+            </span>
+          </div>
+          <div *ngIf="!branchRows().length" class="empty-hint">目前沒有分館資料。</div>
+        </div>
+      </section>
+    </section>
+
     <section class="single-view" *ngIf="activeView() === 'staff-overview'">
       <section class="panel">
         <div class="panel-header">

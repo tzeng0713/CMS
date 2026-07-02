@@ -5,6 +5,7 @@ import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import {
   CmsApiService,
   AuthUser,
+  BranchPayload,
   BranchSummary,
   ContractPayload,
   ContractSearchFilters,
@@ -13,6 +14,7 @@ import {
   CustomerSearchFilters,
   CustomerSummary,
   Dashboard,
+  OfficePayload,
   OfficeSummary,
   RoleSummary,
   RentPaymentPayload
@@ -30,7 +32,10 @@ type ViewKey =
   | 'staff-overview'
   | 'charges'
   | 'refunds'
-  | 'targets';
+  | 'targets'
+  | 'office-search'
+  | 'office-new'
+  | 'branch-management';
 
 interface NavItem {
   key: ViewKey;
@@ -76,6 +81,25 @@ type ContractForm = {
   leaseStatus: string;
   updatedBy: number;
 };
+
+type OfficeContactForm = {
+  personName: string;
+  phone: string;
+};
+
+type OfficeForm = {
+  officeNo: string;
+  branchId: number | null;
+  notes: string;
+  contacts: OfficeContactForm[];
+};
+
+const emptyOfficeForm = (): OfficeForm => ({
+  officeNo: '',
+  branchId: null,
+  notes: '',
+  contacts: []
+});
 
 const emptyCustomerForm = (): CustomerForm => ({
   companyName: '',
@@ -158,6 +182,17 @@ export class AppComponent implements OnInit {
       ]
     },
     {
+      label: '辦公室管理',
+      children: [
+        { key: 'office-search', label: '查詢辦公室' },
+        { key: 'office-new', label: '新增辦公室' }
+      ]
+    },
+    {
+      label: '分館管理',
+      children: [{ key: 'branch-management', label: '分館總覽' }]
+    },
+    {
       label: '職員管理',
       children: [{ key: 'staff-overview', label: '職員總覽' }]
     },
@@ -179,7 +214,10 @@ export class AppComponent implements OnInit {
     return this.allNavGroups
       .map((group) => ({
         ...group,
-        children: group.children.filter((item) => item.key !== 'rent-new' || user.canCreateRent)
+        children: group.children.filter((item) => {
+          if (item.key === 'rent-new') return user.canCreateRent;
+          return true;
+        })
       }))
       .filter((group) => group.children.length);
   }
@@ -204,6 +242,12 @@ export class AppComponent implements OnInit {
   rentCustomerOptions = signal<CustomerSummary[]>([]);
   contractCustomerOptions = signal<CustomerSummary[]>([]);
   selectedRentCustomer = signal<CustomerDetail | null>(null);
+  officeRows = signal<OfficeSummary[]>([]);
+  editingOffice = signal<OfficeSummary | null>(null);
+  officeBranchFilter: number | null = null;
+  branchRows = signal<BranchSummary[]>([]);
+  editingBranch = signal<BranchSummary | null>(null);
+  creatingBranch = signal(false);
   loading = signal(false);
   saving = signal(false);
   editingCustomer = signal(false);
@@ -249,6 +293,10 @@ export class AppComponent implements OnInit {
   customerEditForm: CustomerForm = emptyCustomerForm();
   newContractForm: ContractForm = emptyContractForm();
   contractEditForm: ContractForm = emptyContractForm();
+  newOfficeForm: OfficeForm = emptyOfficeForm();
+  officeEditForm: OfficeForm = emptyOfficeForm();
+  newBranchForm = { branchName: '' };
+  branchEditForm = { branchName: '' };
   editingContract = signal<Record<string, unknown> | null>(null);
   editingRentPayment = signal<Record<string, unknown> | null>(null);
   rentEditForm: Partial<RentPaymentPayload> = {};
@@ -331,6 +379,19 @@ export class AppComponent implements OnInit {
       case 'rent-search':
         this.loadRentPayments();
         break;
+      case 'office-search':
+        this.loadOfficeRows();
+        this.loadMetadata();
+        break;
+      case 'office-new':
+        this.loadMetadata();
+        if (!this.canEditAllBranches()) {
+          this.newOfficeForm.branchId = this.currentUser()?.branch_id ?? null;
+        }
+        break;
+      case 'branch-management':
+        this.loadBranchRows();
+        break;
       case 'staff-overview':
         this.loadStaffOverview();
         break;
@@ -391,6 +452,213 @@ export class AppComponent implements OnInit {
 
   canEditStaff(): boolean {
     return this.currentUser()?.canEditStaff === true;
+  }
+
+  canCreateOffice(): boolean {
+    return this.currentUser()?.canCreateOffice === true;
+  }
+
+  canEditAllBranches(): boolean {
+    return this.currentUser()?.canEditAllBranches === true;
+  }
+
+  canViewAllOffices(): boolean {
+    return this.currentUser()?.canViewAllOffices === true;
+  }
+
+  canManageBranch(): boolean {
+    return this.currentUser()?.canManageBranch === true;
+  }
+
+  loadBranchRows(): void {
+    const user = this.currentUser();
+    this.api.branchList().subscribe({
+      next: (rows) => {
+        if (!user?.canManageBranch && user?.branch_id) {
+          this.branchRows.set(rows.filter((r) => r.branch_id === user.branch_id));
+        } else {
+          this.branchRows.set(rows);
+        }
+      },
+      error: () => this.error.set('無法載入分館資料。')
+    });
+  }
+
+  startCreateBranch(): void {
+    this.editingBranch.set(null);
+    this.branchEditForm = { branchName: '' };
+    this.newBranchForm = { branchName: '' };
+    this.creatingBranch.set(true);
+  }
+
+  cancelCreateBranch(): void {
+    this.creatingBranch.set(false);
+    this.newBranchForm = { branchName: '' };
+  }
+
+  createBranch(): void {
+    if (!this.newBranchForm.branchName.trim()) {
+      this.error.set('請輸入分館名稱。');
+      return;
+    }
+    this.saving.set(true);
+    const payload: BranchPayload = { branchName: this.newBranchForm.branchName.trim() };
+    this.api.createBranch(payload).subscribe({
+      next: (created) => {
+        this.saving.set(false);
+        this.error.set('');
+        this.success.set('分館已新增。');
+        this.branchRows.update((rows) => [...rows, created]);
+        this.branches.update((rows) => [...rows, created]);
+        this.cancelCreateBranch();
+      },
+      error: () => {
+        this.saving.set(false);
+        this.error.set('分館新增失敗。');
+      }
+    });
+  }
+
+  startEditBranch(branch: BranchSummary): void {
+    this.creatingBranch.set(false);
+    this.newBranchForm = { branchName: '' };
+    this.editingBranch.set(branch);
+    this.branchEditForm = { branchName: branch.branch_name };
+  }
+
+  cancelEditBranch(): void {
+    this.editingBranch.set(null);
+    this.branchEditForm = { branchName: '' };
+  }
+
+  saveBranchEdit(): void {
+    const branch = this.editingBranch();
+    if (!branch) return;
+    if (!this.branchEditForm.branchName.trim()) {
+      this.error.set('請輸入分館名稱。');
+      return;
+    }
+    this.saving.set(true);
+    const payload: BranchPayload = { branchName: this.branchEditForm.branchName.trim() };
+    this.api.updateBranch(branch.branch_id, payload).subscribe({
+      next: (updated) => {
+        this.saving.set(false);
+        this.error.set('');
+        this.success.set('分館已更新。');
+        this.branchRows.update((rows) => rows.map((r) => (r.branch_id === updated.branch_id ? updated : r)));
+        this.branches.update((rows) => rows.map((r) => (r.branch_id === updated.branch_id ? updated : r)));
+        this.cancelEditBranch();
+      },
+      error: () => {
+        this.saving.set(false);
+        this.error.set('分館更新失敗。');
+      }
+    });
+  }
+
+  canEditOffice(office: OfficeSummary): boolean {
+    const user = this.currentUser();
+    if (!user) return false;
+    return user.canEditAllBranches || office.branch_id === user.branch_id;
+  }
+
+  loadOfficeRows(): void {
+    const user = this.currentUser();
+    const effectiveBranchId = !user?.canViewAllOffices && user?.branch_id
+      ? user.branch_id
+      : this.officeBranchFilter;
+    this.api.offices(effectiveBranchId ?? undefined).subscribe({
+      next: (rows) => this.officeRows.set(rows),
+      error: () => this.error.set('無法載入辦公室資料。')
+    });
+  }
+
+  filterOfficeByBranch(branchId: number | null): void {
+    if (!this.canViewAllOffices()) return;
+    this.officeBranchFilter = branchId;
+    this.loadOfficeRows();
+  }
+
+  createOffice(): void {
+    if (!this.canEditAllBranches()) {
+      this.newOfficeForm.branchId = this.currentUser()?.branch_id ?? null;
+    }
+    if (!this.newOfficeForm.branchId) {
+      this.error.set('請選擇分館。');
+      return;
+    }
+    this.saving.set(true);
+    this.api.createOffice(this.toOfficePayload(this.newOfficeForm)).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.error.set('');
+        this.success.set('辦公室已新增。');
+        this.newOfficeForm = emptyOfficeForm();
+        this.setView('office-search');
+        this.loadOfficeRows();
+      },
+      error: () => {
+        this.saving.set(false);
+        this.error.set('辦公室新增失敗。');
+      }
+    });
+  }
+
+  startEditOffice(office: OfficeSummary): void {
+    this.editingOffice.set(office);
+    this.officeEditForm = {
+      officeNo: office.office_no ?? '',
+      branchId: office.branch_id,
+      notes: office.notes ?? '',
+      contacts: office.contacts.map((c) => ({ personName: c.person_name ?? '', phone: c.phone ?? '' }))
+    };
+  }
+
+  cancelEditOffice(): void {
+    this.editingOffice.set(null);
+    this.officeEditForm = emptyOfficeForm();
+  }
+
+  saveOfficeEdit(): void {
+    const office = this.editingOffice();
+    if (!office) return;
+    if (!this.officeEditForm.branchId) {
+      this.error.set('請選擇分館。');
+      return;
+    }
+    this.saving.set(true);
+    this.api.updateOffice(office.office_id, this.toOfficePayload(this.officeEditForm)).subscribe({
+      next: (updated) => {
+        this.saving.set(false);
+        this.error.set('');
+        this.success.set('辦公室已更新。');
+        this.officeRows.update((rows) => rows.map((r) => (r.office_id === updated.office_id ? updated : r)));
+        this.cancelEditOffice();
+      },
+      error: () => {
+        this.saving.set(false);
+        this.error.set('辦公室更新失敗。');
+      }
+    });
+  }
+
+  addOfficeContact(form: OfficeForm): void {
+    form.contacts = [...form.contacts, { personName: '', phone: '' }];
+  }
+
+  removeOfficeContact(form: OfficeForm, index: number): void {
+    form.contacts = form.contacts.filter((_, i) => i !== index);
+  }
+
+  private toOfficePayload(form: OfficeForm): OfficePayload {
+    return {
+      officeNo: form.officeNo || undefined,
+      branchId: form.branchId!,
+      notes: form.notes || undefined,
+      contacts: form.contacts
+        .filter((c) => c.personName.trim() || c.phone.trim())
+        .map((c) => ({ personName: c.personName || undefined, phone: c.phone || undefined }))
+    };
   }
 
   isNavActive(key: ViewKey): boolean {
@@ -1109,6 +1377,9 @@ export class AppComponent implements OnInit {
       '/contracts/new': 'contract-new',
       '/rent-payments': 'rent-search',
       '/rent-payments/new': 'rent-new',
+      '/offices': 'office-search',
+      '/offices/new': 'office-new',
+      '/branches': 'branch-management',
       '/staff': 'staff-overview',
       '/charges': 'charges',
       '/refunds': 'refunds',
@@ -1128,6 +1399,9 @@ export class AppComponent implements OnInit {
       'contract-new': '/contracts/new',
       'rent-search': '/rent-payments',
       'rent-new': '/rent-payments/new',
+      'office-search': '/offices',
+      'office-new': '/offices/new',
+      'branch-management': '/branches',
       'staff-overview': '/staff',
       charges: '/charges',
       refunds: '/refunds',

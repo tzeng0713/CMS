@@ -36,6 +36,10 @@ export interface AuthUser {
   canCreateRent: boolean;
   canEditRent: boolean;
   canEditStaff: boolean;
+  canCreateOffice: boolean;
+  canEditAllBranches: boolean;
+  canViewAllOffices: boolean;
+  canManageBranch: boolean;
 }
 
 export interface CustomerSummary {
@@ -110,15 +114,40 @@ export interface RentPaymentPayload {
   updatedBy?: number;
 }
 
+export interface OfficeContact {
+  office_contact_id: number;
+  person_name: string | null;
+  phone: string | null;
+}
+
 export interface OfficeSummary {
   office_id: number;
   office_no: string | null;
+  branch_id: number;
   branch_name: string | null;
+  notes: string | null;
+  contacts: OfficeContact[];
+}
+
+export interface OfficeContactPayload {
+  personName?: string;
+  phone?: string;
+}
+
+export interface OfficePayload {
+  officeNo?: string;
+  branchId: number;
+  notes?: string;
+  contacts?: OfficeContactPayload[];
 }
 
 export interface BranchSummary {
   branch_id: number;
   branch_name: string;
+}
+
+export interface BranchPayload {
+  branchName: string;
 }
 
 export interface RoleSummary {
@@ -213,8 +242,30 @@ export class CmsApiService {
     return this.http.put<CustomerDetail>(`${this.baseUrl}/customers/${id}`, payload);
   }
 
-  offices(): Observable<OfficeSummary[]> {
-    return this.http.get<OfficeSummary[]>(`${this.baseUrl}/offices`);
+  branchList(): Observable<BranchSummary[]> {
+    return this.http.get<BranchSummary[]>(`${this.baseUrl}/branches`);
+  }
+
+  createBranch(payload: BranchPayload): Observable<BranchSummary> {
+    return this.http.post<BranchSummary>(`${this.baseUrl}/branches`, payload);
+  }
+
+  updateBranch(id: number, payload: BranchPayload): Observable<BranchSummary> {
+    return this.http.put<BranchSummary>(`${this.baseUrl}/branches/${id}`, payload);
+  }
+
+  offices(branchId?: number | null): Observable<OfficeSummary[]> {
+    return this.http.get<OfficeSummary[]>(`${this.baseUrl}/offices`, {
+      params: branchId ? { branchId } : {}
+    });
+  }
+
+  createOffice(payload: OfficePayload): Observable<OfficeSummary> {
+    return this.http.post<OfficeSummary>(`${this.baseUrl}/offices`, payload);
+  }
+
+  updateOffice(id: number, payload: OfficePayload): Observable<OfficeSummary> {
+    return this.http.put<OfficeSummary>(`${this.baseUrl}/offices/${id}`, payload);
   }
 
   contracts(searchOrFilters: string | ContractSearchFilters = ''): Observable<Array<Record<string, unknown>>> {
