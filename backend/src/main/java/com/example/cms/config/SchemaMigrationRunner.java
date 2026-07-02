@@ -27,6 +27,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         migrateContractPaymentMonths();
         migrateContractOfficeNullable();
         migrateContractLeaseStatus();
+        migrateRefundsTable();
     }
 
     private void migrateRoleNames() {
@@ -161,6 +162,40 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
             }
             return null;
         });
+    }
+
+    private void migrateRefundsTable() {
+        // rename note → adjustment_note (MySQL only; H2 gets clean schema from schema.sql)
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            String db = connection.getMetaData().getDatabaseProductName().toLowerCase();
+            if (!db.contains("mysql")) return null;
+            boolean hasNote = false, hasAdjNote = false;
+            try (var cols = connection.getMetaData().getColumns(null, null, "refunds", "note")) {
+                hasNote = cols.next();
+            }
+            try (var cols = connection.getMetaData().getColumns(null, null, "refunds", "adjustment_note")) {
+                hasAdjNote = cols.next();
+            }
+            if (hasNote && !hasAdjNote) {
+                jdbc.execute("ALTER TABLE refunds CHANGE note adjustment_note VARCHAR(1000)");
+            }
+            return null;
+        });
+        addColumnIfMissing("refunds", "charge_list_id",        "BIGINT");
+        addColumnIfMissing("refunds", "adjustment_amount",     "DECIMAL(12,2) DEFAULT 0");
+        addColumnIfMissing("refunds", "adjustment_note",       "VARCHAR(1000)");
+        addColumnIfMissing("refunds", "deduction_total",       "DECIMAL(12,2)");
+        addColumnIfMissing("refunds", "refund_status",         "VARCHAR(20)");
+        addColumnIfMissing("refunds", "payment_method",        "VARCHAR(20)");
+        addColumnIfMissing("refunds", "bank_code",             "VARCHAR(20)");
+        addColumnIfMissing("refunds", "bank_account",          "VARCHAR(50)");
+        addColumnIfMissing("refunds", "bank_account_name",     "VARCHAR(100)");
+        addColumnIfMissing("refunds", "refunded_at",           "VARCHAR(30)");
+        addColumnIfMissing("refunds", "termination_staff_id",  "BIGINT");
+        addColumnIfMissing("refunds", "created_by",            "BIGINT");
+        addColumnIfMissing("refunds", "created_at",            "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        addColumnIfMissing("refunds", "reviewed_by",           "BIGINT");
+        addColumnIfMissing("refunds", "reviewed_at",           "TIMESTAMP");
     }
 
     private void migrateContractLeaseStatus() {
