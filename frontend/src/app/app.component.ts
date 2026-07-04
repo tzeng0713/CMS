@@ -1,12 +1,16 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, signal } from '@angular/core';
+import { Component, ElementRef, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import html2canvas from 'html2canvas';
 import {
   CmsApiService,
   AuthUser,
   BranchPayload,
   BranchSummary,
+  ChargeListPayload,
+  ChargeListSearchFilters,
+  ChargeListSummary,
   ContractPayload,
   ContractSearchFilters,
   CustomerDetail,
@@ -82,6 +86,20 @@ type ContractForm = {
   updatedBy: number;
 };
 
+type ChargeListForm = {
+  customerId: number | null;
+  contractId: number | null;
+  feeStartMonth: string;
+  feeEndMonth: string;
+  managementFee: number;
+  electricityFee: number;
+  printingFee: number;
+  tax: number;
+  advancePayment: number;
+  repairFee: number;
+  updatedBy: number;
+};
+
 type OfficeContactForm = {
   personName: string;
   phone: string;
@@ -119,6 +137,25 @@ const emptyCustomerForm = (): CustomerForm => ({
   updatedBy: 1
 });
 
+const emptyChargeListForm = (): ChargeListForm => ({
+  customerId: null,
+  contractId: null,
+  feeStartMonth: '',
+  feeEndMonth: '',
+  managementFee: 0,
+  electricityFee: 0,
+  printingFee: 0,
+  tax: 0,
+  advancePayment: 0,
+  repairFee: 0,
+  updatedBy: 1
+});
+
+const CHARGE_LIST_ISSUER_NAME = '全方位商務中心有限公司';
+const CHARGE_LIST_BANK_INFO = '華南銀行008(南京東路分行)';
+const CHARGE_LIST_BANK_ACCOUNT_NAME = '全方位商務中心有限公司';
+const CHARGE_LIST_BANK_ACCOUNT_NUMBER = '112-1011-03671';
+
 const emptyContractForm = (): ContractForm => ({
   customerId: null,
   officeId: null,
@@ -144,6 +181,10 @@ const emptyContractForm = (): ContractForm => ({
   styleUrl: './app.component.scss'
 })
 export class AppComponent implements OnInit {
+  readonly chargeListIssuerName = CHARGE_LIST_ISSUER_NAME;
+  readonly chargeListBankInfo = CHARGE_LIST_BANK_INFO;
+  readonly chargeListBankAccountName = CHARGE_LIST_BANK_ACCOUNT_NAME;
+  readonly chargeListBankAccountNumber = CHARGE_LIST_BANK_ACCOUNT_NUMBER;
   readonly roleOptions = ['主管', '督導秘書', '一般秘書'];
   readonly statusOptions = [
     { value: 0, label: '租賃中' },
@@ -235,7 +276,16 @@ export class AppComponent implements OnInit {
   staffOptions = signal<Array<Record<string, unknown>>>([]);
   staffRows = signal<Array<Record<string, unknown>>>([]);
   rentPayments = signal<Array<Record<string, unknown>>>([]);
-  chargeLists = signal<Array<Record<string, unknown>>>([]);
+  chargeListRows = signal<ChargeListSummary[]>([]);
+  chargeListTotal = signal(0);
+  chargeListPage = signal(0);
+  readonly chargeListPageSize = 20;
+  editingChargeList = signal<ChargeListSummary | null>(null);
+  exportingChargeList = signal<ChargeListSummary | null>(null);
+  chargeListPreviewImage = signal<string | null>(null);
+  chargeListPreviewRow = signal<ChargeListSummary | null>(null);
+  chargeListCustomerOptions = signal<CustomerSummary[]>([]);
+  selectedChargeListCustomer = signal<CustomerDetail | null>(null);
   refunds = signal<Array<Record<string, unknown>>>([]);
   salesTargets = signal<Array<Record<string, unknown>>>([]);
   newCustomerOptions = signal<CustomerSummary[]>([]);
@@ -269,8 +319,24 @@ export class AppComponent implements OnInit {
     endDateText: '',
     leaseStatus: ''
   };
+  chargeListFilters: ChargeListSearchFilters = {
+    chargeListId: null,
+    customerId: null,
+    contractId: null,
+    feeStartMonth: '',
+    feeEndMonth: '',
+    status: null,
+    createdBy: null,
+    issuedFrom: '',
+    issuedTo: ''
+  };
+  chargeListSortBy = 'issuedAt';
+  chargeListSortDir: 'asc' | 'desc' = 'desc';
+  chargeListFilterCustomerSearch = '';
+  chargeListFilterCustomerOptions = signal<CustomerSummary[]>([]);
   staffBranchFilter: number | null = null;
   contractCustomerSearch = '';
+  chargeListCustomerSearch = '';
   rentCustomerSearch = '';
   rentPaymentMonth = this.currentMonthValue();
   rentEditMonth = this.currentMonthValue();
@@ -304,9 +370,18 @@ export class AppComponent implements OnInit {
     paymentMonth: this.monthNumberFromInput(this.rentPaymentMonth),
     updatedBy: this.currentStaffId()
   };
+  newChargeListForm: ChargeListForm = {
+    ...emptyChargeListForm(),
+    feeStartMonth: this.currentMonthValue(),
+    feeEndMonth: this.currentMonthValue()
+  };
+  chargeListEditForm: ChargeListForm = emptyChargeListForm();
+
+  @ViewChild('chargeListPrintArea') chargeListPrintArea?: ElementRef<HTMLDivElement>;
 
   selectedCustomerId = computed(() => this.selectedCustomer()?.customer_id ?? null);
   sameOwnerCompanies = computed(() => this.selectedCustomer()?.sameOwnerCompanies ?? []);
+  chargeListTotalPages = computed(() => Math.max(1, Math.ceil(this.chargeListTotal() / this.chargeListPageSize)));
 
   constructor(private readonly api: CmsApiService, private readonly router: Router) {}
 
@@ -396,6 +471,7 @@ export class AppComponent implements OnInit {
         this.loadStaffOverview();
         break;
       case 'charges':
+        this.loadMetadata();
         this.loadChargeLists();
         break;
       case 'refunds':
@@ -436,6 +512,9 @@ export class AppComponent implements OnInit {
     this.customers.set([]);
     this.contracts.set([]);
     this.rentPayments.set([]);
+    this.chargeListRows.set([]);
+    this.chargeListTotal.set(0);
+    this.editingChargeList.set(null);
     this.staffRows.set([]);
     this.router.navigateByUrl('/home');
     this.error.set('');
@@ -1061,10 +1140,279 @@ export class AppComponent implements OnInit {
   }
 
   loadChargeLists(): void {
-    this.api.chargeLists().subscribe({
-      next: (rows) => this.chargeLists.set(rows),
+    this.api.chargeLists({
+      ...this.chargeListFilters,
+      page: this.chargeListPage(),
+      pageSize: this.chargeListPageSize,
+      sortBy: this.chargeListSortBy,
+      sortDir: this.chargeListSortDir
+    }).subscribe({
+      next: (result) => {
+        this.chargeListRows.set(result.content);
+        this.chargeListTotal.set(result.totalElements);
+      },
       error: () => this.error.set('無法載入收費清單。')
     });
+  }
+
+  resetChargeListFilters(): void {
+    this.chargeListFilters = {
+      chargeListId: null,
+      customerId: null,
+      contractId: null,
+      feeStartMonth: '',
+      feeEndMonth: '',
+      status: null,
+      createdBy: null,
+      issuedFrom: '',
+      issuedTo: ''
+    };
+    this.chargeListFilterCustomerSearch = '';
+    this.chargeListFilterCustomerOptions.set([]);
+    this.chargeListPage.set(0);
+    this.loadChargeLists();
+  }
+
+  lookupChargeListFilterCustomers(): void {
+    const term = this.chargeListFilterCustomerSearch.trim();
+    if (!term) {
+      this.chargeListFilterCustomerOptions.set([]);
+      this.chargeListFilters.customerId = null;
+      this.loadChargeLists();
+      return;
+    }
+    this.api.customerLookup(term).subscribe({
+      next: (rows) => this.chargeListFilterCustomerOptions.set(rows),
+      error: () => this.error.set('無法查詢客戶資料。')
+    });
+  }
+
+  selectChargeListFilterCustomer(customer: CustomerSummary): void {
+    this.chargeListFilterCustomerSearch = customer.company_name;
+    this.chargeListFilterCustomerOptions.set([]);
+    this.chargeListFilters.customerId = customer.customer_id;
+    this.chargeListPage.set(0);
+    this.loadChargeLists();
+  }
+
+  changeChargeListPage(delta: number): void {
+    const next = this.chargeListPage() + delta;
+    if (next < 0 || next >= this.chargeListTotalPages()) {
+      return;
+    }
+    this.chargeListPage.set(next);
+    this.loadChargeLists();
+  }
+
+  toggleChargeListSort(column: string): void {
+    if (this.chargeListSortBy === column) {
+      this.chargeListSortDir = this.chargeListSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+      this.chargeListSortBy = column;
+      this.chargeListSortDir = 'asc';
+    }
+    this.chargeListPage.set(0);
+    this.loadChargeLists();
+  }
+
+  lookupChargeListCustomers(): void {
+    const term = this.chargeListCustomerSearch.trim();
+    if (!term) {
+      this.chargeListCustomerOptions.set([]);
+      return;
+    }
+    this.api.customerLookup(term).subscribe({
+      next: (rows) => this.chargeListCustomerOptions.set(rows),
+      error: () => this.error.set('無法查詢客戶資料。')
+    });
+  }
+
+  selectChargeListCustomer(customer: CustomerSummary): void {
+    this.api.customerDetail(customer.customer_id).subscribe({
+      next: (value) => {
+        this.selectedChargeListCustomer.set(value);
+        this.chargeListCustomerSearch = value.company_name;
+        this.chargeListCustomerOptions.set([]);
+        this.newChargeListForm.customerId = value.customer_id;
+        const firstContract = value.contracts?.[0] as Record<string, unknown> | undefined;
+        this.newChargeListForm.contractId = firstContract ? Number(firstContract['contract_id']) : null;
+      },
+      error: () => this.error.set('無法載入客戶租約資料。')
+    });
+  }
+
+  chargeListPreviewTotal(form: ChargeListForm): number {
+    return (
+      Number(form.managementFee || 0) +
+      Number(form.electricityFee || 0) +
+      Number(form.printingFee || 0) +
+      Number(form.tax || 0) +
+      Number(form.advancePayment || 0) +
+      Number(form.repairFee || 0)
+    );
+  }
+
+  createChargeList(): void {
+    if (!this.newChargeListForm.customerId || !this.newChargeListForm.contractId) {
+      this.error.set('請先搜尋並選擇客戶與租約。');
+      return;
+    }
+    if (!this.newChargeListForm.feeStartMonth || !this.newChargeListForm.feeEndMonth) {
+      this.error.set('請填寫費用起訖月。');
+      return;
+    }
+    this.newChargeListForm.updatedBy = this.currentStaffId();
+    this.saving.set(true);
+    this.api.createChargeList(this.toChargeListPayload(this.newChargeListForm)).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.error.set('');
+        this.success.set('收費清單已新增。');
+        this.newChargeListForm = {
+          ...emptyChargeListForm(),
+          feeStartMonth: this.currentMonthValue(),
+          feeEndMonth: this.currentMonthValue()
+        };
+        this.chargeListCustomerSearch = '';
+        this.selectedChargeListCustomer.set(null);
+        this.loadChargeLists();
+      },
+      error: () => {
+        this.saving.set(false);
+        this.error.set('收費清單新增失敗，請確認必填欄位與金額是否正確。');
+      }
+    });
+  }
+
+  startEditChargeList(row: ChargeListSummary): void {
+    this.editingChargeList.set(row);
+    this.chargeListEditForm = {
+      customerId: row.customer_id,
+      contractId: row.contract_id,
+      feeStartMonth: row.fee_start_month,
+      feeEndMonth: row.fee_end_month,
+      managementFee: Number(row.management_fee ?? 0),
+      electricityFee: Number(row.electricity_fee ?? 0),
+      printingFee: Number(row.printing_fee ?? 0),
+      tax: Number(row.tax ?? 0),
+      advancePayment: Number(row.advance_payment ?? 0),
+      repairFee: Number(row.repair_fee ?? 0),
+      updatedBy: this.currentStaffId()
+    };
+  }
+
+  cancelEditChargeList(): void {
+    this.editingChargeList.set(null);
+    this.chargeListEditForm = emptyChargeListForm();
+  }
+
+  saveChargeListEdit(): void {
+    const row = this.editingChargeList();
+    if (!row) {
+      return;
+    }
+    if (!this.chargeListEditForm.feeStartMonth || !this.chargeListEditForm.feeEndMonth) {
+      this.error.set('請填寫費用起訖月。');
+      return;
+    }
+    this.chargeListEditForm.updatedBy = this.currentStaffId();
+    this.saving.set(true);
+    this.api.updateChargeList(row.charge_list_id, this.toChargeListPayload(this.chargeListEditForm)).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.error.set('');
+        this.success.set('收費清單已更新。');
+        this.cancelEditChargeList();
+        this.loadChargeLists();
+      },
+      error: () => {
+        this.saving.set(false);
+        this.error.set('收費清單更新失敗，請確認費用起訖月與金額是否正確。');
+      }
+    });
+  }
+
+  displayChargeListStatus(value: unknown): string {
+    return Number(value) === 1 ? '已結清' : '未結清';
+  }
+
+  formatFeePeriod(row: ChargeListSummary): string {
+    return `${row.fee_start_month} ~ ${row.fee_end_month}`;
+  }
+
+  feeCellValue(value: unknown): string {
+    const amount = Number(value ?? 0);
+    return amount ? this.money(amount) : '';
+  }
+
+  chargeListGrandTotal(row: ChargeListSummary): number {
+    return Number(row.contract_rent ?? 0) + Number(row.total_amount ?? 0);
+  }
+
+  formatRocDate(value: unknown): string {
+    if (value === null || value === undefined || value === '') {
+      return '-';
+    }
+    const date = new Date(String(value));
+    if (Number.isNaN(date.getTime())) {
+      return '-';
+    }
+    const rocYear = date.getFullYear() - 1911;
+    return `${rocYear}年${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+
+  exportChargeListImage(row: ChargeListSummary): void {
+    this.exportingChargeList.set(row);
+    setTimeout(() => {
+      const element = this.chargeListPrintArea?.nativeElement;
+      if (!element) {
+        this.exportingChargeList.set(null);
+        return;
+      }
+      html2canvas(element, { backgroundColor: '#ffffff', scale: 2 })
+        .then((canvas) => {
+          this.chargeListPreviewImage.set(canvas.toDataURL('image/png'));
+          this.chargeListPreviewRow.set(row);
+          this.exportingChargeList.set(null);
+        })
+        .catch(() => {
+          this.error.set('收費清單圖片匯出失敗。');
+          this.exportingChargeList.set(null);
+        });
+    }, 0);
+  }
+
+  downloadChargeListPreview(): void {
+    const dataUrl = this.chargeListPreviewImage();
+    const row = this.chargeListPreviewRow();
+    if (!dataUrl || !row) {
+      return;
+    }
+    const link = document.createElement('a');
+    link.download = `charge-list-${row.charge_list_id}.png`;
+    link.href = dataUrl;
+    link.click();
+  }
+
+  closeChargeListPreview(): void {
+    this.chargeListPreviewImage.set(null);
+    this.chargeListPreviewRow.set(null);
+  }
+
+  private toChargeListPayload(form: ChargeListForm): ChargeListPayload {
+    return {
+      customerId: form.customerId ?? undefined,
+      contractId: form.contractId ?? undefined,
+      feeStartMonth: form.feeStartMonth,
+      feeEndMonth: form.feeEndMonth,
+      managementFee: form.managementFee,
+      electricityFee: form.electricityFee,
+      printingFee: form.printingFee,
+      tax: form.tax,
+      advancePayment: form.advancePayment,
+      repairFee: form.repairFee,
+      updatedBy: form.updatedBy
+    };
   }
 
   loadRefunds(): void {

@@ -1,6 +1,7 @@
 package com.example.cms.controller;
 
 import com.example.cms.dto.BranchRequest;
+import com.example.cms.dto.ChargeListRequest;
 import com.example.cms.dto.CustomerRequest;
 import com.example.cms.dto.CustomerWithContractRequest;
 import com.example.cms.dto.ContractRequest;
@@ -155,8 +156,36 @@ public class CmsController {
     }
 
     @GetMapping("/charge-lists")
-    public List<Map<String, Object>> chargeLists() {
-        return service.chargeLists();
+    public Map<String, Object> chargeLists(@RequestParam(required = false) Long chargeListId,
+                                           @RequestParam(required = false) Long customerId,
+                                           @RequestParam(required = false) Long contractId,
+                                           @RequestParam(required = false) String feeStartMonth,
+                                           @RequestParam(required = false) String feeEndMonth,
+                                           @RequestParam(required = false) Integer status,
+                                           @RequestParam(required = false) Long createdBy,
+                                           @RequestParam(required = false) String issuedFrom,
+                                           @RequestParam(required = false) String issuedTo,
+                                           @RequestParam(required = false) Integer page,
+                                           @RequestParam(required = false) Integer pageSize,
+                                           @RequestParam(required = false) String sortBy,
+                                           @RequestParam(required = false) String sortDir) {
+        return service.chargeLists(chargeListId, customerId, contractId, feeStartMonth, feeEndMonth,
+                status, createdBy, issuedFrom, issuedTo, page, pageSize, sortBy, sortDir);
+    }
+
+    @GetMapping("/charge-lists/{id}")
+    public Map<String, Object> chargeListDetail(@PathVariable long id) {
+        return service.chargeListDetail(id);
+    }
+
+    @PostMapping("/charge-lists")
+    public Map<String, Object> createChargeList(@RequestBody ChargeListRequest request) {
+        return service.createChargeList(request);
+    }
+
+    @PutMapping("/charge-lists/{id}")
+    public Map<String, Object> updateChargeList(@PathVariable long id, @RequestBody ChargeListRequest request) {
+        return service.updateChargeList(id, request);
     }
 
     @GetMapping("/refunds")

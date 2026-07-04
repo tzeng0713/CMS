@@ -1156,22 +1156,342 @@
         <div class="panel-header">
           <div>
             <h2>收費清單</h2>
-            <p>管理費、電費與其他收費資料。</p>
+            <p>管理費、電費與其他收費資料，可查詢、新增、修改與匯出圖片。</p>
           </div>
         </div>
-        <div class="empty-state" *ngIf="!chargeLists().length">目前沒有收費清單資料。</div>
-        <div class="simple-table" *ngIf="chargeLists().length">
-          <div class="simple-row header four">
-            <span>公司</span>
-            <span>管理費</span>
-            <span>電費</span>
-            <span>開立時間</span>
+
+        <section class="filter-bar charge-list-filter">
+          <label>
+            收費清單編號
+            <input
+              type="number"
+              name="chargeListFilterId"
+              [(ngModel)]="chargeListFilters.chargeListId"
+              (ngModelChange)="loadChargeLists()"
+            />
+          </label>
+          <label>
+            客戶
+            <input
+              type="search"
+              name="chargeListFilterCustomer"
+              placeholder="輸入公司名稱查找"
+              [(ngModel)]="chargeListFilterCustomerSearch"
+              (ngModelChange)="lookupChargeListFilterCustomers()"
+            />
+            <div class="lookup-list" *ngIf="chargeListFilterCustomerOptions().length">
+              <button
+                type="button"
+                *ngFor="let option of chargeListFilterCustomerOptions()"
+                (click)="selectChargeListFilterCustomer(option)"
+              >
+                <strong>{{ option.company_name }}</strong>
+                <span>{{ option.owner_name || '-' }}</span>
+              </button>
+            </div>
+          </label>
+          <label>
+            租約編號
+            <input
+              type="number"
+              name="chargeListFilterContractId"
+              [(ngModel)]="chargeListFilters.contractId"
+              (ngModelChange)="loadChargeLists()"
+            />
+          </label>
+          <label>
+            單據狀態
+            <select name="chargeListFilterStatus" [(ngModel)]="chargeListFilters.status" (ngModelChange)="loadChargeLists()">
+              <option [ngValue]="null">全部</option>
+              <option [ngValue]="1">已結清</option>
+              <option [ngValue]="2">未結清</option>
+            </select>
+          </label>
+          <label>
+            費用起月
+            <input
+              type="month"
+              name="chargeListFilterFeeStartMonth"
+              [(ngModel)]="chargeListFilters.feeStartMonth"
+              (ngModelChange)="loadChargeLists()"
+            />
+          </label>
+          <label>
+            費用迄月
+            <input
+              type="month"
+              name="chargeListFilterFeeEndMonth"
+              [(ngModel)]="chargeListFilters.feeEndMonth"
+              (ngModelChange)="loadChargeLists()"
+            />
+          </label>
+          <label>
+            開單人
+            <select name="chargeListFilterCreatedBy" [(ngModel)]="chargeListFilters.createdBy" (ngModelChange)="loadChargeLists()">
+              <option [ngValue]="null">全部</option>
+              <option *ngFor="let staffMember of staffOptions()" [ngValue]="staffMember['staff_id']">
+                {{ staffMember['staff_name'] }}
+              </option>
+            </select>
+          </label>
+          <label>
+            開單日期（起）
+            <input
+              type="date"
+              name="chargeListFilterIssuedFrom"
+              [(ngModel)]="chargeListFilters.issuedFrom"
+              (ngModelChange)="loadChargeLists()"
+            />
+          </label>
+          <label>
+            開單日期（迄）
+            <input
+              type="date"
+              name="chargeListFilterIssuedTo"
+              [(ngModel)]="chargeListFilters.issuedTo"
+              (ngModelChange)="loadChargeLists()"
+            />
+          </label>
+          <div class="filter-actions">
+            <button type="button" class="ghost" (click)="resetChargeListFilters()">清除條件</button>
           </div>
-          <div class="simple-row four" *ngFor="let row of chargeLists()">
-            <span>{{ value(row, 'company_name') }}</span>
-            <span>{{ money(row['management_fee']) }}</span>
-            <span>{{ money(row['electricity_fee']) }}</span>
-            <span>{{ value(row, 'issued_at') }}</span>
+        </section>
+
+        <div class="rent-edit-panel" *ngIf="editingChargeList() as editing">
+          <div class="panel-header">
+            <div>
+              <h3>修改收費清單</h3>
+              <p>{{ editing.company_name }} / {{ formatFeePeriod(editing) }}</p>
+            </div>
+          </div>
+          <form class="customer-form" (ngSubmit)="saveChargeListEdit()">
+            <label>
+              客戶（不可修改）
+              <input type="text" [value]="editing.company_name" readonly />
+            </label>
+            <label>
+              辦公室（不可修改）
+              <input type="text" [value]="editing.office_no || '-'" readonly />
+            </label>
+            <label>
+              費用起月
+              <input type="month" name="editChargeListFeeStartMonth" [(ngModel)]="chargeListEditForm.feeStartMonth" required />
+            </label>
+            <label>
+              費用迄月
+              <input type="month" name="editChargeListFeeEndMonth" [(ngModel)]="chargeListEditForm.feeEndMonth" required />
+            </label>
+            <label>
+              管理費
+              <input type="number" min="0" name="editChargeListManagementFee" [(ngModel)]="chargeListEditForm.managementFee" />
+            </label>
+            <label>
+              電費
+              <input type="number" min="0" name="editChargeListElectricityFee" [(ngModel)]="chargeListEditForm.electricityFee" />
+            </label>
+            <label>
+              列印費
+              <input type="number" min="0" name="editChargeListPrintingFee" [(ngModel)]="chargeListEditForm.printingFee" />
+            </label>
+            <label>
+              營業稅
+              <input type="number" min="0" name="editChargeListTax" [(ngModel)]="chargeListEditForm.tax" />
+            </label>
+            <label>
+              代墊費
+              <input type="number" min="0" name="editChargeListAdvancePayment" [(ngModel)]="chargeListEditForm.advancePayment" />
+            </label>
+            <label>
+              修繕費
+              <input type="number" min="0" name="editChargeListRepairFee" [(ngModel)]="chargeListEditForm.repairFee" />
+            </label>
+            <label>
+              單據狀態（系統維護，不可修改）
+              <input type="text" [value]="displayChargeListStatus(editing.status)" readonly />
+            </label>
+            <label>
+              收費總金額（預覽）
+              <input type="text" [value]="money(chargeListPreviewTotal(chargeListEditForm))" readonly />
+            </label>
+            <div class="form-actions wide">
+              <button type="submit" [disabled]="saving()">儲存修改</button>
+              <button type="button" class="ghost" (click)="cancelEditChargeList()">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel-header">
+          <div>
+            <h3>新增收費清單</h3>
+            <p>先搜尋客戶，選擇租約後填寫費用明細。</p>
+          </div>
+        </div>
+
+        <div class="lookup">
+          <label>
+            客戶
+            <input
+              type="search"
+              name="chargeListCustomerSearch"
+              placeholder="輸入公司名稱"
+              [(ngModel)]="chargeListCustomerSearch"
+              (ngModelChange)="lookupChargeListCustomers()"
+            />
+          </label>
+          <div class="lookup-list" *ngIf="chargeListCustomerOptions().length">
+            <button type="button" *ngFor="let option of chargeListCustomerOptions()" (click)="selectChargeListCustomer(option)">
+              <strong>{{ option.company_name }}</strong>
+              <span>{{ option.owner_name || '-' }} / {{ option.office_no || '-' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <section class="selected-customer" *ngIf="selectedChargeListCustomer() as chargeListCustomer">
+          <strong>{{ chargeListCustomer.company_name }}</strong>
+          <span>負責人 {{ chargeListCustomer.owner_name || '-' }}</span>
+        </section>
+
+        <form class="customer-form" (ngSubmit)="createChargeList()" *ngIf="selectedChargeListCustomer() as chargeListCustomer">
+          <label>
+            租約
+            <select name="newChargeListContract" [(ngModel)]="newChargeListForm.contractId" required>
+              <option [ngValue]="null">請選擇租約</option>
+              <option *ngFor="let contract of chargeListCustomer.contracts" [ngValue]="contract['contract_id']">
+                {{ contract['office_no'] || '登記' }} / {{ contract['lease_status'] }}
+              </option>
+            </select>
+          </label>
+          <label>
+            費用起月
+            <input type="month" name="newChargeListFeeStartMonth" [(ngModel)]="newChargeListForm.feeStartMonth" required />
+          </label>
+          <label>
+            費用迄月
+            <input type="month" name="newChargeListFeeEndMonth" [(ngModel)]="newChargeListForm.feeEndMonth" required />
+          </label>
+          <label>
+            管理費
+            <input type="number" min="0" name="newChargeListManagementFee" [(ngModel)]="newChargeListForm.managementFee" />
+          </label>
+          <label>
+            電費
+            <input type="number" min="0" name="newChargeListElectricityFee" [(ngModel)]="newChargeListForm.electricityFee" />
+          </label>
+          <label>
+            列印費
+            <input type="number" min="0" name="newChargeListPrintingFee" [(ngModel)]="newChargeListForm.printingFee" />
+          </label>
+          <label>
+            營業稅
+            <input type="number" min="0" name="newChargeListTax" [(ngModel)]="newChargeListForm.tax" />
+          </label>
+          <label>
+            代墊費
+            <input type="number" min="0" name="newChargeListAdvancePayment" [(ngModel)]="newChargeListForm.advancePayment" />
+          </label>
+          <label>
+            修繕費
+            <input type="number" min="0" name="newChargeListRepairFee" [(ngModel)]="newChargeListForm.repairFee" />
+          </label>
+          <label>
+            收費總金額（預覽，實際以送出後系統計算為準）
+            <input type="text" [value]="money(chargeListPreviewTotal(newChargeListForm))" readonly />
+          </label>
+          <div class="form-actions wide">
+            <button type="submit" [disabled]="saving()">新增收費清單</button>
+          </div>
+        </form>
+
+        <div class="empty-state" *ngIf="!chargeListRows().length">目前沒有收費清單資料。</div>
+        <div class="simple-table rent-table" *ngIf="chargeListRows().length">
+          <div class="simple-row header charge-list-row">
+            <span class="sortable" (click)="toggleChargeListSort('chargeListId')">編號</span>
+            <span>客戶名稱</span>
+            <span>辦公室名稱</span>
+            <span class="sortable" (click)="toggleChargeListSort('feeStartMonth')">費用期間</span>
+            <span class="sortable" (click)="toggleChargeListSort('totalAmount')">收費總金額</span>
+            <span class="sortable" (click)="toggleChargeListSort('status')">單據狀態</span>
+            <span>開單人</span>
+            <span class="sortable" (click)="toggleChargeListSort('issuedAt')">開單時間</span>
+            <span>操作</span>
+          </div>
+          <div class="simple-row charge-list-row" *ngFor="let row of chargeListRows()">
+            <span>{{ row.charge_list_id }}</span>
+            <span>{{ row.company_name }}</span>
+            <span>{{ row.office_no || '-' }}</span>
+            <span>{{ formatFeePeriod(row) }}</span>
+            <span>{{ money(row.total_amount) }}</span>
+            <span>{{ displayChargeListStatus(row.status) }}</span>
+            <span>{{ row.created_by_name || '-' }}</span>
+            <span>{{ row.issued_at }}</span>
+            <span>
+              <button type="button" class="ghost compact-button" (click)="startEditChargeList(row)">修改</button>
+              <button type="button" class="ghost compact-button" (click)="exportChargeListImage(row)">匯出圖片</button>
+            </span>
+          </div>
+        </div>
+
+        <div class="pagination-bar" *ngIf="chargeListRows().length">
+          <button type="button" class="ghost compact-button" [disabled]="chargeListPage() === 0" (click)="changeChargeListPage(-1)">
+            上一頁
+          </button>
+          <span>第 {{ chargeListPage() + 1 }} / {{ chargeListTotalPages() }} 頁（共 {{ chargeListTotal() }} 筆）</span>
+          <button
+            type="button"
+            class="ghost compact-button"
+            [disabled]="chargeListPage() + 1 >= chargeListTotalPages()"
+            (click)="changeChargeListPage(1)"
+          >
+            下一頁
+          </button>
+        </div>
+
+        <div class="charge-list-print-area" #chargeListPrintArea *ngIf="exportingChargeList() as exportRow">
+          <div class="print-header">
+            <div class="print-header-left">
+              <p>辦公室：{{ exportRow.office_no || '-' }}</p>
+              <p>公司：{{ exportRow.company_name }}</p>
+              <p class="print-period">費用期間：{{ formatFeePeriod(exportRow) }}</p>
+            </div>
+            <div class="print-header-right">
+              <strong>{{ chargeListIssuerName }}</strong>
+            </div>
+          </div>
+
+          <div class="print-title-row">
+            <h3>收費清單</h3>
+            <span>{{ formatRocDate(exportRow.issued_at) }}</span>
+          </div>
+
+          <div class="print-item-row"><span>租金</span><span>{{ feeCellValue(exportRow.contract_rent) }}</span></div>
+          <div class="print-item-row"><span>管理費</span><span>{{ feeCellValue(exportRow.management_fee) }}</span></div>
+          <div class="print-item-row"><span>電費</span><span>{{ feeCellValue(exportRow.electricity_fee) }}</span></div>
+          <div class="print-item-row"><span>列印</span><span>{{ feeCellValue(exportRow.printing_fee) }}</span></div>
+          <div class="print-item-row"><span>營業稅</span><span>{{ feeCellValue(exportRow.tax) }}</span></div>
+          <div class="print-item-row"><span>代墊費</span><span>{{ feeCellValue(exportRow.advance_payment) }}</span></div>
+          <div class="print-item-row"><span>修繕費</span><span>{{ feeCellValue(exportRow.repair_fee) }}</span></div>
+
+          <div class="print-total-row"><span>合計</span><span>{{ money(chargeListGrandTotal(exportRow)) }}</span></div>
+
+          <div class="print-footer">
+            <p>{{ chargeListBankInfo }}</p>
+            <p>戶名:{{ chargeListBankAccountName }} 帳號:{{ chargeListBankAccountNumber }}</p>
+          </div>
+        </div>
+
+        <div class="modal-overlay" *ngIf="chargeListPreviewImage() as previewSrc">
+          <div class="modal-dialog">
+            <div class="modal-header">
+              <h3>收費清單圖片預覽</h3>
+              <button type="button" class="ghost compact-button" (click)="closeChargeListPreview()">關閉</button>
+            </div>
+            <div class="modal-body">
+              <img [src]="previewSrc" alt="收費清單預覽圖片" />
+            </div>
+            <div class="modal-footer">
+              <button type="button" (click)="downloadChargeListPreview()">下載圖片</button>
+              <button type="button" class="ghost" (click)="closeChargeListPreview()">取消</button>
+            </div>
           </div>
         </div>
       </section>
