@@ -904,7 +904,7 @@ public class CmsQueryService {
                 ORDER BY s.staff_id
                 """));
         result.put("salesTargets", jdbc.queryForList("""
-                SELECT st.sales_target_id, st.branch_id, st.target_month AS month,
+                SELECT st.sales_target_id, st.branch_id, st.target_month AS `month`,
                        st.category, st.target_count, b.branch_name
                 FROM sales_targets st JOIN branches b ON b.branch_id = st.branch_id
                 ORDER BY st.target_month, st.category

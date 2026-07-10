@@ -1178,7 +1178,6 @@ export class AppComponent implements OnInit {
     if (!term) {
       this.chargeListFilterCustomerOptions.set([]);
       this.chargeListFilters.customerId = null;
-      this.loadChargeLists();
       return;
     }
     this.api.customerLookup(term).subscribe({
@@ -1191,6 +1190,9 @@ export class AppComponent implements OnInit {
     this.chargeListFilterCustomerSearch = customer.company_name;
     this.chargeListFilterCustomerOptions.set([]);
     this.chargeListFilters.customerId = customer.customer_id;
+  }
+
+  searchChargeLists(): void {
     this.chargeListPage.set(0);
     this.loadChargeLists();
   }
@@ -1252,6 +1254,17 @@ export class AppComponent implements OnInit {
     );
   }
 
+  normalizeChargeListFeeField(
+    event: Event,
+    form: ChargeListForm,
+    field: 'managementFee' | 'electricityFee' | 'printingFee' | 'tax' | 'advancePayment' | 'repairFee'
+  ): void {
+    const input = event.target as HTMLInputElement;
+    const normalized = Math.max(0, Number(input.value) || 0);
+    form[field] = normalized;
+    input.value = String(normalized);
+  }
+
   createChargeList(): void {
     if (!this.newChargeListForm.customerId || !this.newChargeListForm.contractId) {
       this.error.set('請先搜尋並選擇客戶與租約。');
@@ -1259,6 +1272,9 @@ export class AppComponent implements OnInit {
     }
     if (!this.newChargeListForm.feeStartMonth || !this.newChargeListForm.feeEndMonth) {
       this.error.set('請填寫費用起訖月。');
+      return;
+    }
+    if (!window.confirm('確定要新增這筆收費清單嗎？')) {
       return;
     }
     this.newChargeListForm.updatedBy = this.currentStaffId();
@@ -1313,6 +1329,9 @@ export class AppComponent implements OnInit {
     }
     if (!this.chargeListEditForm.feeStartMonth || !this.chargeListEditForm.feeEndMonth) {
       this.error.set('請填寫費用起訖月。');
+      return;
+    }
+    if (!window.confirm('確定要儲存這筆收費清單的修改嗎？')) {
       return;
     }
     this.chargeListEditForm.updatedBy = this.currentStaffId();

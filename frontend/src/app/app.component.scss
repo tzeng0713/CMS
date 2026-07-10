@@ -466,6 +466,23 @@ textarea {
   margin-bottom: 14px;
 }
 
+.filter-customer-lookup {
+  position: relative;
+}
+
+.filter-customer-lookup .lookup-list {
+  min-width: 260px;
+}
+
+input[readonly],
+select:disabled,
+input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+  border-color: #e2e8f0;
+}
+
 .form-lookup {
   max-width: none;
   margin-bottom: 0;
@@ -725,6 +742,7 @@ textarea {
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
 }
 
 .radio-group {
@@ -836,12 +854,13 @@ textarea {
 }
 
 .charge-list-row {
-  min-width: 1280px;
+  min-width: 1420px;
   grid-template-columns:
     minmax(80px, 0.5fr)
     minmax(180px, 1.1fr)
     minmax(140px, 0.8fr)
     minmax(160px, 0.9fr)
+    minmax(110px, 0.65fr)
     minmax(130px, 0.75fr)
     minmax(90px, 0.55fr)
     minmax(110px, 0.65fr)
