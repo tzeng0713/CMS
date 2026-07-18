@@ -51,10 +51,14 @@ type CustomerForm = {
   ownerName: string;
   ownerBirthday: string;
   contactPerson: string;
+  contactBirthday: string;
   phone: string;
   forwardingAddress: string;
   pettyCash: number | null;
-  referrer: string;
+  accountantInfo: string;
+  accountInfo: string;
+  isAgent: boolean;
+  relatedCompanyNames: string[];
   notes: string;
   registrationType: string;
   updatedBy: number;
@@ -67,6 +71,8 @@ type ContractForm = {
   rentalStatus: string;
   signedDateText: string;
   signerStaffId: number | null;
+  partnerStaffId: number | null;
+  sourceText: string;
   paymentMonths: number | null;
   startDateText: string;
   endDateText: string;
@@ -86,10 +92,14 @@ const emptyCustomerForm = (): CustomerForm => ({
   ownerName: '',
   ownerBirthday: '',
   contactPerson: '',
+  contactBirthday: '',
   phone: '',
   forwardingAddress: '',
   pettyCash: null,
-  referrer: '',
+  accountantInfo: '',
+  accountInfo: '',
+  isAgent: false,
+  relatedCompanyNames: [''],
   notes: '',
   registrationType: '登記',
   updatedBy: 1
@@ -102,6 +112,8 @@ const emptyContractForm = (): ContractForm => ({
   rentalStatus: '登記',
   signedDateText: '',
   signerStaffId: null,
+  partnerStaffId: null,
+  sourceText: '',
   paymentMonths: null,
   startDateText: '',
   endDateText: '',
@@ -126,13 +138,13 @@ export class AppComponent implements OnInit {
     { value: 1, label: '解約中' },
     { value: 2, label: '合約已到期' }
   ];
-  readonly rentalItemOptions = ['辦公室', '座位', '登記', '聯絡處'];
+  readonly rentalItemOptions = ['辦公室', '座位', '登記', '聯絡處', '停業'];
   readonly rentalStatusOptions = [
     { value: 1, label: '地址' },
     { value: 2, label: '地址+服務' },
     { value: 3, label: '僅服務' }
   ];
-  readonly contractRentalStatusOptions = ['登記', '辦公室', '登記+辦公室'];
+  readonly contractRentalStatusOptions = ['登記', '辦公室', '登記+辦公室', '個人名義'];
   readonly contractStatusOptions = ['綁約中', '已解約'];
 
   private readonly allNavGroups: NavGroup[] = [
@@ -147,7 +159,7 @@ export class AppComponent implements OnInit {
       label: '租約管理',
       children: [
         { key: 'contract-search', label: '查詢租約' },
-        { key: 'contract-new', label: '新增租約' }
+        { key: 'contract-new', label: '續約租約' }
       ]
     },
     {
@@ -246,6 +258,8 @@ export class AppComponent implements OnInit {
   newCustomerForm: CustomerForm = emptyCustomerForm();
   newCustomerContractForm: ContractForm = emptyContractForm();
   newCustomerLeaseImage: File | null = null;
+  newCustomerFirstPaymentAmount: number | null = null;
+  newCustomerFirstPaymentDateText = '';
   customerEditForm: CustomerForm = emptyCustomerForm();
   newContractForm: ContractForm = emptyContractForm();
   contractEditForm: ContractForm = emptyContractForm();
@@ -259,6 +273,7 @@ export class AppComponent implements OnInit {
 
   selectedCustomerId = computed(() => this.selectedCustomer()?.customer_id ?? null);
   sameOwnerCompanies = computed(() => this.selectedCustomer()?.sameOwnerCompanies ?? []);
+  relatedCompanies = computed(() => this.selectedCustomer()?.relatedCompanies ?? []);
 
   constructor(private readonly api: CmsApiService, private readonly router: Router) {}
 
@@ -330,6 +345,9 @@ export class AppComponent implements OnInit {
         break;
       case 'rent-search':
         this.loadRentPayments();
+        break;
+      case 'rent-new':
+        this.loadRentFromRoute();
         break;
       case 'staff-overview':
         this.loadStaffOverview();
@@ -522,9 +540,34 @@ export class AppComponent implements OnInit {
     this.newCustomerOptions.set([]);
   }
 
+  addRelatedCompany(): void {
+    this.newCustomerForm.relatedCompanyNames.push('');
+  }
+
+  removeRelatedCompany(index: number): void {
+    if (this.newCustomerForm.relatedCompanyNames.length === 1) {
+      this.newCustomerForm.relatedCompanyNames[0] = '';
+      return;
+    }
+    this.newCustomerForm.relatedCompanyNames.splice(index, 1);
+  }
+
+  trackByIndex(index: number): number {
+    return index;
+  }
+
   createCustomer(): void {
     if (!this.newCustomerForm.companyName.trim()) {
       this.error.set('公司名稱為必填。');
+      return;
+    }
+    if (!this.validContractStaff(this.newCustomerContractForm)) {
+      return;
+    }
+    const hasFirstPaymentAmount = this.newCustomerFirstPaymentAmount !== null;
+    const hasFirstPaymentDate = Boolean(this.newCustomerFirstPaymentDateText);
+    if (hasFirstPaymentAmount !== hasFirstPaymentDate) {
+      this.error.set('本次繳款金額與繳款日期必須一起填寫。');
       return;
     }
     this.newCustomerForm.updatedBy = this.currentStaffId();
@@ -538,7 +581,9 @@ export class AppComponent implements OnInit {
       .createCustomerWithContract(
         {
           customer: this.toCustomerPayload(this.newCustomerForm),
-          contract: this.toContractPayload(this.newCustomerContractForm)
+          contract: this.toContractPayload(this.newCustomerContractForm),
+          firstPaymentAmount: this.newCustomerFirstPaymentAmount,
+          firstPaymentDateText: this.newCustomerFirstPaymentDateText
         },
         this.newCustomerLeaseImage
       )
@@ -553,6 +598,8 @@ export class AppComponent implements OnInit {
           this.newCustomerForm = emptyCustomerForm();
           this.newCustomerContractForm = { ...emptyContractForm(), updatedBy: this.currentStaffId(), signerStaffId: this.currentStaffId() };
           this.newCustomerLeaseImage = null;
+          this.newCustomerFirstPaymentAmount = null;
+          this.newCustomerFirstPaymentDateText = '';
           this.newCustomerOptions.set([]);
           this.loadDashboard();
           this.loadCustomers();
@@ -681,17 +728,45 @@ export class AppComponent implements OnInit {
   selectContractCustomer(customer: CustomerSummary): void {
     this.contractCustomerSearch = customer.company_name;
     this.contractCustomerOptions.set([]);
-    this.newContractForm.customerId = customer.customer_id;
-    if (this.newContractForm.rent === null && customer.rent !== null && customer.rent !== undefined) {
-      this.newContractForm.rent = Number(customer.rent);
-    }
-    if (this.newContractForm.deposit === null && customer.deposit !== null && customer.deposit !== undefined) {
-      this.newContractForm.deposit = Number(customer.deposit);
-    }
+    this.newContractForm = {
+      ...emptyContractForm(),
+      customerId: customer.customer_id,
+      signerStaffId: this.currentStaffId(),
+      updatedBy: this.currentStaffId()
+    };
+    this.api.latestContract(customer.customer_id).subscribe({
+      next: (latest) => {
+        if (!latest['contract_id']) {
+          return;
+        }
+        this.newContractForm = {
+          ...this.newContractForm,
+          officeId: latest['office_id'] === null || latest['office_id'] === undefined ? null : Number(latest['office_id']),
+          rentalItem: this.textValue(latest['rental_item']) || '登記',
+          rentalStatus: this.textValue(latest['rental_status']) || '登記',
+          signerStaffId:
+            latest['signer_staff_id'] === null || latest['signer_staff_id'] === undefined
+              ? this.currentStaffId()
+              : Number(latest['signer_staff_id']),
+          partnerStaffId:
+            latest['partner_staff_id'] === null || latest['partner_staff_id'] === undefined
+              ? null
+              : Number(latest['partner_staff_id']),
+          sourceText: this.textValue(latest['source_text']),
+          paymentMonths:
+            latest['payment_months'] === null || latest['payment_months'] === undefined
+              ? null
+              : Number(latest['payment_months']),
+          rent: latest['rent'] === null || latest['rent'] === undefined ? null : Number(latest['rent']),
+          deposit: latest['deposit'] === null || latest['deposit'] === undefined ? null : Number(latest['deposit'])
+        };
+      },
+      error: () => this.error.set('無法載入最新租約資料。')
+    });
   }
 
   createContract(): void {
-    this.saveContract(null, this.newContractForm, '租約已新增。');
+    this.saveContract(null, this.newContractForm, '租約已續約。');
   }
 
   startEditContract(row: Record<string, unknown>): void {
@@ -717,6 +792,9 @@ export class AppComponent implements OnInit {
   private saveContract(id: number | null, form: ContractForm, message: string): void {
     if (!form.customerId) {
       this.error.set('請先選擇客戶。');
+      return;
+    }
+    if (!this.validContractStaff(form)) {
       return;
     }
     form.updatedBy = this.currentStaffId();
@@ -777,6 +855,41 @@ export class AppComponent implements OnInit {
         };
       },
       error: () => this.error.set('無法載入客戶合約資料。')
+    });
+  }
+
+  openReconciliation(item: Dashboard['notifications']['incompleteContracts'][number]): void {
+    this.router.navigate(['/rent-payments/new'], {
+      queryParams: { customerId: item.customer_id, contractId: item.contract_id }
+    });
+  }
+
+  private loadRentFromRoute(): void {
+    const query = this.router.parseUrl(this.router.url).queryParams;
+    const customerId = Number(query['customerId']);
+    const contractId = Number(query['contractId']);
+    if (!customerId || !contractId) {
+      return;
+    }
+    this.api.customerDetail(customerId).subscribe({
+      next: (customer) => {
+        const contract = customer.contracts.find((row) => Number(row['contract_id']) === contractId);
+        if (!contract) {
+          this.error.set('找不到通知所對應的租約。');
+          return;
+        }
+        this.selectedRentCustomer.set(customer);
+        this.rentCustomerSearch = customer.company_name;
+        this.rentCustomerOptions.set([]);
+        this.rentForm = {
+          customerId,
+          contractId,
+          paymentMonth: this.monthNumberFromInput(this.rentPaymentMonth),
+          amount: contract['rent'] === null || contract['rent'] === undefined ? undefined : Number(contract['rent']),
+          updatedBy: this.currentStaffId()
+        };
+      },
+      error: () => this.error.set('無法載入待對帳客戶資料。')
     });
   }
 
@@ -928,6 +1041,14 @@ export class AppComponent implements OnInit {
     form.rentalItem = value;
   }
 
+  private validContractStaff(form: ContractForm): boolean {
+    if (form.signerStaffId !== null && form.signerStaffId === form.partnerStaffId) {
+      this.error.set('簽約人與合作夥伴必須是不同職員。');
+      return false;
+    }
+    return true;
+  }
+
   onNewCustomerLeaseImage(event: Event): void {
     const input = event.target as HTMLInputElement;
     this.newCustomerLeaseImage = input.files?.[0] ?? null;
@@ -986,6 +1107,9 @@ export class AppComponent implements OnInit {
       rentalStatus: this.textValue(row['rental_status']) || '登記',
       signedDateText: this.textValue(row['signed_date_text']),
       signerStaffId: row['signer_staff_id'] === null || row['signer_staff_id'] === undefined ? null : Number(row['signer_staff_id']),
+      partnerStaffId:
+        row['partner_staff_id'] === null || row['partner_staff_id'] === undefined ? null : Number(row['partner_staff_id']),
+      sourceText: this.textValue(row['source_text']),
       paymentMonths: row['payment_months'] === null || row['payment_months'] === undefined ? null : Number(row['payment_months']),
       startDateText: this.textValue(row['start_date_text']),
       endDateText: this.textValue(row['end_date_text']),
@@ -1005,6 +1129,8 @@ export class AppComponent implements OnInit {
       rentalStatus: form.rentalStatus,
       signedDateText: form.signedDateText,
       signerStaffId: form.signerStaffId ?? null,
+      partnerStaffId: form.partnerStaffId ?? null,
+      sourceText: form.sourceText,
       paymentMonths: form.paymentMonths,
       startDateText: form.startDateText,
       endDateText: form.endDateText,
@@ -1027,10 +1153,14 @@ export class AppComponent implements OnInit {
       ownerName: customer.owner_name ?? '',
       ownerBirthday: customer.owner_birthday ?? '',
       contactPerson: customer.contact_person ?? '',
+      contactBirthday: customer.contact_birthday ?? '',
       phone: customer.phone ?? '',
       forwardingAddress: customer.forwarding_address ?? '',
       pettyCash: customer.petty_cash === null || customer.petty_cash === undefined ? null : Number(customer.petty_cash),
-      referrer: customer.referrer ?? '',
+      accountantInfo: customer.accountant_info ?? customer.referrer ?? '',
+      accountInfo: customer.account_info ?? '',
+      isAgent: customer.is_agent === true,
+      relatedCompanyNames: [''],
       notes: customer.notes ?? '',
       registrationType: customer.registration_type ?? rentalItem,
       updatedBy: this.currentStaffId()
@@ -1047,10 +1177,15 @@ export class AppComponent implements OnInit {
       ownerName: form.ownerName,
       ownerBirthday: form.ownerBirthday,
       contactPerson: form.contactPerson,
+      contactBirthday: form.contactBirthday,
       phone: form.phone,
       forwardingAddress: form.forwardingAddress,
       pettyCash: form.pettyCash,
-      referrer: form.referrer,
+      referrer: form.accountantInfo,
+      accountantInfo: form.accountantInfo,
+      accountInfo: form.accountInfo,
+      isAgent: form.isAgent,
+      relatedCompanyNames: form.relatedCompanyNames.map((name) => name.trim()).filter(Boolean),
       notes: form.notes,
       registrationType: form.rentalItem || form.registrationType,
       updatedBy: form.updatedBy

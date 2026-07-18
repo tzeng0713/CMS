@@ -90,10 +90,13 @@
       "ownerName": "吳念壎",
       "ownerBirthday": "1980-06-15",
       "contactPerson": "吳念壎",
+      "contactBirthday": "1982-03-12",
       "phone": "0930998049",
       "forwardingAddress": "台北市大安區敦化南路一段 1 號",
       "pettyCash": 2000,
-      "referrer": "官網洽詢",
+      "accountantInfo": "陳會計師",
+      "accountInfo": "台新銀行，公司戶",
+      "isAgent": false,
       "notes": "Demo：辦公室承租客戶",
       "registrationType": "辦公室"
     },
@@ -107,11 +110,14 @@
       "ownerName": "羅至鋐",
       "ownerBirthday": "1979-07-20",
       "contactPerson": "羅至鋐",
+      "contactBirthday": "1981-05-10",
       "phone": "0907637698 羅r",
       "forwardingAddress": "台北市大安區復興南路一段 2 號",
       "pettyCash": 1000,
-      "referrer": "既有客戶介紹",
-      "notes": "Demo：同負責人群組主客戶",
+      "accountantInfo": "林會計師",
+      "accountInfo": "第一銀行，公司戶",
+      "isAgent": true,
+      "notes": "Demo：相關公司群組主客戶",
       "registrationType": "辦公室"
     },
     {
@@ -124,11 +130,14 @@
       "ownerName": "羅至鋐",
       "ownerBirthday": "1979-07-20",
       "contactPerson": "羅至鋐",
+      "contactBirthday": "1981-05-10",
       "phone": "0907637698 羅r",
       "forwardingAddress": "台北市大安區復興南路一段 2 號",
       "pettyCash": null,
-      "referrer": "金鋐源轉介",
-      "notes": "Demo：同負責人登記地址",
+      "accountantInfo": "林會計師",
+      "accountInfo": null,
+      "isAgent": false,
+      "notes": "Demo：相關公司登記地址",
       "registrationType": "登記"
     },
     {
@@ -141,11 +150,14 @@
       "ownerName": "羅至鋐",
       "ownerBirthday": "1979-07-20",
       "contactPerson": "林小姐",
+      "contactBirthday": "1990-09-03",
       "phone": "0911222333",
       "forwardingAddress": "新北市板橋區文化路 10 號",
       "pettyCash": 500,
-      "referrer": "同負責人新增",
-      "notes": "Demo：同負責人座位租約",
+      "accountantInfo": "林會計師",
+      "accountInfo": null,
+      "isAgent": true,
+      "notes": "Demo：相關公司座位租約",
       "registrationType": "座位"
     },
     {
@@ -158,12 +170,40 @@
       "ownerName": "陳怡君",
       "ownerBirthday": "1988-06-28",
       "contactPerson": "陳怡君",
+      "contactBirthday": "1988-06-28",
       "phone": "0922000001",
       "forwardingAddress": "台北市信義區松仁路 20 號",
       "pettyCash": null,
-      "referrer": "網路搜尋",
-      "notes": "Demo：本月壽星提醒",
+      "accountantInfo": "王會計師",
+      "accountInfo": null,
+      "isAgent": false,
+      "notes": "Demo：待完成第一筆繳款",
       "registrationType": "登記"
+    }
+  ],
+  "customerRelationGroups": [
+    {
+      "relationGroupId": 1
+    }
+  ],
+  "customerRelationMembers": [
+    {
+      "relationMemberId": 1,
+      "relationGroupId": 1,
+      "customerId": 2,
+      "companyName": "金鋐源記帳士事務所"
+    },
+    {
+      "relationMemberId": 2,
+      "relationGroupId": 1,
+      "customerId": 3,
+      "companyName": "澔博管理顧問有限公司"
+    },
+    {
+      "relationMemberId": 3,
+      "relationGroupId": 1,
+      "customerId": 4,
+      "companyName": "羅氏數位服務有限公司"
     }
   ],
   "contracts": [
@@ -175,6 +215,8 @@
       "contractRentalStatus": "辦公室",
       "signedDateText": "2026-01-02",
       "signerStaffId": 1,
+      "partnerStaffId": 2,
+      "sourceText": "官網洽詢",
       "paymentMonths": 6,
       "startDateText": "2026-01-01",
       "endDateText": "2026-12-31",
@@ -193,6 +235,8 @@
       "contractRentalStatus": "辦公室",
       "signedDateText": "2026-01-05",
       "signerStaffId": 2,
+      "partnerStaffId": 1,
+      "sourceText": "既有客戶介紹",
       "paymentMonths": 6,
       "startDateText": "2026-01-01",
       "endDateText": "2026-12-31",
@@ -211,6 +255,8 @@
       "contractRentalStatus": "登記",
       "signedDateText": "2026-02-01",
       "signerStaffId": 2,
+      "partnerStaffId": 3,
+      "sourceText": "會計師介紹",
       "paymentMonths": 12,
       "startDateText": "2026-02-01",
       "endDateText": "2027-01-31",
@@ -229,6 +275,8 @@
       "contractRentalStatus": "辦公室",
       "signedDateText": "2026-03-15",
       "signerStaffId": 3,
+      "partnerStaffId": 2,
+      "sourceText": "相關公司轉介",
       "paymentMonths": 3,
       "startDateText": "2026-04-01",
       "endDateText": "2026-09-30",
@@ -247,6 +295,8 @@
       "contractRentalStatus": "登記",
       "signedDateText": "2026-06-01",
       "signerStaffId": 1,
+      "partnerStaffId": 2,
+      "sourceText": "網路搜尋",
       "paymentMonths": 12,
       "startDateText": "2026-07-01",
       "endDateText": "2026-07-28",

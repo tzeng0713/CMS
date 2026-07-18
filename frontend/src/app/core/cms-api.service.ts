@@ -16,10 +16,16 @@ export interface Dashboard {
       end_date_text: string;
       lease_status: string;
     }>;
-    ownerBirthdays: Array<{
+    incompleteContracts: Array<{
+      customer_id: number;
+      contract_id: number;
       company_name: string;
-      owner_name: string | null;
-      owner_birthday: string;
+      signed_date_text: string | null;
+      signer_staff_id: number | null;
+      signer_staff_name: string | null;
+      start_date_text: string | null;
+      rent: number | null;
+      lease_status: string;
     }>;
   };
 }
@@ -47,8 +53,12 @@ export interface CustomerSummary {
   rental_status: number | null;
   owner_name: string | null;
   owner_birthday: string | null;
+  contact_birthday: string | null;
   phone: string | null;
   referrer: string | null;
+  accountant_info: string | null;
+  account_info: string | null;
+  is_agent: boolean | null;
   registration_type: string | null;
   contract_id: number | null;
   lease_status: string | null;
@@ -63,6 +73,12 @@ export interface CustomerDetail extends CustomerSummary {
   forwarding_address: string | null;
   petty_cash: number | null;
   notes: string | null;
+  relatedCompanies: Array<{
+    relation_member_id: number;
+    customer_id: number | null;
+    company_name: string;
+    is_resolved: boolean;
+  }>;
   contracts: Array<Record<string, unknown>>;
   sameOwnerCompanies: CustomerSummary[];
   rentPayments: Array<Record<string, unknown>>;
@@ -79,10 +95,15 @@ export interface CustomerPayload {
   ownerName?: string;
   ownerBirthday?: string;
   contactPerson?: string;
+  contactBirthday?: string;
   phone?: string;
   forwardingAddress?: string;
   pettyCash?: number | null;
   referrer?: string;
+  accountantInfo?: string;
+  accountInfo?: string;
+  isAgent?: boolean;
+  relatedCompanyNames?: string[];
   notes?: string;
   registrationType?: string;
   updatedBy?: number;
@@ -133,6 +154,8 @@ export interface ContractPayload {
   rentalStatus?: string;
   signedDateText?: string;
   signerStaffId?: number | null;
+  partnerStaffId?: number | null;
+  sourceText?: string;
   paymentMonths?: number | null;
   startDateText?: string;
   endDateText?: string;
@@ -198,7 +221,12 @@ export class CmsApiService {
   }
 
   createCustomerWithContract(
-    payload: { customer: CustomerPayload; contract: ContractPayload },
+    payload: {
+      customer: CustomerPayload;
+      contract: ContractPayload;
+      firstPaymentAmount?: number | null;
+      firstPaymentDateText?: string;
+    },
     leaseImage?: File | null
   ): Observable<CustomerDetail> {
     const formData = new FormData();
@@ -233,6 +261,10 @@ export class CmsApiService {
 
   createContract(payload: ContractPayload): Observable<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>(`${this.baseUrl}/contracts`, payload);
+  }
+
+  latestContract(customerId: number): Observable<Record<string, unknown>> {
+    return this.http.get<Record<string, unknown>>(`${this.baseUrl}/customers/${customerId}/latest-contract`);
   }
 
   updateContract(id: number, payload: ContractPayload): Observable<Record<string, unknown>> {

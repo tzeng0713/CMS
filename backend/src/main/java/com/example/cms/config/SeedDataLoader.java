@@ -42,6 +42,8 @@ public class SeedDataLoader implements CommandLineRunner {
             insertStaff(list(seed, "staff"));
             insertOffices(list(seed, "offices"));
             insertCustomers(list(seed, "customers"));
+            insertCustomerRelationGroups(list(seed, "customerRelationGroups"));
+            insertCustomerRelationMembers(list(seed, "customerRelationMembers"));
             insertContracts(list(seed, "contracts"));
             insertRentPayments(list(seed, "rentPayments"));
             insertRefunds(list(seed, "refunds"));
@@ -84,24 +86,44 @@ public class SeedDataLoader implements CommandLineRunner {
         rows.forEach(r -> jdbc.update("""
                 INSERT INTO customers (
                     customer_id, company_name, tax_id, status, rental_item, rental_status,
-                    owner_name, owner_birthday, contact_person, phone, forwarding_address,
-                    petty_cash, referrer, notes, registration_type, updated_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    owner_name, owner_birthday, contact_person, contact_birthday, phone, forwarding_address,
+                    petty_cash, referrer, accountant_info, account_info, is_agent,
+                    notes, registration_type, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                 """, n(r, "customerId"), s(r, "companyName"), s(r, "taxId"),
                 statusCode(s(r, "status")), rentalItem(r), rentalStatus(r), s(r, "ownerName"),
-                s(r, "ownerBirthday"), s(r, "contactPerson"), s(r, "phone"), s(r, "forwardingAddress"),
-                bd(r, "pettyCash"), s(r, "referrer"), s(r, "notes"), rentalItem(r)));
+                s(r, "ownerBirthday"), s(r, "contactPerson"), s(r, "contactBirthday"),
+                s(r, "phone"), s(r, "forwardingAddress"), bd(r, "pettyCash"),
+                s(r, "accountantInfo"), s(r, "accountantInfo"), s(r, "accountInfo"),
+                b(r, "isAgent"), s(r, "notes"), rentalItem(r)));
+    }
+
+    private void insertCustomerRelationGroups(List<Map<String, Object>> rows) {
+        rows.forEach(r -> jdbc.update(
+                "INSERT INTO customer_relation_groups (relation_group_id) VALUES (?)",
+                n(r, "relationGroupId")));
+    }
+
+    private void insertCustomerRelationMembers(List<Map<String, Object>> rows) {
+        rows.forEach(r -> jdbc.update("""
+                INSERT INTO customer_relation_members (
+                    relation_member_id, relation_group_id, customer_id, company_name
+                ) VALUES (?, ?, ?, ?)
+                """, n(r, "relationMemberId"), n(r, "relationGroupId"),
+                n(r, "customerId"), s(r, "companyName")));
     }
 
     private void insertContracts(List<Map<String, Object>> rows) {
         rows.forEach(r -> jdbc.update("""
                 INSERT INTO contracts (
                     contract_id, customer_id, office_id, rental_item, rental_status, signed_date_text,
-                    signer_staff_id, payment_months, start_date_text, end_date_text, termination_date_text,
+                    signer_staff_id, partner_staff_id, source_text, payment_months,
+                    start_date_text, end_date_text, termination_date_text,
                     rent, deposit, registration_type, lease_status, lease_image_path, updated_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
                 """, n(r, "contractId"), n(r, "customerId"), n(r, "officeId"), contractRentalItem(r),
-                contractRentalStatus(r), s(r, "signedDateText"), n(r, "signerStaffId"), n(r, "paymentMonths"),
+                contractRentalStatus(r), s(r, "signedDateText"), n(r, "signerStaffId"),
+                n(r, "partnerStaffId"), s(r, "sourceText"), n(r, "paymentMonths"),
                 s(r, "startDateText"), s(r, "endDateText"), s(r, "terminationDateText"), bd(r, "rent"),
                 bd(r, "deposit"), contractRentalItem(r), contractLeaseStatus(r), s(r, "leaseImagePath")));
     }
@@ -165,6 +187,11 @@ public class SeedDataLoader implements CommandLineRunner {
         return new BigDecimal(value.toString());
     }
 
+    private Boolean b(Map<String, Object> row, String key) {
+        Object value = row.get(key);
+        return value != null && Boolean.parseBoolean(value.toString());
+    }
+
     private Integer statusCode(String value) {
         if (value == null || value.isBlank() || "租賃中".equals(value)) {
             return 0;
@@ -186,7 +213,8 @@ public class SeedDataLoader implements CommandLineRunner {
         if ("實體辦公室".equals(value)) {
             return "辦公室";
         }
-        if ("辦公室".equals(value) || "座位".equals(value) || "登記".equals(value) || "聯絡處".equals(value)) {
+        if ("辦公室".equals(value) || "座位".equals(value) || "登記".equals(value)
+                || "聯絡處".equals(value) || "停業".equals(value)) {
             return value;
         }
         return "登記";
@@ -212,7 +240,8 @@ public class SeedDataLoader implements CommandLineRunner {
         if ("實體辦公室".equals(value)) {
             return "辦公室";
         }
-        if ("辦公室".equals(value) || "座位".equals(value) || "登記".equals(value) || "聯絡處".equals(value)) {
+        if ("辦公室".equals(value) || "座位".equals(value) || "登記".equals(value)
+                || "聯絡處".equals(value) || "停業".equals(value)) {
             return value;
         }
         return "登記";
@@ -223,7 +252,8 @@ public class SeedDataLoader implements CommandLineRunner {
         if (value == null || value.isBlank()) {
             value = s(row, "rentalStatusText");
         }
-        if ("登記".equals(value) || "辦公室".equals(value) || "登記+辦公室".equals(value)) {
+        if ("登記".equals(value) || "辦公室".equals(value)
+                || "登記+辦公室".equals(value) || "個人名義".equals(value)) {
             return value;
         }
         String item = contractRentalItem(row);

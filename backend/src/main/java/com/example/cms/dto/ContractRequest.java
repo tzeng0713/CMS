@@ -9,6 +9,8 @@ public record ContractRequest(
         String rentalStatus,
         String signedDateText,
         Long signerStaffId,
+        Long partnerStaffId,
+        String sourceText,
         Integer paymentMonths,
         String startDateText,
         String endDateText,

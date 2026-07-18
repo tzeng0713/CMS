@@ -47,15 +47,36 @@ CREATE TABLE IF NOT EXISTS customers (
   owner_name VARCHAR(100),
   owner_birthday VARCHAR(30),
   contact_person VARCHAR(100),
+  contact_birthday VARCHAR(30),
   phone VARCHAR(100),
   forwarding_address VARCHAR(255),
   petty_cash DECIMAL(12,2),
   referrer VARCHAR(100),
+  accountant_info VARCHAR(500),
+  account_info VARCHAR(1000),
+  is_agent BOOLEAN DEFAULT FALSE,
   notes VARCHAR(1000),
   registration_type VARCHAR(60),
   updated_by BIGINT,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_customers_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE IF NOT EXISTS customer_relation_groups (
+  relation_group_id BIGINT PRIMARY KEY,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS customer_relation_members (
+  relation_member_id BIGINT PRIMARY KEY,
+  relation_group_id BIGINT NOT NULL,
+  customer_id BIGINT,
+  company_name VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_relation_member_customer UNIQUE (customer_id),
+  CONSTRAINT uq_relation_member_name UNIQUE (relation_group_id, company_name),
+  CONSTRAINT fk_relation_members_group FOREIGN KEY (relation_group_id) REFERENCES customer_relation_groups(relation_group_id),
+  CONSTRAINT fk_relation_members_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
 );
 
 CREATE TABLE IF NOT EXISTS contracts (
@@ -66,6 +87,8 @@ CREATE TABLE IF NOT EXISTS contracts (
   rental_status VARCHAR(30),
   signed_date_text VARCHAR(30),
   signer_staff_id BIGINT,
+  partner_staff_id BIGINT,
+  source_text VARCHAR(500),
   payment_months INT,
   start_date_text VARCHAR(30),
   end_date_text VARCHAR(30),
@@ -80,6 +103,7 @@ CREATE TABLE IF NOT EXISTS contracts (
   CONSTRAINT fk_contracts_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
   CONSTRAINT fk_contracts_office FOREIGN KEY (office_id) REFERENCES offices(office_id),
   CONSTRAINT fk_contracts_signer_staff FOREIGN KEY (signer_staff_id) REFERENCES staff(staff_id),
+  CONSTRAINT fk_contracts_partner_staff FOREIGN KEY (partner_staff_id) REFERENCES staff(staff_id),
   CONSTRAINT fk_contracts_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
 );
 

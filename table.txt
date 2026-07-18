@@ -20,6 +20,8 @@ DROP TABLE IF EXISTS refunds;
 DROP TABLE IF EXISTS charge_lists;
 DROP TABLE IF EXISTS rent_payments;
 DROP TABLE IF EXISTS contracts;
+DROP TABLE IF EXISTS customer_relation_members;
+DROP TABLE IF EXISTS customer_relation_groups;
 DROP TABLE IF EXISTS customers;
 DROP TABLE IF EXISTS office_contacts;
 DROP TABLE IF EXISTS staff;
@@ -77,15 +79,36 @@ CREATE TABLE customers (
   owner_name VARCHAR(100),
   owner_birthday VARCHAR(30),
   contact_person VARCHAR(100),
+  contact_birthday VARCHAR(30),
   phone VARCHAR(100),
   forwarding_address VARCHAR(255),
   petty_cash DECIMAL(12,2),
   referrer VARCHAR(100),
+  accountant_info VARCHAR(500),
+  account_info VARCHAR(1000),
+  is_agent BOOLEAN DEFAULT FALSE,
   notes VARCHAR(1000),
   registration_type VARCHAR(60),
   updated_by BIGINT,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_customers_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE customer_relation_groups (
+  relation_group_id BIGINT PRIMARY KEY,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE customer_relation_members (
+  relation_member_id BIGINT PRIMARY KEY,
+  relation_group_id BIGINT NOT NULL,
+  customer_id BIGINT,
+  company_name VARCHAR(255) NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_relation_member_customer UNIQUE (customer_id),
+  CONSTRAINT uq_relation_member_name UNIQUE (relation_group_id, company_name),
+  CONSTRAINT fk_relation_members_group FOREIGN KEY (relation_group_id) REFERENCES customer_relation_groups(relation_group_id),
+  CONSTRAINT fk_relation_members_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id)
 );
 
 CREATE TABLE contracts (
@@ -96,6 +119,8 @@ CREATE TABLE contracts (
   rental_status VARCHAR(30),
   signed_date_text VARCHAR(30),
   signer_staff_id BIGINT,
+  partner_staff_id BIGINT,
+  source_text VARCHAR(500),
   payment_months INT,
   start_date_text VARCHAR(30),
   end_date_text VARCHAR(30),
@@ -110,6 +135,7 @@ CREATE TABLE contracts (
   CONSTRAINT fk_contracts_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
   CONSTRAINT fk_contracts_office FOREIGN KEY (office_id) REFERENCES offices(office_id),
   CONSTRAINT fk_contracts_signer_staff FOREIGN KEY (signer_staff_id) REFERENCES staff(staff_id),
+  CONSTRAINT fk_contracts_partner_staff FOREIGN KEY (partner_staff_id) REFERENCES staff(staff_id),
   CONSTRAINT fk_contracts_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
 );
 
@@ -209,25 +235,34 @@ INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account,
 
 INSERT INTO customers (
   customer_id, company_name, tax_id, status, rental_item, rental_status,
-  owner_name, owner_birthday, contact_person, phone, forwarding_address,
-  petty_cash, referrer, notes, registration_type, updated_by
+  owner_name, owner_birthday, contact_person, contact_birthday, phone, forwarding_address,
+  petty_cash, referrer, accountant_info, account_info, is_agent,
+  notes, registration_type, updated_by
 ) VALUES
-(1, '奧費斯有限公司', '53920532', 0, '辦公室', 3, '吳念壎', '1980-06-15', '吳念壎', '0930998049', '台北市大安區敦化南路一段 1 號', 2000, '官網洽詢', 'Demo：辦公室承租客戶', '辦公室', 1),
-(2, '金鋐源記帳士事務所', '77214901', 0, '辦公室', 3, '羅至鋐', '1979-07-20', '羅至鋐', '0907637698 羅r', '台北市大安區復興南路一段 2 號', 1000, '既有客戶介紹', 'Demo：同負責人群組主客戶', '辦公室', 1),
-(3, '澔博管理顧問有限公司', '82909732', 0, '登記', 1, '羅至鋐', '1979-07-20', '羅至鋐', '0907637698 羅r', '台北市大安區復興南路一段 2 號', NULL, '金鋐源轉介', 'Demo：同負責人登記地址', '登記', 1),
-(4, '羅氏數位服務有限公司', '90123456', 1, '座位', 3, '羅至鋐', '1979-07-20', '林小姐', '0911222333', '新北市板橋區文化路 10 號', 500, '同負責人新增', 'Demo：同負責人座位租約', '座位', 1),
-(5, '青禾品牌設計有限公司', '24567890', 0, '登記', 1, '陳怡君', '1988-06-28', '陳怡君', '0922000001', '台北市信義區松仁路 20 號', NULL, '網路搜尋', 'Demo：本月壽星提醒', '登記', 1);
+(1, '奧費斯有限公司', '53920532', 0, '辦公室', 3, '吳念壎', '1980-06-15', '吳念壎', '1982-03-12', '0930998049', '台北市大安區敦化南路一段 1 號', 2000, '陳會計師', '陳會計師', '台新銀行，公司戶', FALSE, 'Demo：辦公室承租客戶', '辦公室', 1),
+(2, '金鋐源記帳士事務所', '77214901', 0, '辦公室', 3, '羅至鋐', '1979-07-20', '羅至鋐', '1981-05-10', '0907637698 羅r', '台北市大安區復興南路一段 2 號', 1000, '林會計師', '林會計師', '第一銀行，公司戶', TRUE, 'Demo：相關公司群組主客戶', '辦公室', 1),
+(3, '澔博管理顧問有限公司', '82909732', 0, '登記', 1, '羅至鋐', '1979-07-20', '羅至鋐', '1981-05-10', '0907637698 羅r', '台北市大安區復興南路一段 2 號', NULL, '林會計師', '林會計師', NULL, FALSE, 'Demo：相關公司登記地址', '登記', 1),
+(4, '羅氏數位服務有限公司', '90123456', 1, '座位', 3, '羅至鋐', '1979-07-20', '林小姐', '1990-09-03', '0911222333', '新北市板橋區文化路 10 號', 500, '林會計師', '林會計師', NULL, TRUE, 'Demo：相關公司座位租約', '座位', 1),
+(5, '青禾品牌設計有限公司', '24567890', 0, '登記', 1, '陳怡君', '1988-06-28', '陳怡君', '1988-06-28', '0922000001', '台北市信義區松仁路 20 號', NULL, '王會計師', '王會計師', NULL, FALSE, 'Demo：待完成第一筆繳款', '登記', 1);
+
+INSERT INTO customer_relation_groups (relation_group_id) VALUES (1);
+
+INSERT INTO customer_relation_members (relation_member_id, relation_group_id, customer_id, company_name) VALUES
+(1, 1, 2, '金鋐源記帳士事務所'),
+(2, 1, 3, '澔博管理顧問有限公司'),
+(3, 1, 4, '羅氏數位服務有限公司');
 
 INSERT INTO contracts (
   contract_id, customer_id, office_id, rental_item, rental_status, signed_date_text,
-  signer_staff_id, payment_months, start_date_text, end_date_text, termination_date_text,
+  signer_staff_id, partner_staff_id, source_text, payment_months,
+  start_date_text, end_date_text, termination_date_text,
   rent, deposit, registration_type, lease_status, lease_image_path, updated_by
 ) VALUES
-(1, 1, 1, '辦公室', '辦公室', '2026-01-02', 1, 6, '2026-01-01', '2026-12-31', NULL, 17000, 30000, '辦公室', '綁約中', 'uploads/contracts/demo-contract-1.png', 1),
-(2, 2, 2, '辦公室', '辦公室', '2026-01-05', 2, 6, '2026-01-01', '2026-12-31', NULL, 17000, 32000, '辦公室', '綁約中', 'uploads/contracts/demo-contract-2.png', 1),
-(3, 3, NULL, '登記', '登記', '2026-02-01', 2, 12, '2026-02-01', '2027-01-31', NULL, 3000, 3000, '登記', '綁約中', NULL, 1),
-(4, 4, 4, '座位', '辦公室', '2026-03-15', 3, 3, '2026-04-01', '2026-09-30', '2026-08-31', 6000, 12000, '座位', '已解約', NULL, 1),
-(5, 5, NULL, '登記', '登記', '2026-06-01', 1, 12, '2026-07-01', '2026-07-28', NULL, 2500, 2500, '登記', '綁約中', NULL, 1);
+(1, 1, 1, '辦公室', '辦公室', '2026-01-02', 1, 2, '官網洽詢', 6, '2026-01-01', '2026-12-31', NULL, 17000, 30000, '辦公室', '綁約中', 'uploads/contracts/demo-contract-1.png', 1),
+(2, 2, 2, '辦公室', '辦公室', '2026-01-05', 2, 1, '既有客戶介紹', 6, '2026-01-01', '2026-12-31', NULL, 17000, 32000, '辦公室', '綁約中', 'uploads/contracts/demo-contract-2.png', 1),
+(3, 3, NULL, '登記', '登記', '2026-02-01', 2, 3, '會計師介紹', 12, '2026-02-01', '2027-01-31', NULL, 3000, 3000, '登記', '綁約中', NULL, 1),
+(4, 4, 4, '座位', '辦公室', '2026-03-15', 3, 2, '相關公司轉介', 3, '2026-04-01', '2026-09-30', '2026-08-31', 6000, 12000, '座位', '已解約', NULL, 1),
+(5, 5, NULL, '登記', '登記', '2026-06-01', 1, 2, '網路搜尋', 12, '2026-07-01', '2026-07-28', NULL, 2500, 2500, '登記', '綁約中', NULL, 1);
 
 INSERT INTO rent_payments (
   rent_payment_id, customer_id, contract_id, payment_month, payment_date_text,

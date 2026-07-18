@@ -22,8 +22,11 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         migrateRoleNames();
         migrateStaffBranch();
         migrateCustomerRentalFields();
+        migrateCustomerWorkflowFields();
+        migrateCustomerRelationTables();
         migrateCustomerStatusToCode();
         migrateContractRentalFields();
+        migrateContractWorkflowFields();
         migrateContractPaymentMonths();
         migrateContractOfficeNullable();
         migrateContractLeaseStatus();
@@ -72,6 +75,44 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
                     ELSE 1
                 END
                 WHERE rental_status IS NULL OR rental_status NOT IN (1, 2, 3)
+                """);
+    }
+
+    private void migrateCustomerWorkflowFields() {
+        addColumnIfMissing("customers", "contact_birthday", "VARCHAR(30)");
+        addColumnIfMissing("customers", "accountant_info", "VARCHAR(500)");
+        addColumnIfMissing("customers", "account_info", "VARCHAR(1000)");
+        addColumnIfMissing("customers", "is_agent", "BOOLEAN DEFAULT FALSE");
+        jdbc.update("""
+                UPDATE customers
+                SET accountant_info = referrer
+                WHERE (accountant_info IS NULL OR accountant_info = '')
+                  AND referrer IS NOT NULL
+                  AND referrer <> ''
+                """);
+    }
+
+    private void migrateCustomerRelationTables() {
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS customer_relation_groups (
+                  relation_group_id BIGINT PRIMARY KEY,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS customer_relation_members (
+                  relation_member_id BIGINT PRIMARY KEY,
+                  relation_group_id BIGINT NOT NULL,
+                  customer_id BIGINT,
+                  company_name VARCHAR(255) NOT NULL,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  CONSTRAINT uq_relation_member_customer UNIQUE (customer_id),
+                  CONSTRAINT uq_relation_member_name UNIQUE (relation_group_id, company_name),
+                  CONSTRAINT fk_relation_members_group FOREIGN KEY (relation_group_id)
+                    REFERENCES customer_relation_groups(relation_group_id),
+                  CONSTRAINT fk_relation_members_customer FOREIGN KEY (customer_id)
+                    REFERENCES customers(customer_id)
+                )
                 """);
     }
 
@@ -151,6 +192,11 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
                 END
                 WHERE rental_status IS NULL OR rental_status = ''
                 """);
+    }
+
+    private void migrateContractWorkflowFields() {
+        addColumnIfMissing("contracts", "partner_staff_id", "BIGINT");
+        addColumnIfMissing("contracts", "source_text", "VARCHAR(500)");
     }
 
     private void migrateContractOfficeNullable() {

@@ -117,7 +117,7 @@
         <div class="panel-header">
           <div>
             <h2>系統通知</h2>
-            <p>提醒近期需要處理的租約收費與本月壽星。</p>
+            <p>提醒近期需要處理的租約到期與尚未完成的第一筆繳款。</p>
           </div>
         </div>
 
@@ -143,20 +143,23 @@
 
           <section class="notification-section">
             <div class="notification-heading">
-              <span>本月壽星</span>
-              <strong>{{ d.notifications.ownerBirthdays.length }}</strong>
+              <span>租約未完成</span>
+              <strong>{{ d.notifications.incompleteContracts.length }}</strong>
             </div>
-            <div class="notification-list" *ngIf="d.notifications.ownerBirthdays.length; else noBirthdays">
-              <article class="notification-card birthday" *ngFor="let item of d.notifications.ownerBirthdays">
+            <div class="notification-list" *ngIf="d.notifications.incompleteContracts.length; else noIncompleteContracts">
+              <article class="notification-card pending" *ngFor="let item of d.notifications.incompleteContracts">
                 <div>
                   <strong>{{ item.company_name }}</strong>
-                  <span>負責人 {{ item.owner_name || '-' }}</span>
+                  <span>簽約人 {{ item.signer_staff_name || '-' }} / 起租 {{ item.start_date_text || '-' }}</span>
                 </div>
-                <small>{{ item.owner_birthday }}</small>
+                <div class="notification-action">
+                  <small>{{ money(item.rent) }}</small>
+                  <button type="button" class="ghost compact-button" (click)="openReconciliation(item)">新增對帳</button>
+                </div>
               </article>
             </div>
-            <ng-template #noBirthdays>
-              <p class="empty-state">本月沒有壽星提醒</p>
+            <ng-template #noIncompleteContracts>
+              <p class="empty-state">目前沒有未完成租約</p>
             </ng-template>
           </section>
         </div>
@@ -304,8 +307,12 @@
               <input type="date" name="editOwnerBirthday" [(ngModel)]="customerEditForm.ownerBirthday" />
             </label>
             <label>
-              連絡人
+              聯絡人
               <input name="editContactPerson" [(ngModel)]="customerEditForm.contactPerson" />
+            </label>
+            <label>
+              聯絡人生日
+              <input type="date" name="editContactBirthday" [(ngModel)]="customerEditForm.contactBirthday" />
             </label>
             <label>
               電話
@@ -320,8 +327,16 @@
               <input type="number" name="editPettyCash" [(ngModel)]="customerEditForm.pettyCash" />
             </label>
             <label>
-              推薦人
-              <input name="editReferrer" [(ngModel)]="customerEditForm.referrer" />
+              會計師資訊
+              <input name="editAccountantInfo" [(ngModel)]="customerEditForm.accountantInfo" />
+            </label>
+            <label>
+              帳戶資訊
+              <input name="editAccountInfo" [(ngModel)]="customerEditForm.accountInfo" />
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" name="editIsAgent" [(ngModel)]="customerEditForm.isAgent" />
+              代辦
             </label>
             <label class="wide">
               備註
@@ -340,14 +355,36 @@
               <div><span>承租項目</span><strong>{{ c.rental_item || c.registration_type || '-' }}</strong></div>
               <div><span>承租狀態</span><strong>{{ displayRentalStatus(c.rental_status) }}</strong></div>
               <div><span>負責人生日</span><strong>{{ c.owner_birthday || '-' }}</strong></div>
-              <div><span>連絡人</span><strong>{{ c.contact_person || '-' }}</strong></div>
+              <div><span>聯絡人</span><strong>{{ c.contact_person || '-' }}</strong></div>
+              <div><span>聯絡人生日</span><strong>{{ c.contact_birthday || '-' }}</strong></div>
               <div><span>電話</span><strong>{{ c.phone || '-' }}</strong></div>
               <div><span>轉寄地址</span><strong>{{ c.forwarding_address || '-' }}</strong></div>
               <div><span>零用金</span><strong>{{ money(c.petty_cash) }}</strong></div>
-              <div><span>推薦人</span><strong>{{ c.referrer || '-' }}</strong></div>
+              <div><span>會計師資訊</span><strong>{{ c.accountant_info || c.referrer || '-' }}</strong></div>
+              <div><span>帳戶資訊</span><strong>{{ c.account_info || '-' }}</strong></div>
+              <div><span>代辦</span><strong>{{ c.is_agent ? '是' : '否' }}</strong></div>
               <div><span>備註</span><strong>{{ c.notes || '-' }}</strong></div>
             </div>
           </ng-template>
+        </section>
+
+        <section class="panel" *ngIf="relatedCompanies().length">
+          <h3>相關公司</h3>
+          <ul class="same-owner related-company-list">
+            <li *ngFor="let company of relatedCompanies()">
+              <button
+                type="button"
+                *ngIf="company.customer_id; else unresolvedCompany"
+                (click)="openCustomerDetail(company.customer_id!)"
+              >
+                {{ company.company_name }}
+              </button>
+              <ng-template #unresolvedCompany>
+                <strong>{{ company.company_name }}</strong>
+              </ng-template>
+              <span>{{ company.is_resolved ? '已建立客戶資料' : '尚未建立客戶資料' }}</span>
+            </li>
+          </ul>
         </section>
 
         <section class="panel split">
@@ -377,6 +414,8 @@
                   <div><span>承租狀態</span><strong>{{ value(contract, 'rental_status') }}</strong></div>
                   <div><span>簽約日期</span><strong>{{ value(contract, 'signed_date_text') }}</strong></div>
                   <div><span>簽約人</span><strong>{{ value(contract, 'signer_staff_name') }}</strong></div>
+                  <div><span>合作夥伴</span><strong>{{ value(contract, 'partner_staff_name') }}</strong></div>
+                  <div><span>來源</span><strong>{{ value(contract, 'source_text') }}</strong></div>
                   <div><span>分館</span><strong>{{ value(contract, 'branch_name') }}</strong></div>
                   <div><span>房號</span><strong>{{ value(contract, 'office_no') }}</strong></div>
                   <div><span>付款月數</span><strong>{{ value(contract, 'payment_months') }}</strong></div>
@@ -448,8 +487,12 @@
             <input type="date" name="newOwnerBirthday" [(ngModel)]="newCustomerForm.ownerBirthday" />
           </label>
           <label>
-            連絡人
+            聯絡人
             <input name="newContactPerson" [(ngModel)]="newCustomerForm.contactPerson" />
+          </label>
+          <label>
+            聯絡人生日
+            <input type="date" name="newContactBirthday" [(ngModel)]="newCustomerForm.contactBirthday" />
           </label>
           <label>
             電話
@@ -464,9 +507,31 @@
             <input type="number" name="newPettyCash" [(ngModel)]="newCustomerForm.pettyCash" />
           </label>
           <label>
-            推薦人
-            <input name="newReferrer" [(ngModel)]="newCustomerForm.referrer" />
+            會計師資訊
+            <input name="newAccountantInfo" [(ngModel)]="newCustomerForm.accountantInfo" />
           </label>
+          <label>
+            帳戶資訊
+            <input name="newAccountInfo" [(ngModel)]="newCustomerForm.accountInfo" />
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="newIsAgent" [(ngModel)]="newCustomerForm.isAgent" />
+            代辦
+          </label>
+          <div class="wide related-company-fields">
+            <div class="field-title-row">
+              <span>相關公司</span>
+              <button type="button" class="icon-button" title="新增相關公司" aria-label="新增相關公司" (click)="addRelatedCompany()">+</button>
+            </div>
+            <div class="repeatable-field" *ngFor="let relatedName of newCustomerForm.relatedCompanyNames; let i = index; trackBy: trackByIndex">
+              <input
+                [name]="'newRelatedCompany' + i"
+                [(ngModel)]="newCustomerForm.relatedCompanyNames[i]"
+                placeholder="輸入相關公司名稱"
+              />
+              <button type="button" class="icon-button remove" title="移除相關公司" aria-label="移除相關公司" (click)="removeRelatedCompany(i)">×</button>
+            </div>
+          </div>
           <label class="wide">
             備註
             <textarea name="newNotes" rows="3" [(ngModel)]="newCustomerForm.notes"></textarea>
@@ -497,6 +562,19 @@
                 {{ value(staff, 'staff_name') }} / {{ value(staff, 'branch_name') }}
               </option>
             </select>
+          </label>
+          <label>
+            合作夥伴
+            <select name="newCustomerContractPartner" [(ngModel)]="newCustomerContractForm.partnerStaffId">
+              <option [ngValue]="null">無</option>
+              <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">
+                {{ value(staff, 'staff_name') }} / {{ value(staff, 'branch_name') }}
+              </option>
+            </select>
+          </label>
+          <label>
+            來源
+            <input name="newCustomerContractSource" [(ngModel)]="newCustomerContractForm.sourceText" />
           </label>
           <label>
             辦公室
@@ -531,6 +609,14 @@
           <label>
             押金
             <input type="number" name="newCustomerContractDeposit" [(ngModel)]="newCustomerContractForm.deposit" />
+          </label>
+          <label>
+            本次繳款金額
+            <input type="number" min="0" name="newCustomerFirstPaymentAmount" [(ngModel)]="newCustomerFirstPaymentAmount" />
+          </label>
+          <label>
+            繳款日期
+            <input type="date" name="newCustomerFirstPaymentDate" [(ngModel)]="newCustomerFirstPaymentDateText" />
           </label>
           <label>
             租約狀態
@@ -678,8 +764,8 @@
       <section class="panel">
         <div class="panel-header">
           <div>
-            <h2>新增租約</h2>
-            <p>先搜尋客戶，再選擇辦公室並填寫租約條件。</p>
+            <h2>續約租約</h2>
+            <p>選擇客戶後會帶入最新租約資料，請填寫本次續約的日期與變動內容。</p>
           </div>
         </div>
 
@@ -729,6 +815,19 @@
             </select>
           </label>
           <label>
+            合作夥伴
+            <select name="newContractPartner" [(ngModel)]="newContractForm.partnerStaffId">
+              <option [ngValue]="null">無</option>
+              <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">
+                {{ value(staff, 'staff_name') }} / {{ value(staff, 'branch_name') }}
+              </option>
+            </select>
+          </label>
+          <label>
+            來源
+            <input name="newContractSource" [(ngModel)]="newContractForm.sourceText" />
+          </label>
+          <label>
             辦公室
             <select name="newContractOfficeId" [(ngModel)]="newContractForm.officeId">
               <option [ngValue]="null">未租辦公室</option>
@@ -769,7 +868,7 @@
             </select>
           </label>
           <div class="form-actions wide">
-            <button type="submit" [disabled]="saving()">新增租約</button>
+            <button type="submit" [disabled]="saving()">續約租約</button>
           </div>
         </form>
       </section>

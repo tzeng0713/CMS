@@ -430,6 +430,64 @@ textarea {
   grid-column: 1 / -1;
 }
 
+.customer-form label.checkbox-label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  align-self: end;
+  min-height: 40px;
+  gap: 8px;
+}
+
+.checkbox-label input {
+  width: 18px;
+  height: 18px;
+}
+
+.related-company-fields {
+  display: grid;
+  gap: 8px;
+}
+
+.field-title-row,
+.repeatable-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.field-title-row {
+  justify-content: space-between;
+  color: #475569;
+  font-size: 13px;
+}
+
+.repeatable-field input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 36px;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid #99f6e4;
+  border-radius: 8px;
+  background: #f0fdfa;
+  color: #0f766e;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.icon-button.remove {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
 .form-actions {
   display: flex;
   gap: 10px;
@@ -660,8 +718,15 @@ textarea {
   border-left-color: #f97316;
 }
 
-.notification-card.birthday {
+.notification-card.pending {
   border-left-color: #0f9488;
+}
+
+.notification-action {
+  display: grid;
+  justify-items: end;
+  align-content: space-between;
+  gap: 8px;
 }
 
 .notification-card strong,

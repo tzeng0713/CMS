@@ -19,8 +19,10 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -47,7 +49,8 @@ class CmsApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.customers", greaterThan(0)))
                 .andExpect(jsonPath("$.notifications.expiringContracts").isArray())
-                .andExpect(jsonPath("$.notifications.ownerBirthdays").isArray());
+                .andExpect(jsonPath("$.notifications.incompleteContracts").isArray())
+                .andExpect(jsonPath("$.notifications.ownerBirthdays").doesNotExist());
 
         mvc.perform(get("/api/customers"))
                 .andExpect(status().isOk())
@@ -55,16 +58,13 @@ class CmsApplicationTests {
     }
 
     @Test
-    void dashboardReturnsContractExpirationAndBirthdayNotifications() throws Exception {
+    void dashboardReturnsContractExpirationNotificationsWithoutBirthdays() throws Exception {
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
         LocalDate contractEnd = today.plusMonths(1).withDayOfMonth(28);
         String activeCompany = "Dashboard Expiring Active Co";
         String endedCompany = "Dashboard Expiring Ended Co";
-        String birthdayCompany = "Dashboard Birthday Co";
         long activeCustomerId = insertDashboardCustomer(activeCompany, "1978-01-01");
         long endedCustomerId = insertDashboardCustomer(endedCompany, "1978-01-01");
-        long birthdayCustomerId = insertDashboardCustomer(birthdayCompany,
-                "1988-%02d-15".formatted(today.getMonthValue()));
         insertDashboardContract(activeCustomerId, contractEnd, "綁約中");
         insertDashboardContract(endedCustomerId, contractEnd, "已解約");
 
@@ -72,7 +72,213 @@ class CmsApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.notifications.expiringContracts[*].company_name", hasItems(activeCompany)))
                 .andExpect(jsonPath("$.notifications.expiringContracts[*].company_name").value(org.hamcrest.Matchers.not(hasItems(endedCompany))))
-                .andExpect(jsonPath("$.notifications.ownerBirthdays[*].company_name", hasItems(birthdayCompany)));
+                .andExpect(jsonPath("$.notifications.ownerBirthdays").doesNotExist());
+    }
+
+    @Test
+    void integratedCustomerCreationStoresNewFieldsRelationsAndFirstPayment() throws Exception {
+        MockMultipartFile payload = new MockMultipartFile("payload", "", MediaType.TEXT_PLAIN_VALUE, """
+                {
+                  "customer": {
+                    "companyName": "Workflow Alpha Co",
+                    "taxId": "WF-A-001",
+                    "status": 0,
+                    "rentalItem": "停業",
+                    "rentalStatus": 1,
+                    "ownerName": "Alpha Owner",
+                    "contactPerson": "Alpha Contact",
+                    "contactBirthday": "1992-04-05",
+                    "accountInfo": "銀行末五碼 54321",
+                    "isAgent": true,
+                    "accountantInfo": "王會計師",
+                    "relatedCompanyNames": ["Workflow Beta Co", "Workflow Gamma Co"],
+                    "updatedBy": 1
+                  },
+                  "contract": {
+                    "officeId": null,
+                    "rentalItem": "停業",
+                    "rentalStatus": "個人名義",
+                    "signedDateText": "2026-07-18",
+                    "signerStaffId": 1,
+                    "partnerStaffId": 2,
+                    "sourceText": "舊客戶介紹",
+                    "paymentMonths": 6,
+                    "startDateText": "2026-08-01",
+                    "endDateText": "2027-01-31",
+                    "rent": 3500,
+                    "deposit": 7000,
+                    "leaseStatus": "綁約中",
+                    "updatedBy": 1
+                  },
+                  "firstPaymentAmount": 3500,
+                  "firstPaymentDateText": "2026-07-19"
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+
+        mvc.perform(multipart("/api/customers/with-contract").file(payload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.account_info", is("銀行末五碼 54321")))
+                .andExpect(jsonPath("$.is_agent", is(true)))
+                .andExpect(jsonPath("$.contact_birthday", is("1992-04-05")))
+                .andExpect(jsonPath("$.accountant_info", is("王會計師")))
+                .andExpect(jsonPath("$.relatedCompanies[*].company_name", hasItems("Workflow Beta Co", "Workflow Gamma Co")))
+                .andExpect(jsonPath("$.contracts[0].source_text", is("舊客戶介紹")))
+                .andExpect(jsonPath("$.contracts[0].partner_staff_id", is(2)))
+                .andExpect(jsonPath("$.contracts[0].partner_staff_name").exists())
+                .andExpect(jsonPath("$.rentPayments[0].amount", is(3500.0)))
+                .andExpect(jsonPath("$.rentPayments[0].payment_date_text", is("2026-07-19")));
+    }
+
+    @Test
+    void integratedCustomerCreationRequiresBothFirstPaymentFieldsAndRollsBack() throws Exception {
+        Integer before = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM customers WHERE company_name = 'Incomplete Payment Co'", Integer.class);
+        MockMultipartFile payload = new MockMultipartFile("payload", "", MediaType.TEXT_PLAIN_VALUE, """
+                {
+                  "customer": {
+                    "companyName": "Incomplete Payment Co",
+                    "updatedBy": 1
+                  },
+                  "contract": {
+                    "rentalItem": "登記",
+                    "rentalStatus": "登記",
+                    "signerStaffId": 1,
+                    "leaseStatus": "綁約中",
+                    "updatedBy": 1
+                  },
+                  "firstPaymentAmount": 3000
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+
+        mvc.perform(multipart("/api/customers/with-contract").file(payload))
+                .andExpect(status().isBadRequest());
+
+        Integer after = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM customers WHERE company_name = 'Incomplete Payment Co'", Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(before, after);
+    }
+
+    @Test
+    void contractRejectsSameSignerAndPartner() throws Exception {
+        mvc.perform(post("/api/contracts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "customerId": 1,
+                                  "rentalItem": "登記",
+                                  "rentalStatus": "登記",
+                                  "signerStaffId": 1,
+                                  "partnerStaffId": 1,
+                                  "leaseStatus": "綁約中",
+                                  "updatedBy": 1
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void relatedCompaniesResolveAndDisplayBidirectionally() throws Exception {
+        MvcResult betaResult = mvc.perform(post("/api/customers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "Relation Beta Co",
+                                  "relatedCompanyNames": ["Relation Alpha Co", "Relation Gamma Co"],
+                                  "updatedBy": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relatedCompanies[*].company_name",
+                        hasItems("Relation Alpha Co", "Relation Gamma Co")))
+                .andReturn();
+        long betaId = objectMapper.readTree(betaResult.getResponse().getContentAsString())
+                .get("customer_id").asLong();
+
+        MvcResult alphaResult = mvc.perform(post("/api/customers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "Relation Alpha Co",
+                                  "updatedBy": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+        long alphaId = objectMapper.readTree(alphaResult.getResponse().getContentAsString())
+                .get("customer_id").asLong();
+
+        mvc.perform(get("/api/customers/{id}", alphaId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relatedCompanies[*].company_name", hasItem("Relation Beta Co")));
+        mvc.perform(get("/api/customers/{id}", betaId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relatedCompanies[*].customer_id", hasItem((int) alphaId)));
+    }
+
+    @Test
+    void latestContractReturnsNewestContractForRenewal() throws Exception {
+        MvcResult created = mvc.perform(post("/api/contracts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "customerId": 1,
+                                  "officeId": 2,
+                                  "rentalItem": "停業",
+                                  "rentalStatus": "個人名義",
+                                  "signedDateText": "2026-07-19",
+                                  "signerStaffId": 1,
+                                  "partnerStaffId": 2,
+                                  "sourceText": "續約測試",
+                                  "paymentMonths": 6,
+                                  "rent": 7777,
+                                  "deposit": 8888,
+                                  "leaseStatus": "綁約中",
+                                  "updatedBy": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andReturn();
+        int contractId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("contract_id").asInt();
+
+        mvc.perform(get("/api/customers/1/latest-contract"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contract_id", is(contractId)))
+                .andExpect(jsonPath("$.rental_item", is("停業")))
+                .andExpect(jsonPath("$.rental_status", is("個人名義")))
+                .andExpect(jsonPath("$.source_text", is("續約測試")))
+                .andExpect(jsonPath("$.partner_staff_id", is(2)));
+    }
+
+    @Test
+    void dashboardIncompleteContractReminderDisappearsAfterPayment() throws Exception {
+        long customerId = insertDashboardCustomer("Unpaid Contract Reminder Co", "1980-01-01");
+        insertDashboardContract(customerId, LocalDate.now().plusMonths(3), "綁約中");
+        int contractId = jdbc.queryForObject(
+                "SELECT MAX(contract_id) FROM contracts WHERE customer_id = ?", Integer.class, customerId);
+
+        mvc.perform(get("/api/dashboard"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notifications.incompleteContracts[*].company_name",
+                        hasItem("Unpaid Contract Reminder Co")));
+
+        mvc.perform(post("/api/rent-payments")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "customerId": %d,
+                                  "contractId": %d,
+                                  "paymentDateText": "2026-07-19",
+                                  "amount": 1000,
+                                  "updatedBy": 1
+                                }
+                                """.formatted(customerId, contractId)))
+                .andExpect(status().isOk());
+
+        mvc.perform(get("/api/dashboard"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notifications.incompleteContracts[*].company_name",
+                        not(hasItem("Unpaid Contract Reminder Co"))));
     }
 
     @Test

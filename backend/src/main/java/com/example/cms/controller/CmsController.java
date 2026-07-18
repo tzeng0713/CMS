@@ -93,6 +93,11 @@ public class CmsController {
         return service.sameOwnerCompanies((String) detail.get("owner_name"), id);
     }
 
+    @GetMapping("/customers/{id}/latest-contract")
+    public Map<String, Object> latestContract(@PathVariable long id) {
+        return service.latestContract(id);
+    }
+
     @GetMapping("/offices")
     public List<Map<String, Object>> offices() {
         return service.offices();

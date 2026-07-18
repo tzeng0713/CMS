@@ -20,11 +20,13 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.LocalDate;
-import java.time.MonthDay;
 import java.time.ZoneId;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 public class CmsQueryService {
@@ -57,7 +59,7 @@ public class CmsQueryService {
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
         Map<String, Object> notifications = new LinkedHashMap<>();
         notifications.put("expiringContracts", expiringContractNotifications(today));
-        notifications.put("ownerBirthdays", ownerBirthdayNotifications(today));
+        notifications.put("incompleteContracts", incompleteContractNotifications());
         return notifications;
     }
 
@@ -76,17 +78,21 @@ public class CmsQueryService {
                 .toList();
     }
 
-    private List<Map<String, Object>> ownerBirthdayNotifications(LocalDate today) {
+    private List<Map<String, Object>> incompleteContractNotifications() {
         return jdbc.queryForList("""
-                SELECT company_name, owner_name, owner_birthday
-                FROM customers
-                WHERE owner_birthday IS NOT NULL
-                  AND owner_birthday <> ''
-                ORDER BY owner_birthday, company_name
-                """).stream()
-                .filter(row -> isBirthdayInMonth((String) row.get("owner_birthday"), today))
-                .limit(50)
-                .toList();
+                SELECT c.customer_id, c.company_name, co.contract_id, co.signed_date_text,
+                       co.start_date_text, co.rent, co.lease_status,
+                       co.signer_staff_id, s.staff_name AS signer_staff_name
+                FROM contracts co
+                JOIN customers c ON c.customer_id = co.customer_id
+                LEFT JOIN staff s ON s.staff_id = co.signer_staff_id
+                WHERE co.lease_status IN ('綁約中', '蝬?銝?')
+                  AND NOT EXISTS (
+                    SELECT 1 FROM rent_payments rp WHERE rp.contract_id = co.contract_id
+                  )
+                ORDER BY co.signed_date_text, co.contract_id DESC
+                LIMIT 100
+                """);
     }
 
     public Map<String, Object> login(LoginRequest request) {
@@ -213,14 +219,17 @@ public class CmsQueryService {
         Map<String, Object> detail = jdbc.queryForMap(customerListSql() + " WHERE c.customer_id = ?", id);
         String ownerName = (String) detail.get("owner_name");
         detail.put("contracts", jdbc.queryForList("""
-                SELECT co.*, o.office_no, b.branch_name, s.staff_name AS signer_staff_name
+                SELECT co.*, o.office_no, b.branch_name, s.staff_name AS signer_staff_name,
+                       partner.staff_name AS partner_staff_name
                 FROM contracts co
                 LEFT JOIN offices o ON o.office_id = co.office_id
                 LEFT JOIN branches b ON b.branch_id = o.branch_id
                 LEFT JOIN staff s ON s.staff_id = co.signer_staff_id
+                LEFT JOIN staff partner ON partner.staff_id = co.partner_staff_id
                 WHERE co.customer_id = ?
                 ORDER BY co.contract_id DESC
                 """, id));
+        detail.put("relatedCompanies", relatedCompanies(id));
         detail.put("sameOwnerCompanies", sameOwnerCompanies(ownerName, id));
         detail.put("rentPayments", jdbc.queryForList("""
                 SELECT * FROM rent_payments
@@ -246,11 +255,13 @@ public class CmsQueryService {
         return jdbc.queryForList("""
                 SELECT c.customer_id, c.company_name, c.tax_id, c.status, c.owner_name,
                        c.rental_item, c.rental_status, c.owner_birthday,
-                       c.contact_person, c.phone, c.registration_type, c.referrer,
+                       c.contact_person, c.contact_birthday, c.phone, c.registration_type,
+                       c.referrer, c.accountant_info, c.account_info, c.is_agent,
                        co.contract_id, co.lease_status, co.rent, co.deposit,
                        o.office_no, b.branch_name
                 FROM customers c
                 LEFT JOIN contracts co ON co.customer_id = c.customer_id
+                  AND co.contract_id = (SELECT MAX(latest.contract_id) FROM contracts latest WHERE latest.customer_id = c.customer_id)
                 LEFT JOIN offices o ON o.office_id = co.office_id
                 LEFT JOIN branches b ON b.branch_id = o.branch_id
                 WHERE (? = '%%'
@@ -262,17 +273,24 @@ public class CmsQueryService {
                 """, like, like, like, like);
     }
 
+    @Transactional
     public Map<String, Object> createCustomer(CustomerRequest request) {
         Long id = nextId("customers", "customer_id");
+        String companyName = requiredCompanyName(request.companyName());
+        String accountantInfo = blankToNull(request.accountantInfo());
+        if (accountantInfo == null) {
+            accountantInfo = blankToNull(request.referrer());
+        }
         jdbc.update("""
                 INSERT INTO customers (
                     customer_id, company_name, tax_id, status, rental_item, rental_status,
-                    owner_name, owner_birthday, contact_person, phone, forwarding_address,
-                    petty_cash, referrer, notes, registration_type, updated_by, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                    owner_name, owner_birthday, contact_person, contact_birthday, phone, forwarding_address,
+                    petty_cash, referrer, accountant_info, account_info, is_agent,
+                    notes, registration_type, updated_by, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 id,
-                requiredCompanyName(request.companyName()),
+                companyName,
                 blankToNull(request.taxId()),
                 normalizeStatus(request.status()),
                 normalizeRentalItem(request.rentalItem(), request.registrationType()),
@@ -280,13 +298,19 @@ public class CmsQueryService {
                 blankToNull(request.ownerName()),
                 blankToNull(request.ownerBirthday()),
                 blankToNull(request.contactPerson()),
+                blankToNull(request.contactBirthday()),
                 blankToNull(request.phone()),
                 blankToNull(request.forwardingAddress()),
                 request.pettyCash(),
-                blankToNull(request.referrer()),
+                accountantInfo,
+                accountantInfo,
+                blankToNull(request.accountInfo()),
+                Boolean.TRUE.equals(request.isAgent()),
                 blankToNull(request.notes()),
                 normalizeRegistrationType(request.registrationType(), request.rentalItem()),
                 request.updatedBy() == null ? 1L : request.updatedBy());
+        linkPendingRelationMember(id, companyName);
+        saveRelatedCompanies(id, companyName, request.relatedCompanyNames());
         return customerDetail(id);
     }
 
@@ -295,6 +319,7 @@ public class CmsQueryService {
         if (request == null || request.customer() == null || request.contract() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "customer and contract are required");
         }
+        validateFirstPayment(request);
         Map<String, Object> customer = createCustomer(request.customer());
         Long customerId = ((Number) customer.get("customer_id")).longValue();
         ContractRequest contract = request.contract();
@@ -305,6 +330,8 @@ public class CmsQueryService {
                 contract.rentalStatus(),
                 contract.signedDateText(),
                 contract.signerStaffId(),
+                contract.partnerStaffId(),
+                contract.sourceText(),
                 contract.paymentMonths(),
                 contract.startDateText(),
                 contract.endDateText(),
@@ -314,8 +341,22 @@ public class CmsQueryService {
                 contract.leaseImagePath(),
                 contract.leaseStatus(),
                 contract.updatedBy() == null ? request.customer().updatedBy() : contract.updatedBy()));
+        Long contractId = ((Number) createdContract.get("contract_id")).longValue();
+        if (request.firstPaymentAmount() != null) {
+            Long updatedBy = contract.updatedBy() == null ? request.customer().updatedBy() : contract.updatedBy();
+            createRentPayment(new RentPaymentRequest(
+                    customerId,
+                    contractId,
+                    paymentMonth(request.firstPaymentDateText()),
+                    request.firstPaymentDateText(),
+                    null,
+                    null,
+                    request.firstPaymentAmount(),
+                    null,
+                    "首次繳款",
+                    updatedBy));
+        }
         if (leaseImage != null && !leaseImage.isEmpty()) {
-            Long contractId = ((Number) createdContract.get("contract_id")).longValue();
             String imagePath = saveLeaseImage(contractId, leaseImage);
             jdbc.update("UPDATE contracts SET lease_image_path = ? WHERE contract_id = ?", imagePath, contractId);
         }
@@ -323,6 +364,10 @@ public class CmsQueryService {
     }
 
     public Map<String, Object> updateCustomer(long id, CustomerRequest request) {
+        String accountantInfo = blankToNull(request.accountantInfo());
+        if (accountantInfo == null) {
+            accountantInfo = blankToNull(request.referrer());
+        }
         jdbc.update("""
                 UPDATE customers
                 SET company_name = ?,
@@ -333,10 +378,14 @@ public class CmsQueryService {
                     owner_name = ?,
                     owner_birthday = ?,
                     contact_person = ?,
+                    contact_birthday = ?,
                     phone = ?,
                     forwarding_address = ?,
                     petty_cash = ?,
                     referrer = ?,
+                    accountant_info = ?,
+                    account_info = ?,
+                    is_agent = ?,
                     notes = ?,
                     registration_type = ?,
                     updated_by = ?,
@@ -351,14 +400,19 @@ public class CmsQueryService {
                 blankToNull(request.ownerName()),
                 blankToNull(request.ownerBirthday()),
                 blankToNull(request.contactPerson()),
+                blankToNull(request.contactBirthday()),
                 blankToNull(request.phone()),
                 blankToNull(request.forwardingAddress()),
                 request.pettyCash(),
-                blankToNull(request.referrer()),
+                accountantInfo,
+                accountantInfo,
+                blankToNull(request.accountInfo()),
+                Boolean.TRUE.equals(request.isAgent()),
                 blankToNull(request.notes()),
                 normalizeRegistrationType(request.registrationType(), request.rentalItem()),
                 request.updatedBy() == null ? 1L : request.updatedBy(),
                 id);
+        saveRelatedCompanies(id, requiredCompanyName(request.companyName()), request.relatedCompanyNames());
         return customerDetail(id);
     }
 
@@ -393,12 +447,13 @@ public class CmsQueryService {
         String statusText = leaseStatus == null ? "" : leaseStatus.trim();
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 SELECT co.*, c.company_name, c.owner_name, c.tax_id, o.office_no, b.branch_name,
-                       s.staff_name AS signer_staff_name
+                       s.staff_name AS signer_staff_name, partner.staff_name AS partner_staff_name
                 FROM contracts co
                 JOIN customers c ON c.customer_id = co.customer_id
                 LEFT JOIN offices o ON o.office_id = co.office_id
                 LEFT JOIN branches b ON b.branch_id = o.branch_id
                 LEFT JOIN staff s ON s.staff_id = co.signer_staff_id
+                LEFT JOIN staff partner ON partner.staff_id = co.partner_staff_id
                 WHERE (? = '%%'
                    OR c.company_name LIKE ?
                    OR c.owner_name LIKE ?
@@ -419,13 +474,15 @@ public class CmsQueryService {
     }
 
     public Map<String, Object> createContract(ContractRequest request) {
+        validateContractStaff(request);
         Long id = nextId("contracts", "contract_id");
         jdbc.update("""
                 INSERT INTO contracts (
                     contract_id, customer_id, office_id, rental_item, rental_status, signed_date_text,
-                    signer_staff_id, payment_months, start_date_text, end_date_text, termination_date_text,
+                    signer_staff_id, partner_staff_id, source_text, payment_months,
+                    start_date_text, end_date_text, termination_date_text,
                     rent, deposit, lease_image_path, lease_status, updated_by, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
                 """,
                 id,
                 requiredId(request.customerId(), "customerId"),
@@ -434,6 +491,8 @@ public class CmsQueryService {
                 normalizeContractRentalStatus(request.rentalStatus()),
                 blankToNull(request.signedDateText()),
                 request.signerStaffId(),
+                request.partnerStaffId(),
+                blankToNull(request.sourceText()),
                 request.paymentMonths(),
                 blankToNull(request.startDateText()),
                 blankToNull(request.endDateText()),
@@ -482,14 +541,26 @@ public class CmsQueryService {
     private Map<String, Object> contractDetail(long id) {
         return jdbc.queryForMap("""
                 SELECT co.*, c.company_name, c.owner_name, c.tax_id, o.office_no, b.branch_name,
-                       s.staff_name AS signer_staff_name
+                       s.staff_name AS signer_staff_name, partner.staff_name AS partner_staff_name
                 FROM contracts co
                 JOIN customers c ON c.customer_id = co.customer_id
                 LEFT JOIN offices o ON o.office_id = co.office_id
                 LEFT JOIN branches b ON b.branch_id = o.branch_id
                 LEFT JOIN staff s ON s.staff_id = co.signer_staff_id
+                LEFT JOIN staff partner ON partner.staff_id = co.partner_staff_id
                 WHERE co.contract_id = ?
                 """, id);
+    }
+
+    public Map<String, Object> latestContract(long customerId) {
+        List<Long> ids = jdbc.queryForList("""
+                SELECT contract_id
+                FROM contracts
+                WHERE customer_id = ?
+                ORDER BY contract_id DESC
+                LIMIT 1
+                """, Long.class, customerId);
+        return ids.isEmpty() ? Map.of() : contractDetail(ids.get(0));
     }
 
     public List<Map<String, Object>> rentPayments(String search) {
@@ -616,6 +687,7 @@ public class CmsQueryService {
                        o.office_no, b.branch_name
                 FROM customers c
                 LEFT JOIN contracts co ON co.customer_id = c.customer_id
+                  AND co.contract_id = (SELECT MAX(latest.contract_id) FROM contracts latest WHERE latest.customer_id = c.customer_id)
                 LEFT JOIN offices o ON o.office_id = co.office_id
                 LEFT JOIN branches b ON b.branch_id = o.branch_id
                 """;
@@ -697,8 +769,8 @@ public class CmsQueryService {
         if ("實體辦公室".equals(item)) {
             return "辦公室";
         }
-        if (!List.of("辦公室", "座位", "登記", "聯絡處").contains(item)) {
-            throw new IllegalArgumentException("rentalItem must be 辦公室, 座位, 登記, or 聯絡處");
+        if (!List.of("辦公室", "座位", "登記", "聯絡處", "停業").contains(item)) {
+            throw new IllegalArgumentException("rentalItem must be 辦公室, 座位, 登記, 聯絡處, or 停業");
         }
         return item;
     }
@@ -730,8 +802,8 @@ public class CmsQueryService {
         if ("實體辦公室".equals(item)) {
             return "辦公室";
         }
-        if (!List.of("辦公室", "座位", "登記", "聯絡處").contains(item)) {
-            throw new IllegalArgumentException("rentalItem must be 辦公室, 座位, 登記, or 聯絡處");
+        if (!List.of("辦公室", "座位", "登記", "聯絡處", "停業").contains(item)) {
+            throw new IllegalArgumentException("rentalItem must be 辦公室, 座位, 登記, 聯絡處, or 停業");
         }
         return item;
     }
@@ -741,8 +813,8 @@ public class CmsQueryService {
         if (status == null) {
             return null;
         }
-        if (!List.of("登記", "辦公室", "登記+辦公室").contains(status)) {
-            throw new IllegalArgumentException("rentalStatus must be 登記, 辦公室, or 登記+辦公室");
+        if (!List.of("登記", "辦公室", "登記+辦公室", "個人名義").contains(status)) {
+            throw new IllegalArgumentException("rentalStatus must be 登記, 辦公室, 登記+辦公室, or 個人名義");
         }
         return status;
     }
@@ -756,6 +828,201 @@ public class CmsQueryService {
             throw new IllegalArgumentException("leaseStatus must be 綁約中 or 已解約");
         }
         return status;
+    }
+
+    private void validateContractStaff(ContractRequest request) {
+        if (request.signerStaffId() != null
+                && request.signerStaffId().equals(request.partnerStaffId())) {
+            throw new IllegalArgumentException("signerStaffId and partnerStaffId must be different");
+        }
+    }
+
+    private void validateFirstPayment(CustomerWithContractRequest request) {
+        boolean hasAmount = request.firstPaymentAmount() != null;
+        boolean hasDate = blankToNull(request.firstPaymentDateText()) != null;
+        if (hasAmount != hasDate) {
+            throw new IllegalArgumentException("firstPaymentAmount and firstPaymentDateText must be provided together");
+        }
+        if (hasAmount && request.firstPaymentAmount().signum() <= 0) {
+            throw new IllegalArgumentException("firstPaymentAmount must be greater than zero");
+        }
+        if (hasDate && localDate(request.firstPaymentDateText()) == null) {
+            throw new IllegalArgumentException("firstPaymentDateText must be a valid date");
+        }
+    }
+
+    private Integer paymentMonth(String dateText) {
+        LocalDate date = localDate(dateText);
+        return date == null ? null : date.getYear() * 100 + date.getMonthValue();
+    }
+
+    private List<Map<String, Object>> relatedCompanies(long customerId) {
+        List<Long> groups = jdbc.queryForList("""
+                SELECT relation_group_id
+                FROM customer_relation_members
+                WHERE customer_id = ?
+                """, Long.class, customerId);
+        if (groups.isEmpty()) {
+            return List.of();
+        }
+        return jdbc.queryForList("""
+                SELECT relation_member_id, customer_id, company_name,
+                       CASE WHEN customer_id IS NULL THEN FALSE ELSE TRUE END AS is_resolved
+                FROM customer_relation_members
+                WHERE relation_group_id = ?
+                  AND (customer_id IS NULL OR customer_id <> ?)
+                ORDER BY company_name
+                """, groups.get(0), customerId);
+    }
+
+    private void linkPendingRelationMember(long customerId, String companyName) {
+        List<Long> pendingMembers = jdbc.queryForList("""
+                SELECT relation_member_id
+                FROM customer_relation_members
+                WHERE customer_id IS NULL
+                  AND LOWER(company_name) = LOWER(?)
+                ORDER BY relation_member_id
+                """, Long.class, companyName);
+        if (pendingMembers.size() == 1) {
+            jdbc.update("""
+                    UPDATE customer_relation_members
+                    SET customer_id = ?, company_name = ?
+                    WHERE relation_member_id = ?
+                    """, customerId, companyName, pendingMembers.get(0));
+        }
+    }
+
+    private void saveRelatedCompanies(long customerId, String companyName, List<String> requestedNames) {
+        if (requestedNames == null) {
+            return;
+        }
+        List<String> names = normalizedRelatedCompanyNames(companyName, requestedNames);
+        if (names.isEmpty()) {
+            return;
+        }
+
+        Long groupId = relationGroupIdForCustomer(customerId);
+        if (groupId == null) {
+            for (String name : names) {
+                Long relatedCustomerId = uniqueCustomerIdByCompanyName(name);
+                if (relatedCustomerId != null) {
+                    groupId = relationGroupIdForCustomer(relatedCustomerId);
+                    if (groupId != null) {
+                        break;
+                    }
+                }
+            }
+        }
+        if (groupId == null) {
+            groupId = nextId("customer_relation_groups", "relation_group_id");
+            jdbc.update("INSERT INTO customer_relation_groups (relation_group_id) VALUES (?)", groupId);
+        }
+        ensureRelationMember(groupId, customerId, companyName);
+
+        for (String name : names) {
+            Long relatedCustomerId = uniqueCustomerIdByCompanyName(name);
+            if (relatedCustomerId != null) {
+                Long relatedGroupId = relationGroupIdForCustomer(relatedCustomerId);
+                if (relatedGroupId != null && !groupId.equals(relatedGroupId)) {
+                    mergeRelationGroups(groupId, relatedGroupId);
+                }
+            }
+            ensureRelationMember(groupId, relatedCustomerId, name);
+        }
+    }
+
+    private List<String> normalizedRelatedCompanyNames(String companyName, List<String> requestedNames) {
+        List<String> result = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        seen.add(companyName.trim().toLowerCase());
+        for (String value : requestedNames) {
+            String name = blankToNull(value);
+            if (name == null) {
+                continue;
+            }
+            String key = name.toLowerCase();
+            if (seen.add(key)) {
+                result.add(name);
+            }
+        }
+        return result;
+    }
+
+    private Long relationGroupIdForCustomer(long customerId) {
+        List<Long> groups = jdbc.queryForList("""
+                SELECT relation_group_id
+                FROM customer_relation_members
+                WHERE customer_id = ?
+                """, Long.class, customerId);
+        return groups.isEmpty() ? null : groups.get(0);
+    }
+
+    private Long uniqueCustomerIdByCompanyName(String companyName) {
+        List<Long> ids = jdbc.queryForList("""
+                SELECT customer_id
+                FROM customers
+                WHERE LOWER(company_name) = LOWER(?)
+                ORDER BY customer_id
+                """, Long.class, companyName);
+        return ids.size() == 1 ? ids.get(0) : null;
+    }
+
+    private void ensureRelationMember(long groupId, Long customerId, String companyName) {
+        List<Map<String, Object>> sameName = jdbc.queryForList("""
+                SELECT relation_member_id, customer_id
+                FROM customer_relation_members
+                WHERE relation_group_id = ?
+                  AND LOWER(company_name) = LOWER(?)
+                """, groupId, companyName);
+        if (!sameName.isEmpty()) {
+            Object linkedCustomer = sameName.get(0).get("customer_id");
+            if (linkedCustomer == null && customerId != null) {
+                jdbc.update("UPDATE customer_relation_members SET customer_id = ?, company_name = ? WHERE relation_member_id = ?",
+                        customerId, companyName, sameName.get(0).get("relation_member_id"));
+            }
+            return;
+        }
+        if (customerId != null && relationGroupIdForCustomer(customerId) != null) {
+            return;
+        }
+        Long memberId = nextId("customer_relation_members", "relation_member_id");
+        jdbc.update("""
+                INSERT INTO customer_relation_members (
+                    relation_member_id, relation_group_id, customer_id, company_name
+                ) VALUES (?, ?, ?, ?)
+                """, memberId, groupId, customerId, companyName);
+    }
+
+    private void mergeRelationGroups(long targetGroupId, long sourceGroupId) {
+        List<Map<String, Object>> sourceMembers = jdbc.queryForList("""
+                SELECT relation_member_id, customer_id, company_name
+                FROM customer_relation_members
+                WHERE relation_group_id = ?
+                ORDER BY relation_member_id
+                """, sourceGroupId);
+        for (Map<String, Object> source : sourceMembers) {
+            String companyName = (String) source.get("company_name");
+            List<Map<String, Object>> targetMembers = jdbc.queryForList("""
+                    SELECT relation_member_id, customer_id
+                    FROM customer_relation_members
+                    WHERE relation_group_id = ?
+                      AND LOWER(company_name) = LOWER(?)
+                    """, targetGroupId, companyName);
+            if (targetMembers.isEmpty()) {
+                jdbc.update("UPDATE customer_relation_members SET relation_group_id = ? WHERE relation_member_id = ?",
+                        targetGroupId, source.get("relation_member_id"));
+                continue;
+            }
+            Object targetCustomerId = targetMembers.get(0).get("customer_id");
+            Object sourceCustomerId = source.get("customer_id");
+            if (targetCustomerId == null && sourceCustomerId != null) {
+                jdbc.update("UPDATE customer_relation_members SET customer_id = ? WHERE relation_member_id = ?",
+                        sourceCustomerId, targetMembers.get(0).get("relation_member_id"));
+            }
+            jdbc.update("DELETE FROM customer_relation_members WHERE relation_member_id = ?",
+                    source.get("relation_member_id"));
+        }
+        jdbc.update("DELETE FROM customer_relation_groups WHERE relation_group_id = ?", sourceGroupId);
     }
 
     private String saveLeaseImage(Long contractId, MultipartFile file) {
@@ -794,16 +1061,6 @@ public class CmsQueryService {
         }
         LocalDate reminderStart = endDate.minusMonths(1).withDayOfMonth(1);
         return !today.isBefore(reminderStart) && !today.isAfter(endDate);
-    }
-
-    private boolean isBirthdayInMonth(String birthdayText, LocalDate today) {
-        MonthDay birthday = monthDay(birthdayText);
-        return birthday != null && birthday.getMonthValue() == today.getMonthValue();
-    }
-
-    private MonthDay monthDay(String value) {
-        LocalDate date = localDate(value);
-        return date == null ? null : MonthDay.from(date);
     }
 
     private LocalDate localDate(String value) {
