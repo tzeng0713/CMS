@@ -32,6 +32,8 @@ type ViewKey =
   | 'refunds'
   | 'targets';
 
+type NotificationKind = 'expiring' | 'unpaid' | 'incomplete';
+
 interface NavItem {
   key: ViewKey;
   label: string;
@@ -200,6 +202,9 @@ export class AppComponent implements OnInit {
   authMode = signal<'login' | 'register'>('login');
   activeView = signal<ViewKey>('home');
   dashboard = signal<Dashboard | null>(null);
+  expiringNotificationPage = signal(1);
+  unpaidNotificationPage = signal(1);
+  incompleteNotificationPage = signal(1);
   customers = signal<CustomerSummary[]>([]);
   selectedCustomer = signal<CustomerDetail | null>(null);
   contracts = signal<Array<Record<string, unknown>>>([]);
@@ -229,8 +234,12 @@ export class AppComponent implements OnInit {
     phone: '',
     ownerName: '',
     branchId: null,
-    officeNo: ''
+    officeNo: '',
+    ownerBirthdayMonth: null,
+    contactBirthdayMonth: null
   };
+  readonly birthdayMonthOptions = Array.from({ length: 12 }, (_, index) => index + 1);
+  readonly notificationPageSize = 5;
   contractFilters: ContractSearchFilters = {
     companyName: '',
     startDateText: '',
@@ -366,7 +375,10 @@ export class AppComponent implements OnInit {
 
   loadDashboard(): void {
     this.api.dashboard().subscribe({
-      next: (value) => this.dashboard.set(value),
+      next: (value) => {
+        this.dashboard.set(value);
+        this.clampNotificationPages(value);
+      },
       error: () => this.error.set('無法載入總覽資料，請確認 API 是否啟動。')
     });
   }
@@ -444,7 +456,9 @@ export class AppComponent implements OnInit {
       phone: '',
       ownerName: '',
       branchId: null,
-      officeNo: ''
+      officeNo: '',
+      ownerBirthdayMonth: null,
+      contactBirthdayMonth: null
     };
     this.loadCustomers();
   }
@@ -858,9 +872,70 @@ export class AppComponent implements OnInit {
     });
   }
 
-  openReconciliation(item: Dashboard['notifications']['incompleteContracts'][number]): void {
+  openReconciliation(
+    item:
+      | Dashboard['notifications']['incompleteContracts'][number]
+      | Dashboard['notifications']['unpaidRent'][number]
+  ): void {
+    const amount = 'suggested_amount' in item ? item.suggested_amount : null;
     this.router.navigate(['/rent-payments/new'], {
-      queryParams: { customerId: item.customer_id, contractId: item.contract_id }
+      queryParams: {
+        customerId: item.customer_id,
+        contractId: item.contract_id,
+        amount: amount ?? undefined
+      }
+    });
+  }
+
+  pagedNotifications<T>(items: T[], kind: NotificationKind): T[] {
+    const page = this.notificationPage(kind);
+    const start = (page - 1) * this.notificationPageSize;
+    return items.slice(start, start + this.notificationPageSize);
+  }
+
+  notificationTotalPages(items: unknown[]): number {
+    return Math.max(1, Math.ceil(items.length / this.notificationPageSize));
+  }
+
+  notificationPage(kind: NotificationKind): number {
+    switch (kind) {
+      case 'expiring':
+        return this.expiringNotificationPage();
+      case 'unpaid':
+        return this.unpaidNotificationPage();
+      case 'incomplete':
+        return this.incompleteNotificationPage();
+    }
+  }
+
+  changeNotificationPage(kind: NotificationKind, delta: number, itemCount: number): void {
+    const totalPages = Math.max(1, Math.ceil(itemCount / this.notificationPageSize));
+    this.setNotificationPage(kind, Math.min(totalPages, Math.max(1, this.notificationPage(kind) + delta)));
+  }
+
+  private setNotificationPage(kind: NotificationKind, page: number): void {
+    switch (kind) {
+      case 'expiring':
+        this.expiringNotificationPage.set(page);
+        break;
+      case 'unpaid':
+        this.unpaidNotificationPage.set(page);
+        break;
+      case 'incomplete':
+        this.incompleteNotificationPage.set(page);
+        break;
+    }
+  }
+
+  private clampNotificationPages(dashboard: Dashboard): void {
+    const groups: Array<[NotificationKind, unknown[]]> = [
+      ['expiring', dashboard.notifications.expiringContracts],
+      ['unpaid', dashboard.notifications.unpaidRent],
+      ['incomplete', dashboard.notifications.incompleteContracts]
+    ];
+    groups.forEach(([kind, items]) => {
+      const totalPages = this.notificationTotalPages(items);
+      this.setNotificationPage(kind, Math.min(this.notificationPage(kind), totalPages));
     });
   }
 
@@ -868,6 +943,7 @@ export class AppComponent implements OnInit {
     const query = this.router.parseUrl(this.router.url).queryParams;
     const customerId = Number(query['customerId']);
     const contractId = Number(query['contractId']);
+    const suggestedAmount = Number(query['amount']);
     if (!customerId || !contractId) {
       return;
     }
@@ -885,7 +961,11 @@ export class AppComponent implements OnInit {
           customerId,
           contractId,
           paymentMonth: this.monthNumberFromInput(this.rentPaymentMonth),
-          amount: contract['rent'] === null || contract['rent'] === undefined ? undefined : Number(contract['rent']),
+          amount: Number.isFinite(suggestedAmount)
+            ? suggestedAmount
+            : contract['rent'] === null || contract['rent'] === undefined
+              ? undefined
+              : Number(contract['rent']),
           updatedBy: this.currentStaffId()
         };
       },

@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -40,6 +41,8 @@ public class CmsQueryService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("customers", count("customers"));
         result.put("activeContracts", countWhere("contracts", "lease_status IN ('綁約中', '蝬?銝?')"));
+        result.put("officeCustomers", latestActiveContractCount("辦公室", "登記+辦公室"));
+        result.put("registrationCustomers", latestActiveContractCount("登記", "登記+辦公室"));
         result.put("rentPayments", count("rent_payments"));
         result.put("refunds", count("refunds"));
         result.put("monthlyRentAmount", jdbc.queryForObject(
@@ -59,22 +62,81 @@ public class CmsQueryService {
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
         Map<String, Object> notifications = new LinkedHashMap<>();
         notifications.put("expiringContracts", expiringContractNotifications(today));
+        notifications.put("unpaidRent", unpaidRentNotifications(today));
         notifications.put("incompleteContracts", incompleteContractNotifications());
         return notifications;
     }
 
     private List<Map<String, Object>> expiringContractNotifications(LocalDate today) {
         return jdbc.queryForList("""
-                SELECT c.company_name, co.end_date_text, co.lease_status
+                SELECT c.company_name, co.end_date_text, co.rental_item
                 FROM contracts co
                 JOIN customers c ON c.customer_id = co.customer_id
                 WHERE co.lease_status IN ('綁約中', '蝬?銝?')
+                  AND co.contract_id = (
+                    SELECT MAX(latest.contract_id) FROM contracts latest
+                    WHERE latest.customer_id = co.customer_id
+                  )
                   AND co.end_date_text IS NOT NULL
                   AND co.end_date_text <> ''
                 ORDER BY co.end_date_text, c.company_name
                 """).stream()
                 .filter(row -> shouldShowExpirationReminder((String) row.get("end_date_text"), today))
-                .limit(50)
+                .sorted((left, right) -> localDate((String) left.get("end_date_text"))
+                        .compareTo(localDate((String) right.get("end_date_text"))))
+                .toList();
+    }
+
+    private List<Map<String, Object>> unpaidRentNotifications(LocalDate today) {
+        List<Map<String, Object>> contracts = jdbc.queryForList("""
+                SELECT c.customer_id, c.company_name, co.contract_id, co.payment_months,
+                       co.rent, co.end_date_text
+                FROM contracts co
+                JOIN customers c ON c.customer_id = co.customer_id
+                WHERE co.lease_status IN ('綁約中', '蝬?銝?')
+                  AND co.contract_id = (
+                    SELECT MAX(latest.contract_id) FROM contracts latest
+                    WHERE latest.customer_id = co.customer_id
+                  )
+                  AND EXISTS (
+                    SELECT 1 FROM rent_payments rp WHERE rp.contract_id = co.contract_id
+                  )
+                ORDER BY c.company_name
+                """);
+        List<Map<String, Object>> reminders = new ArrayList<>();
+        for (Map<String, Object> contract : contracts) {
+            long contractId = ((Number) contract.get("contract_id")).longValue();
+            LocalDate latestCoveredDate = jdbc.queryForList("""
+                            SELECT fee_end_date_text FROM rent_payments
+                            WHERE contract_id = ?
+                              AND fee_end_date_text IS NOT NULL
+                              AND fee_end_date_text <> ''
+                            """, contractId).stream()
+                    .map(row -> localDate((String) row.get("fee_end_date_text")))
+                    .filter(java.util.Objects::nonNull)
+                    .max(LocalDate::compareTo)
+                    .orElse(null);
+            LocalDate contractEnd = localDate((String) contract.get("end_date_text"));
+            if (latestCoveredDate == null || contractEnd == null) {
+                continue;
+            }
+            LocalDate nextPeriodStart = latestCoveredDate.plusDays(1);
+            if (nextPeriodStart.isAfter(contractEnd)
+                    || today.isBefore(nextPeriodStart.minusDays(30))) {
+                continue;
+            }
+            Map<String, Object> reminder = new LinkedHashMap<>(contract);
+            reminder.put("next_period_start", nextPeriodStart.toString());
+            Number rent = (Number) contract.get("rent");
+            Number paymentMonths = (Number) contract.get("payment_months");
+            reminder.put("suggested_amount", rent == null || paymentMonths == null
+                    ? null
+                    : new BigDecimal(rent.toString()).multiply(BigDecimal.valueOf(paymentMonths.longValue())));
+            reminders.add(reminder);
+        }
+        return reminders.stream()
+                .sorted((left, right) -> ((String) left.get("next_period_start"))
+                        .compareTo((String) right.get("next_period_start")))
                 .toList();
     }
 
@@ -87,11 +149,14 @@ public class CmsQueryService {
                 JOIN customers c ON c.customer_id = co.customer_id
                 LEFT JOIN staff s ON s.staff_id = co.signer_staff_id
                 WHERE co.lease_status IN ('綁約中', '蝬?銝?')
+                  AND co.contract_id = (
+                    SELECT MAX(latest.contract_id) FROM contracts latest
+                    WHERE latest.customer_id = co.customer_id
+                  )
                   AND NOT EXISTS (
                     SELECT 1 FROM rent_payments rp WHERE rp.contract_id = co.contract_id
-                  )
+                )
                 ORDER BY co.signed_date_text, co.contract_id DESC
-                LIMIT 100
                 """);
     }
 
@@ -158,14 +223,18 @@ public class CmsQueryService {
     }
 
     public List<Map<String, Object>> customers(String search, String ownerName, String companyName, String taxId,
-                                               String phone, Long branchId, String officeNo) {
-        if (hasCustomerFilters(companyName, taxId, phone, ownerName, branchId, officeNo)) {
+                                               String phone, Long branchId, String officeNo,
+                                               Integer ownerBirthdayMonth, Integer contactBirthdayMonth) {
+        validateBirthdayMonth(ownerBirthdayMonth);
+        validateBirthdayMonth(contactBirthdayMonth);
+        if (hasCustomerFilters(companyName, taxId, phone, ownerName, branchId, officeNo,
+                ownerBirthdayMonth, contactBirthdayMonth)) {
             String companyLike = "%" + blankToEmpty(companyName) + "%";
             String taxIdLike = "%" + blankToEmpty(taxId) + "%";
             String phoneLike = "%" + blankToEmpty(phone) + "%";
             String ownerLike = "%" + blankToEmpty(ownerName) + "%";
             String officeLike = "%" + blankToEmpty(officeNo) + "%";
-            return jdbc.queryForList(customerListSql() + """
+            List<Map<String, Object>> rows = jdbc.queryForList(customerListSql() + """
                     WHERE c.customer_id IN (
                         SELECT DISTINCT filtered.customer_id
                         FROM customers filtered
@@ -179,13 +248,13 @@ public class CmsQueryService {
                           AND (? = '%%' OR filtered_office.office_no LIKE ?)
                     )
                     ORDER BY c.customer_id DESC
-                    LIMIT 200
                     """, companyLike, companyLike,
                     taxIdLike, taxIdLike,
                     phoneLike, phoneLike,
                     ownerLike, ownerLike,
                     branchId, branchId,
                     officeLike, officeLike);
+            return filterBirthdayMonths(rows, ownerBirthdayMonth, contactBirthdayMonth);
         }
         String searchText = search == null ? "" : search.trim();
         if (searchText.isBlank()) {
@@ -344,13 +413,19 @@ public class CmsQueryService {
         Long contractId = ((Number) createdContract.get("contract_id")).longValue();
         if (request.firstPaymentAmount() != null) {
             Long updatedBy = contract.updatedBy() == null ? request.customer().updatedBy() : contract.updatedBy();
+            LocalDate feeStartDate = localDate(contract.startDateText());
+            LocalDate feeEndDate = feeStartDate.plusMonths(contract.paymentMonths()).minusDays(1);
+            LocalDate contractEndDate = localDate(contract.endDateText());
+            if (contractEndDate != null && feeEndDate.isAfter(contractEndDate)) {
+                feeEndDate = contractEndDate;
+            }
             createRentPayment(new RentPaymentRequest(
                     customerId,
                     contractId,
                     paymentMonth(request.firstPaymentDateText()),
                     request.firstPaymentDateText(),
-                    null,
-                    null,
+                    feeStartDate.toString(),
+                    feeEndDate.toString(),
                     request.firstPaymentAmount(),
                     null,
                     "首次繳款",
@@ -739,13 +814,53 @@ public class CmsQueryService {
     }
 
     private boolean hasCustomerFilters(String companyName, String taxId, String phone, String ownerName,
-                                       Long branchId, String officeNo) {
+                                       Long branchId, String officeNo, Integer ownerBirthdayMonth,
+                                       Integer contactBirthdayMonth) {
         return !blankToEmpty(companyName).isBlank()
                 || !blankToEmpty(taxId).isBlank()
                 || !blankToEmpty(phone).isBlank()
                 || !blankToEmpty(ownerName).isBlank()
                 || branchId != null
-                || !blankToEmpty(officeNo).isBlank();
+                || !blankToEmpty(officeNo).isBlank()
+                || ownerBirthdayMonth != null
+                || contactBirthdayMonth != null;
+    }
+
+    private void validateBirthdayMonth(Integer month) {
+        if (month != null && (month < 1 || month > 12)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "birthday month must be between 1 and 12");
+        }
+    }
+
+    private List<Map<String, Object>> filterBirthdayMonths(List<Map<String, Object>> rows,
+                                                            Integer ownerBirthdayMonth,
+                                                            Integer contactBirthdayMonth) {
+        return rows.stream()
+                .filter(row -> birthdayMatches(row.get("owner_birthday"), ownerBirthdayMonth))
+                .filter(row -> birthdayMatches(row.get("contact_birthday"), contactBirthdayMonth))
+                .limit(200)
+                .toList();
+    }
+
+    private boolean birthdayMatches(Object value, Integer month) {
+        if (month == null) {
+            return true;
+        }
+        LocalDate birthday = localDate(value == null ? null : value.toString());
+        return birthday != null && birthday.getMonthValue() == month;
+    }
+
+    private int latestActiveContractCount(String firstRentalStatus, String secondRentalStatus) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*)
+                FROM contracts co
+                WHERE co.contract_id = (
+                    SELECT MAX(latest.contract_id) FROM contracts latest
+                    WHERE latest.customer_id = co.customer_id
+                )
+                  AND co.lease_status IN ('綁約中', '蝬?銝?')
+                  AND co.rental_status IN (?, ?)
+                """, Integer.class, firstRentalStatus, secondRentalStatus);
     }
 
     private Integer normalizeStatus(Integer value) {
@@ -848,6 +963,20 @@ public class CmsQueryService {
         }
         if (hasDate && localDate(request.firstPaymentDateText()) == null) {
             throw new IllegalArgumentException("firstPaymentDateText must be a valid date");
+        }
+        if (hasAmount) {
+            ContractRequest contract = request.contract();
+            LocalDate contractStart = localDate(contract.startDateText());
+            LocalDate contractEnd = localDate(contract.endDateText());
+            if (contractStart == null) {
+                throw new IllegalArgumentException("contract startDateText is required for the first payment");
+            }
+            if (contractEnd != null && contractEnd.isBefore(contractStart)) {
+                throw new IllegalArgumentException("contract endDateText must not be before startDateText");
+            }
+            if (contract.paymentMonths() == null || contract.paymentMonths() <= 0) {
+                throw new IllegalArgumentException("contract paymentMonths is required for the first payment");
+            }
         }
     }
 
@@ -1059,7 +1188,7 @@ public class CmsQueryService {
         if (endDate == null) {
             return false;
         }
-        LocalDate reminderStart = endDate.minusMonths(1).withDayOfMonth(1);
+        LocalDate reminderStart = endDate.minusDays(45);
         return !today.isBefore(reminderStart) && !today.isAfter(endDate);
     }
 

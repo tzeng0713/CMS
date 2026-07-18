@@ -52,8 +52,11 @@ public class CmsController {
                                                @RequestParam(required = false) String taxId,
                                                @RequestParam(required = false) String phone,
                                                @RequestParam(required = false) Long branchId,
-                                               @RequestParam(required = false) String officeNo) {
-        return service.customers(search, ownerName, companyName, taxId, phone, branchId, officeNo);
+                                               @RequestParam(required = false) String officeNo,
+                                               @RequestParam(required = false) Integer ownerBirthdayMonth,
+                                               @RequestParam(required = false) Integer contactBirthdayMonth) {
+        return service.customers(search, ownerName, companyName, taxId, phone, branchId, officeNo,
+                ownerBirthdayMonth, contactBirthdayMonth);
     }
 
     @GetMapping("/customers/{id}")

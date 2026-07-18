@@ -76,6 +76,132 @@ class CmsApplicationTests {
     }
 
     @Test
+    void customerSearchFiltersByBirthdayMonth() throws Exception {
+        long augustOwner = insertDashboardCustomer("August Birthday Search Co", "1988/8/12");
+        long septemberContact = insertDashboardCustomer("September Contact Search Co", "1980-01-01");
+        long rocContact = insertDashboardCustomer("ROC Contact Search Co", "1980-01-01");
+        jdbc.update("UPDATE customers SET contact_birthday = '1992-09-05' WHERE customer_id = ?", septemberContact);
+        jdbc.update("UPDATE customers SET contact_birthday = '115.9.18' WHERE customer_id = ?", rocContact);
+
+        mvc.perform(get("/api/customers").param("ownerBirthdayMonth", "8"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].customer_id", hasItem((int) augustOwner)))
+                .andExpect(jsonPath("$[*].customer_id", not(hasItem((int) septemberContact))));
+
+        mvc.perform(get("/api/customers")
+                        .param("contactBirthdayMonth", "9")
+                        .param("companyName", "Contact Search"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].customer_id", hasItems((int) septemberContact, (int) rocContact)))
+                .andExpect(jsonPath("$[*].customer_id", not(hasItem((int) augustOwner))));
+    }
+
+    @Test
+    void customerBirthdaySearchDoesNotTruncateCandidatesBeforeFiltering() throws Exception {
+        long targetCustomer = insertDashboardCustomer("Older November Birthday Co", "1985-11-20");
+        for (int index = 0; index < 1000; index++) {
+            insertDashboardCustomer("Newer January Birthday Co " + index, "1985-01-20");
+        }
+
+        mvc.perform(get("/api/customers").param("ownerBirthdayMonth", "11"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[*].customer_id", hasItem((int) targetCustomer)));
+    }
+
+    @Test
+    void dashboardUsesLatestContractsForServiceCountsAndExpiration() throws Exception {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        int officeBefore = objectMapper.readTree(mvc.perform(get("/api/dashboard")).andReturn()
+                .getResponse().getContentAsString()).path("officeCustomers").asInt();
+        int registrationBefore = objectMapper.readTree(mvc.perform(get("/api/dashboard")).andReturn()
+                .getResponse().getContentAsString()).path("registrationCustomers").asInt();
+
+        long officeCustomer = insertDashboardCustomer("Latest Office Count Co", "1980-01-01");
+        long combinedCustomer = insertDashboardCustomer("Latest Combined Count Co", "1980-01-01");
+        insertDashboardContractWithTerms(officeCustomer, today.minusMonths(10), today.plusDays(20),
+                "登記", 1, 1000, "綁約中");
+        insertDashboardContractWithTerms(officeCustomer, today, today.plusMonths(8),
+                "辦公室", 3, 5000, "綁約中");
+        insertDashboardContractWithTerms(combinedCustomer, today, today.plusDays(45),
+                "登記+辦公室", 6, 3000, "綁約中");
+
+        mvc.perform(get("/api/dashboard"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.officeCustomers", is(officeBefore + 2)))
+                .andExpect(jsonPath("$.registrationCustomers", is(registrationBefore + 1)))
+                .andExpect(jsonPath("$.notifications.expiringContracts[*].company_name",
+                        hasItem("Latest Combined Count Co")))
+                .andExpect(jsonPath("$.notifications.expiringContracts[*].company_name",
+                        not(hasItem("Latest Office Count Co"))))
+                .andExpect(jsonPath("$.notifications.expiringContracts[?(@.company_name == 'Latest Combined Count Co')].rental_item",
+                        hasItem("登記+辦公室")));
+
+        long outsideCustomer = insertDashboardCustomer("Outside 45 Day Co", "1980-01-01");
+        insertDashboardContractWithTerms(outsideCustomer, today, today.plusDays(46),
+                "登記", 1, 1000, "綁約中");
+        mvc.perform(get("/api/dashboard"))
+                .andExpect(jsonPath("$.notifications.expiringContracts[*].company_name",
+                        not(hasItem("Outside 45 Day Co"))));
+    }
+
+    @Test
+    void dashboardShowsUnpaidRentThirtyDaysBeforeNextPeriodWithoutDuplicatingIncompleteContracts() throws Exception {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        long unpaidCustomer = insertDashboardCustomer("Recurring Rent Reminder Co", "1980-01-01");
+        long unpaidContract = insertDashboardContractWithTerms(unpaidCustomer, today.minusMonths(6),
+                today.plusMonths(8), "辦公室", 3, 2000, "綁約中");
+        insertDashboardRentPayment(unpaidCustomer, unpaidContract, today.minusMonths(3), today.plusDays(29));
+
+        long incompleteCustomer = insertDashboardCustomer("Only Incomplete Reminder Co", "1980-01-01");
+        insertDashboardContractWithTerms(incompleteCustomer, today, today.plusMonths(8),
+                "登記", 6, 3000, "綁約中");
+
+        mvc.perform(get("/api/dashboard"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notifications.unpaidRent[*].company_name",
+                        hasItem("Recurring Rent Reminder Co")))
+                .andExpect(jsonPath("$.notifications.unpaidRent[*].company_name",
+                        not(hasItem("Only Incomplete Reminder Co"))))
+                .andExpect(jsonPath("$.notifications.incompleteContracts[*].company_name",
+                        hasItem("Only Incomplete Reminder Co")))
+                .andExpect(jsonPath("$.notifications.unpaidRent[?(@.company_name == 'Recurring Rent Reminder Co')].suggested_amount",
+                        hasItem(6000.0)));
+
+        insertDashboardRentPayment(unpaidCustomer, unpaidContract, today.plusDays(30), today.plusMonths(3));
+        mvc.perform(get("/api/dashboard"))
+                .andExpect(jsonPath("$.notifications.unpaidRent[*].company_name",
+                        not(hasItem("Recurring Rent Reminder Co"))));
+    }
+
+    @Test
+    void dashboardKeepsOverdueRentVisibleAfterContractEnd() throws Exception {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        long customerId = insertDashboardCustomer("Expired Contract Debt Co", "1980-01-01");
+        long contractId = insertDashboardContractWithTerms(customerId, today.minusMonths(6),
+                today.minusDays(1), "辦公室", 1, 2000, "綁約中");
+        insertDashboardRentPayment(customerId, contractId, today.minusMonths(2), today.minusMonths(1));
+
+        mvc.perform(get("/api/dashboard"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notifications.unpaidRent[*].company_name",
+                        hasItem("Expired Contract Debt Co")));
+    }
+
+    @Test
+    void dashboardNotificationListsAreNotTruncatedBeforeClientPagination() throws Exception {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        for (int index = 0; index < 51; index++) {
+            long customerId = insertDashboardCustomer("Pagination Expiration Co " + index, "1980-01-01");
+            insertDashboardContractWithTerms(customerId, today.minusMonths(6), today.plusDays(30),
+                    "登記", 1, 1000, "綁約中");
+        }
+
+        mvc.perform(get("/api/dashboard"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.notifications.expiringContracts.length()", greaterThan(50)));
+    }
+
+    @Test
     void integratedCustomerCreationStoresNewFieldsRelationsAndFirstPayment() throws Exception {
         MockMultipartFile payload = new MockMultipartFile("payload", "", MediaType.TEXT_PLAIN_VALUE, """
                 {
@@ -126,7 +252,9 @@ class CmsApplicationTests {
                 .andExpect(jsonPath("$.contracts[0].partner_staff_id", is(2)))
                 .andExpect(jsonPath("$.contracts[0].partner_staff_name").exists())
                 .andExpect(jsonPath("$.rentPayments[0].amount", is(3500.0)))
-                .andExpect(jsonPath("$.rentPayments[0].payment_date_text", is("2026-07-19")));
+                .andExpect(jsonPath("$.rentPayments[0].payment_date_text", is("2026-07-19")))
+                .andExpect(jsonPath("$.rentPayments[0].fee_start_date_text", is("2026-08-01")))
+                .andExpect(jsonPath("$.rentPayments[0].fee_end_date_text", is("2027-01-31")));
     }
 
     @Test
@@ -156,6 +284,32 @@ class CmsApplicationTests {
         Integer after = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM customers WHERE company_name = 'Incomplete Payment Co'", Integer.class);
         org.junit.jupiter.api.Assertions.assertEquals(before, after);
+    }
+
+    @Test
+    void integratedCustomerCreationRejectsReversedContractDates() throws Exception {
+        MockMultipartFile payload = new MockMultipartFile("payload", "", MediaType.TEXT_PLAIN_VALUE, """
+                {
+                  "customer": {"companyName": "Reversed Contract Dates Co", "updatedBy": 1},
+                  "contract": {
+                    "rentalItem": "登記",
+                    "rentalStatus": "登記",
+                    "startDateText": "2026-08-01",
+                    "endDateText": "2026-07-31",
+                    "paymentMonths": 1,
+                    "leaseStatus": "綁約中",
+                    "updatedBy": 1
+                  },
+                  "firstPaymentAmount": 3000,
+                  "firstPaymentDateText": "2026-07-19"
+                }
+                """.getBytes(StandardCharsets.UTF_8));
+
+        mvc.perform(multipart("/api/customers/with-contract").file(payload))
+                .andExpect(status().isBadRequest());
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM customers WHERE company_name = 'Reversed Contract Dates Co'", Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(0, count);
     }
 
     @Test
@@ -654,5 +808,33 @@ class CmsApplicationTests {
                     rent, deposit, lease_status, updated_by
                 ) VALUES (?, ?, 1, 1, ?, ?, 1000, 1000, ?, 1)
                 """, contractId, customerId, endDate.minusMonths(11).toString(), endDate.toString(), leaseStatus);
+    }
+
+    private long insertDashboardContractWithTerms(long customerId, LocalDate startDate, LocalDate endDate,
+                                                  String rentalStatus, int paymentMonths, int rent,
+                                                  String leaseStatus) {
+        Long contractId = jdbc.queryForObject("SELECT COALESCE(MAX(contract_id), 0) + 1 FROM contracts", Long.class);
+        jdbc.update("""
+                INSERT INTO contracts (
+                    contract_id, customer_id, office_id, rental_item, rental_status, payment_months,
+                    start_date_text, end_date_text, rent, deposit, lease_status, updated_by
+                ) VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                """, contractId, customerId, rentalStatus, rentalStatus, paymentMonths,
+                startDate.toString(), endDate.toString(), rent, rent, leaseStatus);
+        return contractId;
+    }
+
+    private void insertDashboardRentPayment(long customerId, long contractId,
+                                            LocalDate feeStartDate, LocalDate feeEndDate) {
+        Long paymentId = jdbc.queryForObject(
+                "SELECT COALESCE(MAX(rent_payment_id), 0) + 1 FROM rent_payments", Long.class);
+        jdbc.update("""
+                INSERT INTO rent_payments (
+                    rent_payment_id, customer_id, contract_id, payment_month, payment_date_text,
+                    fee_start_date_text, fee_end_date_text, amount, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, 6000, 1)
+                """, paymentId, customerId, contractId,
+                feeStartDate.getYear() * 100 + feeStartDate.getMonthValue(),
+                feeStartDate.toString(), feeStartDate.toString(), feeEndDate.toString());
     }
 }

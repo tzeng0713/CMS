@@ -6,6 +6,8 @@ import { environment } from '../../environments/environment';
 export interface Dashboard {
   customers: number;
   activeContracts: number;
+  officeCustomers: number;
+  registrationCustomers: number;
   rentPayments: number;
   refunds: number;
   monthlyRentAmount: number;
@@ -14,7 +16,16 @@ export interface Dashboard {
     expiringContracts: Array<{
       company_name: string;
       end_date_text: string;
-      lease_status: string;
+      rental_item: string | null;
+    }>;
+    unpaidRent: Array<{
+      customer_id: number;
+      contract_id: number;
+      company_name: string;
+      next_period_start: string;
+      payment_months: number | null;
+      rent: number | null;
+      suggested_amount: number | null;
     }>;
     incompleteContracts: Array<{
       customer_id: number;
@@ -116,6 +127,8 @@ export interface CustomerSearchFilters {
   ownerName?: string;
   branchId?: number | null;
   officeNo?: string;
+  ownerBirthdayMonth?: number | null;
+  contactBirthdayMonth?: number | null;
 }
 
 export interface RentPaymentPayload {

@@ -90,34 +90,26 @@
       </div>
     </header>
 
-    <section class="kpis" *ngIf="dashboard() as d">
-      <article>
-        <span>客戶數</span>
-        <strong>{{ d.customers }}</strong>
-      </article>
-      <article>
-        <span>租賃中合約</span>
-        <strong>{{ d.activeContracts }}</strong>
-      </article>
-      <article>
-        <span>租金紀錄</span>
-        <strong>{{ d.rentPayments }}</strong>
-      </article>
-      <article>
-        <span>租金總額</span>
-        <strong>{{ money(d.monthlyRentAmount) }}</strong>
-      </article>
-    </section>
-
     <p class="error" *ngIf="error()">{{ error() }}</p>
     <p class="success" *ngIf="success()">{{ success() }}</p>
 
     <section class="home-view" *ngIf="activeView() === 'home' && dashboard() as d">
+      <section class="kpis home-kpis" aria-label="客戶服務統計">
+        <article>
+          <span>租辦公室客戶數</span>
+          <strong>{{ d.officeCustomers }}</strong>
+        </article>
+        <article>
+          <span>登記客戶數</span>
+          <strong>{{ d.registrationCustomers }}</strong>
+        </article>
+      </section>
+
       <section class="panel notification-panel">
         <div class="panel-header">
           <div>
             <h2>系統通知</h2>
-            <p>提醒近期需要處理的租約到期與尚未完成的第一筆繳款。</p>
+            <p>提醒近期租約到期、下一期租金與尚未完成的第一筆繳款。</p>
           </div>
         </div>
 
@@ -128,17 +120,49 @@
               <strong>{{ d.notifications.expiringContracts.length }}</strong>
             </div>
             <div class="notification-list" *ngIf="d.notifications.expiringContracts.length; else noExpiringContracts">
-              <article class="notification-card urgent" *ngFor="let item of d.notifications.expiringContracts">
+              <article class="notification-card urgent" *ngFor="let item of pagedNotifications(d.notifications.expiringContracts, 'expiring')">
                 <div>
                   <strong>{{ item.company_name }}</strong>
                   <span>到期日期 {{ item.end_date_text }}</span>
                 </div>
-                <small>{{ item.lease_status }}</small>
+                <small>{{ item.rental_item || '-' }}</small>
               </article>
             </div>
             <ng-template #noExpiringContracts>
               <p class="empty-state">目前沒有租約到期提醒</p>
             </ng-template>
+            <div class="notification-pager" *ngIf="d.notifications.expiringContracts.length > notificationPageSize">
+              <button type="button" class="ghost pager-button" title="上一頁" aria-label="租約到期上一頁" [disabled]="expiringNotificationPage() === 1" (click)="changeNotificationPage('expiring', -1, d.notifications.expiringContracts.length)">‹</button>
+              <span>{{ expiringNotificationPage() }} / {{ notificationTotalPages(d.notifications.expiringContracts) }}</span>
+              <button type="button" class="ghost pager-button" title="下一頁" aria-label="租約到期下一頁" [disabled]="expiringNotificationPage() === notificationTotalPages(d.notifications.expiringContracts)" (click)="changeNotificationPage('expiring', 1, d.notifications.expiringContracts.length)">›</button>
+            </div>
+          </section>
+
+          <section class="notification-section">
+            <div class="notification-heading">
+              <span>租金尚未繳納</span>
+              <strong>{{ d.notifications.unpaidRent.length }}</strong>
+            </div>
+            <div class="notification-list" *ngIf="d.notifications.unpaidRent.length; else noUnpaidRent">
+              <article class="notification-card unpaid" *ngFor="let item of pagedNotifications(d.notifications.unpaidRent, 'unpaid')">
+                <div>
+                  <strong>{{ item.company_name }}</strong>
+                  <span>下期起日 {{ item.next_period_start }} / 每 {{ item.payment_months || '-' }} 個月</span>
+                </div>
+                <div class="notification-action">
+                  <small>{{ money(item.suggested_amount) }}</small>
+                  <button type="button" class="ghost compact-button" (click)="openReconciliation(item)">新增對帳</button>
+                </div>
+              </article>
+            </div>
+            <ng-template #noUnpaidRent>
+              <p class="empty-state">目前沒有租金未繳提醒</p>
+            </ng-template>
+            <div class="notification-pager" *ngIf="d.notifications.unpaidRent.length > notificationPageSize">
+              <button type="button" class="ghost pager-button" title="上一頁" aria-label="租金未繳上一頁" [disabled]="unpaidNotificationPage() === 1" (click)="changeNotificationPage('unpaid', -1, d.notifications.unpaidRent.length)">‹</button>
+              <span>{{ unpaidNotificationPage() }} / {{ notificationTotalPages(d.notifications.unpaidRent) }}</span>
+              <button type="button" class="ghost pager-button" title="下一頁" aria-label="租金未繳下一頁" [disabled]="unpaidNotificationPage() === notificationTotalPages(d.notifications.unpaidRent)" (click)="changeNotificationPage('unpaid', 1, d.notifications.unpaidRent.length)">›</button>
+            </div>
           </section>
 
           <section class="notification-section">
@@ -147,10 +171,10 @@
               <strong>{{ d.notifications.incompleteContracts.length }}</strong>
             </div>
             <div class="notification-list" *ngIf="d.notifications.incompleteContracts.length; else noIncompleteContracts">
-              <article class="notification-card pending" *ngFor="let item of d.notifications.incompleteContracts">
+              <article class="notification-card pending" *ngFor="let item of pagedNotifications(d.notifications.incompleteContracts, 'incomplete')">
                 <div>
                   <strong>{{ item.company_name }}</strong>
-                  <span>簽約人 {{ item.signer_staff_name || '-' }} / 起租 {{ item.start_date_text || '-' }}</span>
+                  <span>簽約人 {{ item.signer_staff_name || '-' }} / 簽約 {{ item.signed_date_text || '-' }}</span>
                 </div>
                 <div class="notification-action">
                   <small>{{ money(item.rent) }}</small>
@@ -161,6 +185,11 @@
             <ng-template #noIncompleteContracts>
               <p class="empty-state">目前沒有未完成租約</p>
             </ng-template>
+            <div class="notification-pager" *ngIf="d.notifications.incompleteContracts.length > notificationPageSize">
+              <button type="button" class="ghost pager-button" title="上一頁" aria-label="未完成租約上一頁" [disabled]="incompleteNotificationPage() === 1" (click)="changeNotificationPage('incomplete', -1, d.notifications.incompleteContracts.length)">‹</button>
+              <span>{{ incompleteNotificationPage() }} / {{ notificationTotalPages(d.notifications.incompleteContracts) }}</span>
+              <button type="button" class="ghost pager-button" title="下一頁" aria-label="未完成租約下一頁" [disabled]="incompleteNotificationPage() === notificationTotalPages(d.notifications.incompleteContracts)" (click)="changeNotificationPage('incomplete', 1, d.notifications.incompleteContracts.length)">›</button>
+            </div>
           </section>
         </div>
       </section>
@@ -232,6 +261,20 @@
               [(ngModel)]="customerFilters.officeNo"
               (ngModelChange)="loadCustomers()"
             />
+          </label>
+          <label>
+            負責人生日月份
+            <select name="customerFilterOwnerBirthdayMonth" [(ngModel)]="customerFilters.ownerBirthdayMonth" (ngModelChange)="loadCustomers()">
+              <option [ngValue]="null">全部月份</option>
+              <option *ngFor="let month of birthdayMonthOptions" [ngValue]="month">{{ month }} 月</option>
+            </select>
+          </label>
+          <label>
+            聯絡人生日月份
+            <select name="customerFilterContactBirthdayMonth" [(ngModel)]="customerFilters.contactBirthdayMonth" (ngModelChange)="loadCustomers()">
+              <option [ngValue]="null">全部月份</option>
+              <option *ngFor="let month of birthdayMonthOptions" [ngValue]="month">{{ month }} 月</option>
+            </select>
           </label>
           <div class="filter-actions">
             <button type="button" class="ghost" (click)="resetCustomerFilters()">清除條件</button>

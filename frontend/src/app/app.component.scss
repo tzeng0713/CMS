@@ -197,6 +197,11 @@ button {
   margin-bottom: 18px;
 }
 
+.home-kpis {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-bottom: 0;
+}
+
 .kpis article,
 .panel {
   background: #ffffff;
@@ -664,7 +669,7 @@ textarea {
 
 .notification-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -722,6 +727,10 @@ textarea {
   border-left-color: #0f9488;
 }
 
+.notification-card.unpaid {
+  border-left-color: #dc2626;
+}
+
 .notification-action {
   display: grid;
   justify-items: end;
@@ -733,6 +742,37 @@ textarea {
 .notification-card span,
 .notification-card small {
   display: block;
+}
+
+.notification-pager {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  min-height: 34px;
+}
+
+.notification-pager span {
+  min-width: 52px;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pager-button {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.pager-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .notification-card strong {
