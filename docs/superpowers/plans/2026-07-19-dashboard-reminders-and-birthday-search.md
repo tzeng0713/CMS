@@ -123,7 +123,7 @@ Render expiration rental item, add the unpaid-rent section and reconciliation ac
 
 - [ ] **Step 4: Add paginator styling and responsive checks**
 
-Use compact previous/next icon or text controls, current/total page text, stable button dimensions, and responsive notification layout without nested cards.
+Use compact previous/next icon or text controls, current/total page text, stable button dimensions, and responsive notification layout without nested cards. Set each notification section to align its internal grid content at the start so all three headings share the same top edge even when a section is empty.
 
 - [ ] **Step 5: Build and browser-test**
 

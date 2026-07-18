@@ -54,6 +54,8 @@ This change improves customer birthday search and limits dashboard summary and n
 ## Notification Pagination
 
 - Expiring contracts, unpaid rent, and incomplete contracts each have an independent paginator.
+- All three notification section headings align to the top of the same grid row regardless of list length or empty state.
+- Each notification list begins immediately below its heading; empty content must not vertically center or displace the heading.
 - Each page displays five reminders.
 - Each paginator shows current page, total pages, previous, and next controls.
 - Controls are disabled when the current page has no previous or next page.
