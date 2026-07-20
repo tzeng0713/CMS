@@ -689,8 +689,8 @@ public class CmsQueryService {
                                            Integer page, Integer pageSize, String sortBy, String sortDir) {
         String feeStartMonthText = blankToEmpty(feeStartMonth);
         String feeEndMonthText = blankToEmpty(feeEndMonth);
-        String issuedFromText = blankToEmpty(issuedFrom);
-        String issuedToText = blankToEmpty(issuedTo);
+        String issuedFromText = blankToNull(issuedFrom);
+        String issuedToText = blankToNull(issuedTo);
 
         String where = """
                  WHERE (? IS NULL OR cl.charge_list_id = ?)
@@ -700,8 +700,8 @@ public class CmsQueryService {
                    AND (? = '' OR cl.fee_end_month = ?)
                    AND (? IS NULL OR cl.status = ?)
                    AND (? IS NULL OR cl.created_by = ?)
-                   AND (? = '' OR DATE(cl.issued_at) >= ?)
-                   AND (? = '' OR DATE(cl.issued_at) <= ?)
+                   AND (? IS NULL OR DATE(cl.issued_at) >= ?)
+                   AND (? IS NULL OR DATE(cl.issued_at) <= ?)
                 """;
         List<Object> args = new ArrayList<>();
         args.add(chargeListId); args.add(chargeListId);
