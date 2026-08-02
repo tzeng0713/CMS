@@ -1,4 +1,6 @@
 -- CMS 客戶管理資訊系統 MySQL 建表與 Demo 假資料
+-- 警告：此檔會刪除並重建 cms 內的資料表，只適用於全新環境或 Demo 重置。
+-- 既有正式資料庫請啟動後端，讓 SchemaMigrationRunner 以保留資料的方式補欄位。
 -- 使用方式：
 --   mysql -u root -p < table.txt
 --
@@ -45,7 +47,6 @@ CREATE TABLE offices (
   office_id BIGINT PRIMARY KEY,
   office_no VARCHAR(50),
   branch_id BIGINT NOT NULL,
-  phone VARCHAR(80),
   notes VARCHAR(500),
   CONSTRAINT fk_offices_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
 );
@@ -161,35 +162,68 @@ CREATE TABLE charge_lists (
   charge_list_id BIGINT PRIMARY KEY AUTO_INCREMENT,
   customer_id BIGINT NOT NULL,
   contract_id BIGINT NOT NULL,
-  fee_start_month VARCHAR(20),
-  fee_end_month VARCHAR(20),
-  management_fee DECIMAL(12,2),
-  electricity_fee DECIMAL(12,2),
-  printing_fee DECIMAL(12,2),
-  tax DECIMAL(12,2),
-  advance_payment DECIMAL(12,2),
+  fee_start_month CHAR(7),
+  fee_end_month CHAR(7),
+  management_fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+  electricity_fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+  printing_fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+  tax DECIMAL(12,2) NOT NULL DEFAULT 0,
+  advance_payment DECIMAL(12,2) NOT NULL DEFAULT 0,
+  repair_fee DECIMAL(12,2) NOT NULL DEFAULT 0,
+  total_amount DECIMAL(12,2) NOT NULL DEFAULT 0,
+  status TINYINT NOT NULL DEFAULT 2,
+  created_by BIGINT,
   issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_by BIGINT,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_charge_lists_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
   CONSTRAINT fk_charge_lists_contract FOREIGN KEY (contract_id) REFERENCES contracts(contract_id),
+  CONSTRAINT fk_charge_lists_created_by FOREIGN KEY (created_by) REFERENCES staff(staff_id),
   CONSTRAINT fk_charge_lists_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
 );
+
+CREATE INDEX idx_charge_lists_customer_id ON charge_lists(customer_id);
+CREATE INDEX idx_charge_lists_contract_id ON charge_lists(contract_id);
+CREATE INDEX idx_charge_lists_status ON charge_lists(status);
+CREATE INDEX idx_charge_lists_issued_at ON charge_lists(issued_at);
+CREATE INDEX idx_charge_lists_fee_start_month ON charge_lists(fee_start_month);
+CREATE INDEX idx_charge_lists_fee_end_month ON charge_lists(fee_end_month);
 
 CREATE TABLE refunds (
   refund_id BIGINT PRIMARY KEY,
   customer_id BIGINT,
   contract_id BIGINT,
+  charge_list_id BIGINT,
   company_name VARCHAR(255),
   reason VARCHAR(500),
+  adjustment_amount DECIMAL(12,2) DEFAULT 0,
+  adjustment_note VARCHAR(1000),
+  deduction_total DECIMAL(12,2),
   refund_amount DECIMAL(12,2),
-  note VARCHAR(1000),
+  refund_status VARCHAR(20),
+  payment_method VARCHAR(20),
+  bank_code VARCHAR(20),
+  bank_account VARCHAR(50),
+  bank_account_name VARCHAR(100),
+  refunded_at VARCHAR(30),
+  termination_staff_id BIGINT,
+  created_by BIGINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  reviewed_by BIGINT,
+  reviewed_at TIMESTAMP,
   updated_by BIGINT,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_refunds_customer FOREIGN KEY (customer_id) REFERENCES customers(customer_id),
   CONSTRAINT fk_refunds_contract FOREIGN KEY (contract_id) REFERENCES contracts(contract_id),
+  CONSTRAINT fk_refunds_charge_list FOREIGN KEY (charge_list_id) REFERENCES charge_lists(charge_list_id),
+  CONSTRAINT fk_refunds_termination_staff FOREIGN KEY (termination_staff_id) REFERENCES staff(staff_id),
+  CONSTRAINT fk_refunds_created_by FOREIGN KEY (created_by) REFERENCES staff(staff_id),
+  CONSTRAINT fk_refunds_reviewed_by FOREIGN KEY (reviewed_by) REFERENCES staff(staff_id),
   CONSTRAINT fk_refunds_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
 );
+
+CREATE INDEX idx_refunds_status ON refunds(refund_status);
+CREATE INDEX idx_refunds_refunded_at ON refunds(refunded_at);
 
 CREATE TABLE sales_targets (
   sales_target_id BIGINT PRIMARY KEY,
@@ -218,11 +252,11 @@ INSERT INTO branches (branch_id, branch_name) VALUES
 (1, '敦化館'),
 (2, '信義館');
 
-INSERT INTO offices (office_id, office_no, branch_id, phone, notes) VALUES
-(1, '101', 1, '02-2776-9001', '主管室旁辦公室'),
-(2, '102', 1, '02-2776-9002 羅r', '標準辦公室'),
-(3, '103', 1, '02-2776-9003 羅r', '小型辦公室'),
-(4, 'S-201', 2, '02-8780-0201', '信義館座位區');
+INSERT INTO offices (office_id, office_no, branch_id, notes) VALUES
+(1, '101', 1, '主管室旁辦公室'),
+(2, '102', 1, '標準辦公室'),
+(3, '103', 1, '小型辦公室'),
+(4, 'S-201', 2, '信義館座位區');
 
 INSERT INTO office_contacts (office_contact_id, office_id, person_name, phone) VALUES
 (1, 1, '櫃台', '02-2776-9000'),
@@ -274,12 +308,21 @@ INSERT INTO rent_payments (
 
 INSERT INTO charge_lists (
   charge_list_id, customer_id, contract_id, fee_start_month, fee_end_month,
-  management_fee, electricity_fee, printing_fee, tax, advance_payment, updated_by
+  management_fee, electricity_fee, printing_fee, tax, advance_payment, repair_fee,
+  total_amount, status, created_by, updated_by
 ) VALUES
-(1, 2, 2, '2026-07', '2026-12', 102000, 1800, 300, 5205, 0, 1);
+(1, 2, 2, '2026-07', '2026-12', 102000, 1800, 300, 5205, 0, 500, 109805, 2, 1, 1);
 
-INSERT INTO refunds (refund_id, customer_id, contract_id, company_name, reason, refund_amount, note, updated_by) VALUES
-(1, 4, 4, '羅氏數位服務有限公司', '提前退租，退還部分押金', 5000, 'Demo 退款紀錄', 1);
+INSERT INTO refunds (
+  refund_id, customer_id, contract_id, charge_list_id, company_name, reason,
+  adjustment_amount, adjustment_note, deduction_total, refund_amount, refund_status,
+  payment_method, bank_code, bank_account, bank_account_name, refunded_at,
+  termination_staff_id, created_by, reviewed_by, updated_by
+) VALUES
+(1, 4, 4, NULL, '羅氏數位服務有限公司', '提前退租，退還部分押金',
+ 500, '扣除門禁卡補發費', 7500, 5000, '已退款',
+ '匯款', '812', '012345678901', '羅氏數位服務有限公司', '2026-08-01',
+ 3, 2, 1, 1);
 
 INSERT INTO sales_targets (sales_target_id, branch_id, target_month, category, target_count) VALUES
 (1, 1, 202607, '登記', 5),

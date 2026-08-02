@@ -1,9 +1,13 @@
 package com.example.cms.service;
 
+import com.example.cms.dto.BranchRequest;
+import com.example.cms.dto.ChargeListRequest;
 import com.example.cms.dto.CustomerRequest;
 import com.example.cms.dto.CustomerWithContractRequest;
 import com.example.cms.dto.ContractRequest;
 import com.example.cms.dto.LoginRequest;
+import com.example.cms.dto.OfficeContactRequest;
+import com.example.cms.dto.OfficeRequest;
 import com.example.cms.dto.RegisterRequest;
 import com.example.cms.dto.RentPaymentRequest;
 import com.example.cms.dto.StaffUpdateRequest;
@@ -16,10 +20,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -504,13 +508,120 @@ public class CmsQueryService {
                 """, ownerName, excludeCustomerId);
     }
 
-    public List<Map<String, Object>> offices() {
-        return jdbc.queryForList("""
+    public List<Map<String, Object>> branches() {
+        return jdbc.queryForList("SELECT * FROM branches ORDER BY branch_id");
+    }
+
+    public Map<String, Object> createBranch(BranchRequest request) {
+        String name = requiredBranchName(request.branchName());
+        Long id = nextId("branches", "branch_id");
+        jdbc.update("INSERT INTO branches (branch_id, branch_name) VALUES (?, ?)", id, name);
+        return jdbc.queryForMap("SELECT * FROM branches WHERE branch_id = ?", id);
+    }
+
+    public Map<String, Object> updateBranch(long id, BranchRequest request) {
+        jdbc.update("UPDATE branches SET branch_name = ? WHERE branch_id = ?",
+                requiredBranchName(request.branchName()), id);
+        return jdbc.queryForMap("SELECT * FROM branches WHERE branch_id = ?", id);
+    }
+
+    public List<Map<String, Object>> offices(Long branchId) {
+        List<Map<String, Object>> rows;
+        if (branchId != null) {
+            rows = jdbc.queryForList("""
+                    SELECT o.*, b.branch_name
+                    FROM offices o
+                    JOIN branches b ON b.branch_id = o.branch_id
+                    WHERE o.branch_id = ?
+                    ORDER BY o.office_id
+                    """, branchId);
+        } else {
+            rows = jdbc.queryForList("""
+                    SELECT o.*, b.branch_name
+                    FROM offices o
+                    JOIN branches b ON b.branch_id = o.branch_id
+                    ORDER BY o.office_id
+                    """);
+        }
+        rows.forEach(row -> {
+            Long officeId = ((Number) row.get("office_id")).longValue();
+            row.put("contacts", jdbc.queryForList("""
+                    SELECT office_contact_id, person_name, phone
+                    FROM office_contacts
+                    WHERE office_id = ?
+                    ORDER BY office_contact_id
+                    """, officeId));
+        });
+        return rows;
+    }
+
+    @Transactional
+    public Map<String, Object> createOffice(OfficeRequest request) {
+        requiredId(request.branchId(), "branchId");
+        Long id = nextId("offices", "office_id");
+        jdbc.update("""
+                INSERT INTO offices (office_id, office_no, branch_id, notes)
+                VALUES (?, ?, ?, ?)
+                """,
+                id,
+                blankToNull(request.officeNo()),
+                request.branchId(),
+                blankToNull(request.notes()));
+        saveOfficeContacts(id, request.contacts());
+        return officeDetail(id);
+    }
+
+    @Transactional
+    public Map<String, Object> updateOffice(long id, OfficeRequest request) {
+        requiredId(request.branchId(), "branchId");
+        jdbc.update("""
+                UPDATE offices
+                SET office_no = ?,
+                    branch_id = ?,
+                    notes = ?
+                WHERE office_id = ?
+                """,
+                blankToNull(request.officeNo()),
+                request.branchId(),
+                blankToNull(request.notes()),
+                id);
+        saveOfficeContacts(id, request.contacts());
+        return officeDetail(id);
+    }
+
+    private Map<String, Object> officeDetail(long id) {
+        Map<String, Object> row = jdbc.queryForMap("""
                 SELECT o.*, b.branch_name
                 FROM offices o
                 JOIN branches b ON b.branch_id = o.branch_id
-                ORDER BY o.office_id
-                """);
+                WHERE o.office_id = ?
+                """, id);
+        row.put("contacts", jdbc.queryForList("""
+                SELECT office_contact_id, person_name, phone
+                FROM office_contacts
+                WHERE office_id = ?
+                ORDER BY office_contact_id
+                """, id));
+        return row;
+    }
+
+    private void saveOfficeContacts(long officeId, java.util.List<OfficeContactRequest> contacts) {
+        jdbc.update("DELETE FROM office_contacts WHERE office_id = ?", officeId);
+        if (contacts == null || contacts.isEmpty()) {
+            return;
+        }
+        Long baseId = nextId("office_contacts", "office_contact_id");
+        for (int i = 0; i < contacts.size(); i++) {
+            OfficeContactRequest c = contacts.get(i);
+            jdbc.update("""
+                    INSERT INTO office_contacts (office_contact_id, office_id, person_name, phone)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    baseId + i,
+                    officeId,
+                    blankToNull(c.personName()),
+                    blankToNull(c.phone()));
+        }
     }
 
     public List<Map<String, Object>> contracts(String search, String companyName, String startDateText, String endDateText, String leaseStatus) {
@@ -708,14 +819,206 @@ public class CmsQueryService {
                 """, id);
     }
 
-    public List<Map<String, Object>> chargeLists() {
-        return jdbc.queryForList("""
-                SELECT cl.*, c.company_name
+    private static final Map<String, String> CHARGE_LIST_SORT_COLUMNS = Map.of(
+            "chargeListId", "cl.charge_list_id",
+            "customerId", "cl.customer_id",
+            "feeStartMonth", "cl.fee_start_month",
+            "feeEndMonth", "cl.fee_end_month",
+            "totalAmount", "cl.total_amount",
+            "status", "cl.status",
+            "issuedAt", "cl.issued_at"
+    );
+
+    public Map<String, Object> chargeLists(Long chargeListId, Long customerId, Long contractId,
+                                           String feeStartMonth, String feeEndMonth, Integer status,
+                                           Long createdBy, String issuedFrom, String issuedTo,
+                                           Integer page, Integer pageSize, String sortBy, String sortDir) {
+        String feeStartMonthText = blankToEmpty(feeStartMonth);
+        String feeEndMonthText = blankToEmpty(feeEndMonth);
+        String issuedFromText = blankToNull(issuedFrom);
+        String issuedToText = blankToNull(issuedTo);
+
+        String where = """
+                 WHERE (? IS NULL OR cl.charge_list_id = ?)
+                   AND (? IS NULL OR cl.customer_id = ?)
+                   AND (? IS NULL OR cl.contract_id = ?)
+                   AND (? = '' OR cl.fee_start_month = ?)
+                   AND (? = '' OR cl.fee_end_month = ?)
+                   AND (? IS NULL OR cl.status = ?)
+                   AND (? IS NULL OR cl.created_by = ?)
+                   AND (? IS NULL OR DATE(cl.issued_at) >= ?)
+                   AND (? IS NULL OR DATE(cl.issued_at) <= ?)
+                """;
+        List<Object> args = new ArrayList<>();
+        args.add(chargeListId); args.add(chargeListId);
+        args.add(customerId); args.add(customerId);
+        args.add(contractId); args.add(contractId);
+        args.add(feeStartMonthText); args.add(feeStartMonthText);
+        args.add(feeEndMonthText); args.add(feeEndMonthText);
+        args.add(status); args.add(status);
+        args.add(createdBy); args.add(createdBy);
+        args.add(issuedFromText); args.add(issuedFromText);
+        args.add(issuedToText); args.add(issuedToText);
+
+        String sortColumn = sortBy == null ? "cl.issued_at" : CHARGE_LIST_SORT_COLUMNS.getOrDefault(sortBy, "cl.issued_at");
+        String direction = "asc".equalsIgnoreCase(sortDir) ? "ASC" : "DESC";
+        int size = pageSize == null || pageSize <= 0 ? 20 : Math.min(pageSize, 200);
+        int pageNumber = page == null || page < 0 ? 0 : page;
+
+        List<Object> selectArgs = new ArrayList<>(args);
+        selectArgs.add(size);
+        selectArgs.add(pageNumber * size);
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                chargeListListSql() + where + " ORDER BY " + sortColumn + " " + direction + " LIMIT ? OFFSET ?",
+                selectArgs.toArray());
+
+        Long total = jdbc.queryForObject("SELECT COUNT(*) FROM charge_lists cl" + where, Long.class, args.toArray());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("content", rows);
+        result.put("totalElements", total);
+        result.put("page", pageNumber);
+        result.put("pageSize", size);
+        return result;
+    }
+
+    public Map<String, Object> chargeListDetail(long id) {
+        try {
+            return jdbc.queryForMap(chargeListListSql() + " WHERE cl.charge_list_id = ?", id);
+        } catch (EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "charge list not found");
+        }
+    }
+
+    public Map<String, Object> createChargeList(ChargeListRequest request) {
+        requireExistingCustomer(request.customerId());
+        requireExistingContract(request.contractId());
+        requireContractBelongsToCustomer(request.contractId(), request.customerId());
+        requireValidMonthRange(request.feeStartMonth(), request.feeEndMonth());
+        requireNonNegativeAmounts(request);
+        BigDecimal totalAmount = calculateTotalAmount(request);
+        Long id = nextId("charge_lists", "charge_list_id");
+        Long staffId = request.updatedBy() == null ? 1L : request.updatedBy();
+        jdbc.update("""
+                INSERT INTO charge_lists (
+                    charge_list_id, customer_id, contract_id, fee_start_month, fee_end_month,
+                    management_fee, electricity_fee, printing_fee, tax, advance_payment, repair_fee,
+                    total_amount, status, created_by, issued_at, updated_by, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+                """,
+                id, request.customerId(), request.contractId(), request.feeStartMonth(), request.feeEndMonth(),
+                zeroIfNull(request.managementFee()), zeroIfNull(request.electricityFee()), zeroIfNull(request.printingFee()),
+                zeroIfNull(request.tax()), zeroIfNull(request.advancePayment()), zeroIfNull(request.repairFee()),
+                totalAmount, staffId, staffId);
+        return chargeListDetail(id);
+    }
+
+    public Map<String, Object> updateChargeList(long id, ChargeListRequest request) {
+        requireValidMonthRange(request.feeStartMonth(), request.feeEndMonth());
+        requireNonNegativeAmounts(request);
+        BigDecimal totalAmount = calculateTotalAmount(request);
+        Long staffId = request.updatedBy() == null ? 1L : request.updatedBy();
+        int updated = jdbc.update("""
+                UPDATE charge_lists
+                SET fee_start_month = ?,
+                    fee_end_month = ?,
+                    management_fee = ?,
+                    electricity_fee = ?,
+                    printing_fee = ?,
+                    tax = ?,
+                    advance_payment = ?,
+                    repair_fee = ?,
+                    total_amount = ?,
+                    updated_by = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE charge_list_id = ?
+                """,
+                request.feeStartMonth(), request.feeEndMonth(),
+                zeroIfNull(request.managementFee()), zeroIfNull(request.electricityFee()), zeroIfNull(request.printingFee()),
+                zeroIfNull(request.tax()), zeroIfNull(request.advancePayment()), zeroIfNull(request.repairFee()),
+                totalAmount, staffId, id);
+        if (updated == 0) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "charge list not found");
+        }
+        return chargeListDetail(id);
+    }
+
+    private String chargeListListSql() {
+        return """
+                SELECT cl.*, c.company_name, o.office_no, b.branch_name, co.rent AS contract_rent, s.staff_name AS created_by_name
                 FROM charge_lists cl
                 JOIN customers c ON c.customer_id = cl.customer_id
-                ORDER BY cl.issued_at DESC
-                LIMIT 200
-                """);
+                LEFT JOIN contracts co ON co.contract_id = cl.contract_id
+                LEFT JOIN offices o ON o.office_id = co.office_id
+                LEFT JOIN branches b ON b.branch_id = o.branch_id
+                LEFT JOIN staff s ON s.staff_id = cl.created_by
+                """;
+    }
+
+    private void requireExistingCustomer(Long customerId) {
+        requiredId(customerId, "customerId");
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM customers WHERE customer_id = ?", Integer.class, customerId);
+        if (count == null || count == 0) {
+            throw new IllegalArgumentException("customerId not found");
+        }
+    }
+
+    private void requireExistingContract(Long contractId) {
+        requiredId(contractId, "contractId");
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM contracts WHERE contract_id = ?", Integer.class, contractId);
+        if (count == null || count == 0) {
+            throw new IllegalArgumentException("contractId not found");
+        }
+    }
+
+    private void requireContractBelongsToCustomer(Long contractId, Long customerId) {
+        Long actualCustomerId = jdbc.queryForObject("SELECT customer_id FROM contracts WHERE contract_id = ?", Long.class, contractId);
+        if (actualCustomerId == null || !actualCustomerId.equals(customerId)) {
+            throw new IllegalArgumentException("contractId does not belong to customerId");
+        }
+    }
+
+    private void requireValidMonthRange(String feeStartMonth, String feeEndMonth) {
+        String start = requiredMonth(feeStartMonth, "feeStartMonth");
+        String end = requiredMonth(feeEndMonth, "feeEndMonth");
+        if (start.compareTo(end) > 0) {
+            throw new IllegalArgumentException("feeStartMonth must not be after feeEndMonth");
+        }
+    }
+
+    private String requiredMonth(String value, String fieldName) {
+        if (value == null || !value.matches("\\d{4}-\\d{2}")) {
+            throw new IllegalArgumentException(fieldName + " must be in YYYY-MM format");
+        }
+        return value;
+    }
+
+    private void requireNonNegativeAmounts(ChargeListRequest request) {
+        requireNonNegative(request.managementFee(), "managementFee");
+        requireNonNegative(request.electricityFee(), "electricityFee");
+        requireNonNegative(request.printingFee(), "printingFee");
+        requireNonNegative(request.tax(), "tax");
+        requireNonNegative(request.advancePayment(), "advancePayment");
+        requireNonNegative(request.repairFee(), "repairFee");
+    }
+
+    private void requireNonNegative(BigDecimal value, String fieldName) {
+        if (value != null && value.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException(fieldName + " must not be negative");
+        }
+    }
+
+    private BigDecimal calculateTotalAmount(ChargeListRequest request) {
+        return zeroIfNull(request.managementFee())
+                .add(zeroIfNull(request.electricityFee()))
+                .add(zeroIfNull(request.printingFee()))
+                .add(zeroIfNull(request.tax()))
+                .add(zeroIfNull(request.advancePayment()))
+                .add(zeroIfNull(request.repairFee()));
+    }
+
+    private BigDecimal zeroIfNull(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     public List<Map<String, Object>> refunds() {
@@ -747,7 +1050,7 @@ public class CmsQueryService {
                 ORDER BY s.staff_id
                 """));
         result.put("salesTargets", jdbc.queryForList("""
-                SELECT st.sales_target_id, st.branch_id, st.target_month AS month,
+                SELECT st.sales_target_id, st.branch_id, st.target_month AS `month`,
                        st.category, st.target_count, b.branch_name
                 FROM sales_targets st JOIN branches b ON b.branch_id = st.branch_id
                 ORDER BY st.target_month, st.category
@@ -789,6 +1092,13 @@ public class CmsQueryService {
     private Long nextId(String table, String column) {
         Number max = jdbc.queryForObject("SELECT COALESCE(MAX(" + column + "), 0) + 1 FROM " + table, Number.class);
         return max.longValue();
+    }
+
+    private String requiredBranchName(String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("branchName is required");
+        }
+        return value.trim();
     }
 
     private String requiredCompanyName(String value) {
@@ -1256,5 +1566,9 @@ public class CmsQueryService {
         user.put("canCreateRent", "主管".equals(roleName));
         user.put("canEditRent", !"一般秘書".equals(roleName));
         user.put("canEditStaff", "主管".equals(roleName));
+        user.put("canCreateOffice", true);
+        user.put("canEditAllBranches", "主管".equals(roleName));
+        user.put("canViewAllOffices", !"一般秘書".equals(roleName));
+        user.put("canManageBranch", "主管".equals(roleName));
     }
 }

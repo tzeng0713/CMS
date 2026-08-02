@@ -53,6 +53,10 @@ export interface AuthUser {
   canCreateRent: boolean;
   canEditRent: boolean;
   canEditStaff: boolean;
+  canCreateOffice: boolean;
+  canEditAllBranches: boolean;
+  canViewAllOffices: boolean;
+  canManageBranch: boolean;
 }
 
 export interface CustomerSummary {
@@ -144,15 +148,40 @@ export interface RentPaymentPayload {
   updatedBy?: number;
 }
 
+export interface OfficeContact {
+  office_contact_id: number;
+  person_name: string | null;
+  phone: string | null;
+}
+
 export interface OfficeSummary {
   office_id: number;
   office_no: string | null;
+  branch_id: number;
   branch_name: string | null;
+  notes: string | null;
+  contacts: OfficeContact[];
+}
+
+export interface OfficeContactPayload {
+  personName?: string;
+  phone?: string;
+}
+
+export interface OfficePayload {
+  officeNo?: string;
+  branchId: number;
+  notes?: string;
+  contacts?: OfficeContactPayload[];
 }
 
 export interface BranchSummary {
   branch_id: number;
   branch_name: string;
+}
+
+export interface BranchPayload {
+  branchName: string;
 }
 
 export interface RoleSummary {
@@ -185,6 +214,68 @@ export interface ContractSearchFilters {
   startDateText?: string;
   endDateText?: string;
   leaseStatus?: string;
+}
+
+export interface ChargeListSummary {
+  charge_list_id: number;
+  customer_id: number;
+  contract_id: number;
+  company_name: string;
+  office_no: string | null;
+  branch_name: string | null;
+  contract_rent: number | null;
+  fee_start_month: string;
+  fee_end_month: string;
+  management_fee: number;
+  electricity_fee: number;
+  printing_fee: number;
+  tax: number;
+  advance_payment: number;
+  repair_fee: number;
+  total_amount: number;
+  status: number;
+  created_by: number | null;
+  created_by_name: string | null;
+  issued_at: string;
+  updated_by: number | null;
+  updated_at: string;
+}
+
+export interface ChargeListPayload {
+  customerId?: number;
+  contractId?: number;
+  feeStartMonth?: string;
+  feeEndMonth?: string;
+  managementFee?: number;
+  electricityFee?: number;
+  printingFee?: number;
+  tax?: number;
+  advancePayment?: number;
+  repairFee?: number;
+  updatedBy?: number;
+}
+
+export interface ChargeListSearchFilters {
+  chargeListId?: number | null;
+  customerId?: number | null;
+  contractId?: number | null;
+  feeStartMonth?: string;
+  feeEndMonth?: string;
+  status?: number | null;
+  createdBy?: number | null;
+  issuedFrom?: string;
+  issuedTo?: string;
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortDir?: string;
+}
+
+export interface PagedResult<T> {
+  content: T[];
+  totalElements: number;
+  page: number;
+  pageSize: number;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -254,8 +345,30 @@ export class CmsApiService {
     return this.http.put<CustomerDetail>(`${this.baseUrl}/customers/${id}`, payload);
   }
 
-  offices(): Observable<OfficeSummary[]> {
-    return this.http.get<OfficeSummary[]>(`${this.baseUrl}/offices`);
+  branchList(): Observable<BranchSummary[]> {
+    return this.http.get<BranchSummary[]>(`${this.baseUrl}/branches`);
+  }
+
+  createBranch(payload: BranchPayload): Observable<BranchSummary> {
+    return this.http.post<BranchSummary>(`${this.baseUrl}/branches`, payload);
+  }
+
+  updateBranch(id: number, payload: BranchPayload): Observable<BranchSummary> {
+    return this.http.put<BranchSummary>(`${this.baseUrl}/branches/${id}`, payload);
+  }
+
+  offices(branchId?: number | null): Observable<OfficeSummary[]> {
+    return this.http.get<OfficeSummary[]>(`${this.baseUrl}/offices`, {
+      params: branchId ? { branchId } : {}
+    });
+  }
+
+  createOffice(payload: OfficePayload): Observable<OfficeSummary> {
+    return this.http.post<OfficeSummary>(`${this.baseUrl}/offices`, payload);
+  }
+
+  updateOffice(id: number, payload: OfficePayload): Observable<OfficeSummary> {
+    return this.http.put<OfficeSummary>(`${this.baseUrl}/offices/${id}`, payload);
   }
 
   contracts(searchOrFilters: string | ContractSearchFilters = ''): Observable<Array<Record<string, unknown>>> {
@@ -300,8 +413,23 @@ export class CmsApiService {
     });
   }
 
-  chargeLists(): Observable<Array<Record<string, unknown>>> {
-    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/charge-lists`);
+  chargeLists(filters: ChargeListSearchFilters = {}): Observable<PagedResult<ChargeListSummary>> {
+    const params = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    );
+    return this.http.get<PagedResult<ChargeListSummary>>(`${this.baseUrl}/charge-lists`, { params });
+  }
+
+  chargeListDetail(id: number): Observable<ChargeListSummary> {
+    return this.http.get<ChargeListSummary>(`${this.baseUrl}/charge-lists/${id}`);
+  }
+
+  createChargeList(payload: ChargeListPayload): Observable<ChargeListSummary> {
+    return this.http.post<ChargeListSummary>(`${this.baseUrl}/charge-lists`, payload);
+  }
+
+  updateChargeList(id: number, payload: ChargeListPayload): Observable<ChargeListSummary> {
+    return this.http.put<ChargeListSummary>(`${this.baseUrl}/charge-lists/${id}`, payload);
   }
 
   refunds(): Observable<Array<Record<string, unknown>>> {

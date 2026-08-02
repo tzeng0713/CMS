@@ -30,6 +30,8 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         migrateContractPaymentMonths();
         migrateContractOfficeNullable();
         migrateContractLeaseStatus();
+        migrateRefundsTable();
+        migrateChargeListsTable();
     }
 
     private void migrateRoleNames() {
@@ -205,6 +207,126 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
             if (database.contains("mysql")) {
                 jdbc.execute("ALTER TABLE contracts MODIFY office_id BIGINT NULL");
             }
+            return null;
+        });
+    }
+
+    private void migrateRefundsTable() {
+        // rename note → adjustment_note (MySQL only; H2 gets clean schema from schema.sql)
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            String db = connection.getMetaData().getDatabaseProductName().toLowerCase();
+            if (!db.contains("mysql")) return null;
+            boolean hasNote = false, hasAdjNote = false;
+            try (var cols = connection.getMetaData().getColumns(null, null, "refunds", "note")) {
+                hasNote = cols.next();
+            }
+            try (var cols = connection.getMetaData().getColumns(null, null, "refunds", "adjustment_note")) {
+                hasAdjNote = cols.next();
+            }
+            if (hasNote && !hasAdjNote) {
+                jdbc.execute("ALTER TABLE refunds CHANGE note adjustment_note VARCHAR(1000)");
+            }
+            return null;
+        });
+        addColumnIfMissing("refunds", "charge_list_id",        "BIGINT");
+        addColumnIfMissing("refunds", "adjustment_amount",     "DECIMAL(12,2) DEFAULT 0");
+        addColumnIfMissing("refunds", "adjustment_note",       "VARCHAR(1000)");
+        addColumnIfMissing("refunds", "deduction_total",       "DECIMAL(12,2)");
+        addColumnIfMissing("refunds", "refund_status",         "VARCHAR(20)");
+        addColumnIfMissing("refunds", "payment_method",        "VARCHAR(20)");
+        addColumnIfMissing("refunds", "bank_code",             "VARCHAR(20)");
+        addColumnIfMissing("refunds", "bank_account",          "VARCHAR(50)");
+        addColumnIfMissing("refunds", "bank_account_name",     "VARCHAR(100)");
+        addColumnIfMissing("refunds", "refunded_at",           "VARCHAR(30)");
+        addColumnIfMissing("refunds", "termination_staff_id",  "BIGINT");
+        addColumnIfMissing("refunds", "created_by",            "BIGINT");
+        addColumnIfMissing("refunds", "created_at",            "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        addColumnIfMissing("refunds", "reviewed_by",           "BIGINT");
+        addColumnIfMissing("refunds", "reviewed_at",           "TIMESTAMP");
+
+        addForeignKeyIfMissing("refunds", "fk_refunds_charge_list", "charge_list_id", "charge_lists", "charge_list_id");
+        addForeignKeyIfMissing("refunds", "fk_refunds_termination_staff", "termination_staff_id", "staff", "staff_id");
+        addForeignKeyIfMissing("refunds", "fk_refunds_created_by", "created_by", "staff", "staff_id");
+        addForeignKeyIfMissing("refunds", "fk_refunds_reviewed_by", "reviewed_by", "staff", "staff_id");
+        addIndexIfMissing("refunds", "idx_refunds_status", "refund_status");
+        addIndexIfMissing("refunds", "idx_refunds_refunded_at", "refunded_at");
+    }
+
+    private void migrateChargeListsTable() {
+        addColumnIfMissing("charge_lists", "repair_fee", "DECIMAL(12,2) DEFAULT 0");
+        addColumnIfMissing("charge_lists", "total_amount", "DECIMAL(12,2) DEFAULT 0");
+        addColumnIfMissing("charge_lists", "status", "TINYINT DEFAULT 2");
+        addColumnIfMissing("charge_lists", "created_by", "BIGINT");
+
+        jdbc.update("""
+                UPDATE charge_lists
+                SET management_fee  = COALESCE(management_fee, 0),
+                    electricity_fee = COALESCE(electricity_fee, 0),
+                    printing_fee    = COALESCE(printing_fee, 0),
+                    tax             = COALESCE(tax, 0),
+                    advance_payment = COALESCE(advance_payment, 0),
+                    repair_fee      = COALESCE(repair_fee, 0),
+                    status          = COALESCE(status, 2),
+                    created_by      = COALESCE(created_by, updated_by)
+                """);
+        jdbc.update("""
+                UPDATE charge_lists
+                SET total_amount = management_fee + electricity_fee + printing_fee + tax + advance_payment + repair_fee
+                WHERE total_amount IS NULL OR total_amount = 0
+                """);
+
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            String db = connection.getMetaData().getDatabaseProductName().toLowerCase();
+            if (!db.contains("mysql")) return null;
+
+            jdbc.execute("ALTER TABLE charge_lists MODIFY fee_start_month CHAR(7)");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY fee_end_month CHAR(7)");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY management_fee DECIMAL(12,2) NOT NULL DEFAULT 0");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY electricity_fee DECIMAL(12,2) NOT NULL DEFAULT 0");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY printing_fee DECIMAL(12,2) NOT NULL DEFAULT 0");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY tax DECIMAL(12,2) NOT NULL DEFAULT 0");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY advance_payment DECIMAL(12,2) NOT NULL DEFAULT 0");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY repair_fee DECIMAL(12,2) NOT NULL DEFAULT 0");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY total_amount DECIMAL(12,2) NOT NULL DEFAULT 0");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP");
+            return null;
+        });
+
+        addForeignKeyIfMissing("charge_lists", "fk_charge_lists_created_by", "created_by", "staff", "staff_id");
+
+        addIndexIfMissing("charge_lists", "idx_charge_lists_customer_id", "customer_id");
+        addIndexIfMissing("charge_lists", "idx_charge_lists_contract_id", "contract_id");
+        addIndexIfMissing("charge_lists", "idx_charge_lists_status", "status");
+        addIndexIfMissing("charge_lists", "idx_charge_lists_issued_at", "issued_at");
+        addIndexIfMissing("charge_lists", "idx_charge_lists_fee_start_month", "fee_start_month");
+        addIndexIfMissing("charge_lists", "idx_charge_lists_fee_end_month", "fee_end_month");
+    }
+
+    private void addForeignKeyIfMissing(String table, String fkName, String column, String refTable, String refColumn) {
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            try (var keys = connection.getMetaData().getImportedKeys(null, null, table)) {
+                while (keys.next()) {
+                    if (fkName.equalsIgnoreCase(keys.getString("FK_NAME"))) {
+                        return null;
+                    }
+                }
+            }
+            jdbc.execute("ALTER TABLE " + table + " ADD CONSTRAINT " + fkName
+                    + " FOREIGN KEY (" + column + ") REFERENCES " + refTable + "(" + refColumn + ")");
+            return null;
+        });
+    }
+
+    private void addIndexIfMissing(String table, String indexName, String column) {
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            try (var indexes = connection.getMetaData().getIndexInfo(null, null, table, false, false)) {
+                while (indexes.next()) {
+                    if (indexName.equalsIgnoreCase(indexes.getString("INDEX_NAME"))) {
+                        return null;
+                    }
+                }
+            }
+            jdbc.execute("CREATE INDEX " + indexName + " ON " + table + "(" + column + ")");
             return null;
         });
     }

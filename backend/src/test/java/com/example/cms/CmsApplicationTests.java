@@ -60,7 +60,7 @@ class CmsApplicationTests {
     @Test
     void dashboardReturnsContractExpirationNotificationsWithoutBirthdays() throws Exception {
         LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
-        LocalDate contractEnd = today.plusMonths(1).withDayOfMonth(28);
+        LocalDate contractEnd = today.plusDays(30);
         String activeCompany = "Dashboard Expiring Active Co";
         String endedCompany = "Dashboard Expiring Ended Co";
         long activeCustomerId = insertDashboardCustomer(activeCompany, "1978-01-01");

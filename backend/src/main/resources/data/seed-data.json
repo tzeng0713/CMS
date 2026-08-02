@@ -54,29 +54,39 @@
       "officeId": 1,
       "officeNo": "101",
       "branchId": 1,
-      "phone": "02-2776-9001",
       "notes": "主管室旁辦公室"
     },
     {
       "officeId": 2,
       "officeNo": "102",
       "branchId": 1,
-      "phone": "02-2776-9002 羅r",
       "notes": "標準辦公室"
     },
     {
       "officeId": 3,
       "officeNo": "103",
       "branchId": 1,
-      "phone": "02-2776-9003 羅r",
       "notes": "小型辦公室"
     },
     {
       "officeId": 4,
       "officeNo": "S-201",
       "branchId": 2,
-      "phone": "02-8780-0201",
       "notes": "信義館座位區"
+    }
+  ],
+  "officeContacts": [
+    {
+      "officeContactId": 1,
+      "officeId": 1,
+      "personName": "櫃台",
+      "phone": "02-2776-9000"
+    },
+    {
+      "officeContactId": 2,
+      "officeId": 2,
+      "personName": "羅先生",
+      "phone": "0907637698"
     }
   ],
   "customers": [
@@ -346,6 +356,25 @@
       "note": "辦公室半年租金"
     }
   ],
+  "chargeLists": [
+    {
+      "chargeListId": 1,
+      "customerId": 2,
+      "contractId": 2,
+      "feeStartMonth": "2026-07",
+      "feeEndMonth": "2026-12",
+      "managementFee": 102000,
+      "electricityFee": 1800,
+      "printingFee": 300,
+      "tax": 5205,
+      "advancePayment": 0,
+      "repairFee": 500,
+      "totalAmount": 109805,
+      "status": 2,
+      "createdBy": 1,
+      "updatedBy": 1
+    }
+  ],
   "refunds": [
     {
       "refundId": 1,
@@ -353,8 +382,20 @@
       "contractId": 4,
       "companyName": "羅氏數位服務有限公司",
       "reason": "提前退租，退還部分押金",
+      "adjustmentAmount": 500,
+      "adjustmentNote": "扣除門禁卡補發費",
+      "deductionTotal": 7500,
       "refundAmount": 5000,
-      "note": "Demo 退款紀錄"
+      "refundStatus": "已退款",
+      "paymentMethod": "匯款",
+      "bankCode": "812",
+      "bankAccount": "012345678901",
+      "bankAccountName": "羅氏數位服務有限公司",
+      "refundedAt": "2026-08-01",
+      "terminationStaffId": 3,
+      "createdBy": 2,
+      "reviewedBy": 1,
+      "updatedBy": 1
     }
   ],
   "salesTargets": [

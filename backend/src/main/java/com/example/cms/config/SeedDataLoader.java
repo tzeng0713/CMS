@@ -41,11 +41,13 @@ public class SeedDataLoader implements CommandLineRunner {
             insertRoles(list(seed, "roles"));
             insertStaff(list(seed, "staff"));
             insertOffices(list(seed, "offices"));
+            insertOfficeContacts(list(seed, "officeContacts"));
             insertCustomers(list(seed, "customers"));
             insertCustomerRelationGroups(list(seed, "customerRelationGroups"));
             insertCustomerRelationMembers(list(seed, "customerRelationMembers"));
             insertContracts(list(seed, "contracts"));
             insertRentPayments(list(seed, "rentPayments"));
+            insertChargeLists(list(seed, "chargeLists"));
             insertRefunds(list(seed, "refunds"));
             insertSalesTargets(list(seed, "salesTargets"));
             insertPerformanceBonuses(list(seed, "performanceBonuses"));
@@ -78,8 +80,14 @@ public class SeedDataLoader implements CommandLineRunner {
 
     private void insertOffices(List<Map<String, Object>> rows) {
         rows.forEach(r -> jdbc.update(
-                "INSERT INTO offices (office_id, office_no, branch_id, phone, notes) VALUES (?, ?, ?, ?, ?)",
-                n(r, "officeId"), s(r, "officeNo"), n(r, "branchId"), s(r, "phone"), s(r, "notes")));
+                "INSERT INTO offices (office_id, office_no, branch_id, notes) VALUES (?, ?, ?, ?)",
+                n(r, "officeId"), s(r, "officeNo"), n(r, "branchId"), s(r, "notes")));
+    }
+
+    private void insertOfficeContacts(List<Map<String, Object>> rows) {
+        rows.forEach(r -> jdbc.update(
+                "INSERT INTO office_contacts (office_contact_id, office_id, person_name, phone) VALUES (?, ?, ?, ?)",
+                n(r, "officeContactId"), n(r, "officeId"), s(r, "personName"), s(r, "phone")));
     }
 
     private void insertCustomers(List<Map<String, Object>> rows) {
@@ -139,12 +147,34 @@ public class SeedDataLoader implements CommandLineRunner {
                 bd(r, "amount"), s(r, "receiptNo"), s(r, "note")));
     }
 
+    private void insertChargeLists(List<Map<String, Object>> rows) {
+        rows.forEach(r -> jdbc.update("""
+                INSERT INTO charge_lists (
+                    charge_list_id, customer_id, contract_id, fee_start_month, fee_end_month,
+                    management_fee, electricity_fee, printing_fee, tax, advance_payment, repair_fee,
+                    total_amount, status, created_by, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, n(r, "chargeListId"), n(r, "customerId"), n(r, "contractId"),
+                s(r, "feeStartMonth"), s(r, "feeEndMonth"), bdOrZero(r, "managementFee"),
+                bdOrZero(r, "electricityFee"), bdOrZero(r, "printingFee"), bdOrZero(r, "tax"),
+                bdOrZero(r, "advancePayment"), bdOrZero(r, "repairFee"), bdOrZero(r, "totalAmount"),
+                n(r, "status"), n(r, "createdBy"), n(r, "updatedBy")));
+    }
+
     private void insertRefunds(List<Map<String, Object>> rows) {
         rows.forEach(r -> jdbc.update("""
-                INSERT INTO refunds (refund_id, customer_id, contract_id, company_name, reason, refund_amount, note, updated_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-                """, n(r, "refundId"), n(r, "customerId"), n(r, "contractId"), s(r, "companyName"),
-                s(r, "reason"), bd(r, "refundAmount"), s(r, "note")));
+                INSERT INTO refunds (
+                    refund_id, customer_id, contract_id, charge_list_id, company_name, reason,
+                    adjustment_amount, adjustment_note, deduction_total, refund_amount, refund_status,
+                    payment_method, bank_code, bank_account, bank_account_name, refunded_at,
+                    termination_staff_id, created_by, reviewed_by, updated_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, n(r, "refundId"), n(r, "customerId"), n(r, "contractId"), n(r, "chargeListId"),
+                s(r, "companyName"), s(r, "reason"), bdOrZero(r, "adjustmentAmount"),
+                s(r, "adjustmentNote"), bdOrZero(r, "deductionTotal"), bdOrZero(r, "refundAmount"),
+                s(r, "refundStatus"), s(r, "paymentMethod"), s(r, "bankCode"), s(r, "bankAccount"),
+                s(r, "bankAccountName"), s(r, "refundedAt"), n(r, "terminationStaffId"),
+                n(r, "createdBy"), n(r, "reviewedBy"), n(r, "updatedBy")));
     }
 
     private void insertSalesTargets(List<Map<String, Object>> rows) {
@@ -185,6 +215,11 @@ public class SeedDataLoader implements CommandLineRunner {
             return null;
         }
         return new BigDecimal(value.toString());
+    }
+
+    private BigDecimal bdOrZero(Map<String, Object> row, String key) {
+        BigDecimal value = bd(row, key);
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private Boolean b(Map<String, Object> row, String key) {

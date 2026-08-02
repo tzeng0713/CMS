@@ -529,6 +529,23 @@ textarea {
   margin-bottom: 14px;
 }
 
+.filter-customer-lookup {
+  position: relative;
+}
+
+.filter-customer-lookup .lookup-list {
+  min-width: 260px;
+}
+
+input[readonly],
+select:disabled,
+input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+  border-color: #e2e8f0;
+}
+
 .form-lookup {
   max-width: none;
   margin-bottom: 0;
@@ -819,6 +836,10 @@ textarea {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.filter-bar.charge-list-filter {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .filter-bar input {
   width: 100%;
 }
@@ -827,6 +848,7 @@ textarea {
   grid-column: 1 / -1;
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
 }
 
 .radio-group {
@@ -937,6 +959,182 @@ textarea {
   grid-template-columns: minmax(180px, 0.8fr) minmax(220px, 1fr) minmax(180px, 0.8fr);
 }
 
+.charge-list-row {
+  min-width: 1420px;
+  grid-template-columns:
+    minmax(80px, 0.5fr)
+    minmax(180px, 1.1fr)
+    minmax(140px, 0.8fr)
+    minmax(160px, 0.9fr)
+    minmax(110px, 0.65fr)
+    minmax(130px, 0.75fr)
+    minmax(90px, 0.55fr)
+    minmax(110px, 0.65fr)
+    minmax(160px, 0.9fr)
+    minmax(140px, 0.8fr);
+}
+
+.pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #475569;
+}
+
+.charge-list-print-area {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  width: 480px;
+  padding: 28px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.charge-list-print-area .print-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+}
+
+.charge-list-print-area .print-header-left p {
+  margin: 0 0 4px;
+}
+
+.charge-list-print-area .print-header-left .print-period {
+  color: #475569;
+  font-size: 12px;
+}
+
+.charge-list-print-area .print-header-right strong {
+  font-size: 15px;
+}
+
+.charge-list-print-area .print-title-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  border-bottom: 2px solid #0f172a;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.charge-list-print-area .print-title-row h3 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.charge-list-print-area .print-item-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #0f172a;
+  min-height: 20px;
+}
+
+.charge-list-print-area .print-total-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  padding-top: 10px;
+  border-top: 3px solid #0f172a;
+  font-weight: 800;
+  font-size: 16px;
+}
+
+.charge-list-print-area .print-footer {
+  margin-top: 20px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.charge-list-print-area .print-footer p {
+  margin: 0 0 4px;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, 0.55);
+}
+
+.modal-dialog {
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: #ffffff;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid #e2e8f0;
+
+  h3 {
+    margin: 0;
+    font-size: 16px;
+  }
+}
+
+.modal-body {
+  padding: 16px;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  background: #f8fafc;
+
+  img {
+    max-width: 100%;
+    height: auto;
+    box-shadow: 0 2px 10px rgba(15, 23, 42, 0.15);
+  }
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 18px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.office-row {
+  grid-template-columns: 100px 140px 1fr 80px;
+}
+
+.branch-row {
+  grid-template-columns: 80px 1fr 80px;
+}
+
+.contact-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+
+  input {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
 .compact-select {
   width: 100%;
   min-width: 0;
@@ -954,6 +1152,15 @@ textarea {
 
 .compact-button {
   padding: 7px 10px;
+}
+
+.simple-row.header .sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.simple-row.header .sortable:hover {
+  color: #0f172a;
 }
 
 .simple-row.header {
@@ -998,6 +1205,8 @@ textarea {
   .rent-row.can-edit,
   .contract-row,
   .staff-row,
+  .office-row,
+  .charge-list-row,
   .customer-form,
   .row-main,
   .info-grid.compact {
