@@ -1,9 +1,12 @@
 package com.example.cms.controller;
 
+import com.example.cms.dto.BranchRequest;
+import com.example.cms.dto.ChargeListRequest;
 import com.example.cms.dto.CustomerRequest;
 import com.example.cms.dto.CustomerWithContractRequest;
 import com.example.cms.dto.ContractRequest;
 import com.example.cms.dto.LoginRequest;
+import com.example.cms.dto.OfficeRequest;
 import com.example.cms.dto.RegisterRequest;
 import com.example.cms.dto.RentPaymentRequest;
 import com.example.cms.dto.StaffUpdateRequest;
@@ -94,8 +97,18 @@ public class CmsController {
     }
 
     @GetMapping("/offices")
-    public List<Map<String, Object>> offices() {
-        return service.offices();
+    public List<Map<String, Object>> offices(@RequestParam(required = false) Long branchId) {
+        return service.offices(branchId);
+    }
+
+    @PostMapping("/offices")
+    public Map<String, Object> createOffice(@RequestBody OfficeRequest request) {
+        return service.createOffice(request);
+    }
+
+    @PutMapping("/offices/{id}")
+    public Map<String, Object> updateOffice(@PathVariable long id, @RequestBody OfficeRequest request) {
+        return service.updateOffice(id, request);
     }
 
     @GetMapping("/contracts")
@@ -143,13 +156,56 @@ public class CmsController {
     }
 
     @GetMapping("/charge-lists")
-    public List<Map<String, Object>> chargeLists() {
-        return service.chargeLists();
+    public Map<String, Object> chargeLists(@RequestParam(required = false) Long chargeListId,
+                                           @RequestParam(required = false) Long customerId,
+                                           @RequestParam(required = false) Long contractId,
+                                           @RequestParam(required = false) String feeStartMonth,
+                                           @RequestParam(required = false) String feeEndMonth,
+                                           @RequestParam(required = false) Integer status,
+                                           @RequestParam(required = false) Long createdBy,
+                                           @RequestParam(required = false) String issuedFrom,
+                                           @RequestParam(required = false) String issuedTo,
+                                           @RequestParam(required = false) Integer page,
+                                           @RequestParam(required = false) Integer pageSize,
+                                           @RequestParam(required = false) String sortBy,
+                                           @RequestParam(required = false) String sortDir) {
+        return service.chargeLists(chargeListId, customerId, contractId, feeStartMonth, feeEndMonth,
+                status, createdBy, issuedFrom, issuedTo, page, pageSize, sortBy, sortDir);
+    }
+
+    @GetMapping("/charge-lists/{id}")
+    public Map<String, Object> chargeListDetail(@PathVariable long id) {
+        return service.chargeListDetail(id);
+    }
+
+    @PostMapping("/charge-lists")
+    public Map<String, Object> createChargeList(@RequestBody ChargeListRequest request) {
+        return service.createChargeList(request);
+    }
+
+    @PutMapping("/charge-lists/{id}")
+    public Map<String, Object> updateChargeList(@PathVariable long id, @RequestBody ChargeListRequest request) {
+        return service.updateChargeList(id, request);
     }
 
     @GetMapping("/refunds")
     public List<Map<String, Object>> refunds() {
         return service.refunds();
+    }
+
+    @GetMapping("/branches")
+    public List<Map<String, Object>> branches() {
+        return service.branches();
+    }
+
+    @PostMapping("/branches")
+    public Map<String, Object> createBranch(@RequestBody BranchRequest request) {
+        return service.createBranch(request);
+    }
+
+    @PutMapping("/branches/{id}")
+    public Map<String, Object> updateBranch(@PathVariable long id, @RequestBody BranchRequest request) {
+        return service.updateBranch(id, request);
     }
 
     @GetMapping("/metadata")

@@ -76,8 +76,8 @@ public class SeedDataLoader implements CommandLineRunner {
 
     private void insertOffices(List<Map<String, Object>> rows) {
         rows.forEach(r -> jdbc.update(
-                "INSERT INTO offices (office_id, office_no, branch_id, phone, notes) VALUES (?, ?, ?, ?, ?)",
-                n(r, "officeId"), s(r, "officeNo"), n(r, "branchId"), s(r, "phone"), s(r, "notes")));
+                "INSERT INTO offices (office_id, office_no, branch_id, notes) VALUES (?, ?, ?, ?)",
+                n(r, "officeId"), s(r, "officeNo"), n(r, "branchId"), s(r, "notes")));
     }
 
     private void insertCustomers(List<Map<String, Object>> rows) {
@@ -119,7 +119,7 @@ public class SeedDataLoader implements CommandLineRunner {
 
     private void insertRefunds(List<Map<String, Object>> rows) {
         rows.forEach(r -> jdbc.update("""
-                INSERT INTO refunds (refund_id, customer_id, contract_id, company_name, reason, refund_amount, note, updated_by)
+                INSERT INTO refunds (refund_id, customer_id, contract_id, company_name, reason, refund_amount, adjustment_note, updated_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?, 1)
                 """, n(r, "refundId"), n(r, "customerId"), n(r, "contractId"), s(r, "companyName"),
                 s(r, "reason"), bd(r, "refundAmount"), s(r, "note")));
