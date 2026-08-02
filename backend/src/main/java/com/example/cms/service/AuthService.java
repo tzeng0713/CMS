@@ -6,6 +6,8 @@ import com.example.cms.service.support.CmsJdbcSupport;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -13,6 +15,9 @@ import java.util.Map;
 
 @Service
 public class AuthService extends CmsJdbcSupport {
+    private static final String NOOP_PREFIX = "{noop}";
+
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     public AuthService(JdbcTemplate jdbc) {
         super(jdbc);
@@ -32,8 +37,12 @@ public class AuthService extends CmsJdbcSupport {
                     LEFT JOIN branches b ON b.branch_id = s.branch_id
                     WHERE s.account = ?
                     """, request.account().trim());
-            if (!passwordMatches((String) user.get("password_hash"), request.password())) {
+            String storedHash = (String) user.get("password_hash");
+            if (!passwordMatches(storedHash, request.password())) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid account or password");
+            }
+            if (storedHash != null && storedHash.startsWith(NOOP_PREFIX)) {
+                upgradeToHashedPassword((Number) user.get("staff_id"), request.password());
             }
             user.remove("password_hash");
             applyPermissions(user);
@@ -67,7 +76,7 @@ public class AuthService extends CmsJdbcSupport {
                 INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, password_hash)
                 VALUES (?, ?, 1, ?, ?, ?)
                 """, staffId, roleId, request.staffName().trim(), request.account().trim(),
-                "{noop}" + request.password());
+                passwordEncoder.encode(request.password()));
         Map<String, Object> user = jdbc.queryForMap("""
                 SELECT s.staff_id, s.staff_name, s.account, s.branch_id,
                        b.branch_name, r.role_permission_id, r.role_name, r.scope
@@ -84,10 +93,15 @@ public class AuthService extends CmsJdbcSupport {
         if (storedPassword == null) {
             return false;
         }
-        if (storedPassword.startsWith("{noop}")) {
-            return storedPassword.substring("{noop}".length()).equals(rawPassword);
+        if (storedPassword.startsWith(NOOP_PREFIX)) {
+            return storedPassword.substring(NOOP_PREFIX.length()).equals(rawPassword);
         }
-        return storedPassword.equals(rawPassword);
+        return passwordEncoder.matches(rawPassword, storedPassword);
+    }
+
+    private void upgradeToHashedPassword(Number staffId, String rawPassword) {
+        jdbc.update("UPDATE staff SET password_hash = ? WHERE staff_id = ?",
+                passwordEncoder.encode(rawPassword), staffId.longValue());
     }
 
     private void applyPermissions(Map<String, Object> user) {

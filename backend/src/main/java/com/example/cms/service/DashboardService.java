@@ -22,7 +22,7 @@ public class DashboardService extends CmsJdbcSupport {
     public Map<String, Object> dashboard() {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("customers", count("customers"));
-        result.put("activeContracts", countWhere("contracts", "lease_status IN ('綁約中', '蝬?銝?')"));
+        result.put("activeContracts", countWhere("contracts", "lease_status = '綁約中'"));
         result.put("officeCustomers", latestActiveContractCount("辦公室", "登記+辦公室"));
         result.put("registrationCustomers", latestActiveContractCount("登記", "登記+辦公室"));
         result.put("rentPayments", count("rent_payments"));
@@ -54,7 +54,7 @@ public class DashboardService extends CmsJdbcSupport {
                 SELECT c.company_name, co.end_date_text, co.rental_item
                 FROM contracts co
                 JOIN customers c ON c.customer_id = co.customer_id
-                WHERE co.lease_status IN ('綁約中', '蝬?銝?')
+                WHERE co.lease_status = '綁約中'
                   AND co.contract_id = (
                     SELECT MAX(latest.contract_id) FROM contracts latest
                     WHERE latest.customer_id = co.customer_id
@@ -75,7 +75,7 @@ public class DashboardService extends CmsJdbcSupport {
                        co.rent, co.end_date_text
                 FROM contracts co
                 JOIN customers c ON c.customer_id = co.customer_id
-                WHERE co.lease_status IN ('綁約中', '蝬?銝?')
+                WHERE co.lease_status = '綁約中'
                   AND co.contract_id = (
                     SELECT MAX(latest.contract_id) FROM contracts latest
                     WHERE latest.customer_id = co.customer_id
@@ -130,7 +130,7 @@ public class DashboardService extends CmsJdbcSupport {
                 FROM contracts co
                 JOIN customers c ON c.customer_id = co.customer_id
                 LEFT JOIN staff s ON s.staff_id = co.signer_staff_id
-                WHERE co.lease_status IN ('綁約中', '蝬?銝?')
+                WHERE co.lease_status = '綁約中'
                   AND co.contract_id = (
                     SELECT MAX(latest.contract_id) FROM contracts latest
                     WHERE latest.customer_id = co.customer_id
@@ -159,7 +159,7 @@ public class DashboardService extends CmsJdbcSupport {
                     SELECT MAX(latest.contract_id) FROM contracts latest
                     WHERE latest.customer_id = co.customer_id
                 )
-                  AND co.lease_status IN ('綁約中', '蝬?銝?')
+                  AND co.lease_status = '綁約中'
                   AND co.rental_status IN (?, ?)
                 """, Integer.class, firstRentalStatus, secondRentalStatus);
     }
