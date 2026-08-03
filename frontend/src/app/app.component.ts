@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, ElementRef, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
@@ -125,6 +126,26 @@ const emptyOfficeForm = (): OfficeForm => ({
   branchId: null,
   notes: '',
   contacts: []
+});
+
+type BranchForm = {
+  branchName: string;
+  branchCode: string;
+  branchAddress: string;
+  taxId: string;
+  bankAccount: string;
+  bankBranch: string;
+  bankAccountName: string;
+};
+
+const emptyBranchForm = (): BranchForm => ({
+  branchName: '',
+  branchCode: '',
+  branchAddress: '',
+  taxId: '',
+  bankAccount: '',
+  bankBranch: '',
+  bankAccountName: ''
 });
 
 const emptyCustomerForm = (): CustomerForm => ({
@@ -384,8 +405,8 @@ export class AppComponent implements OnInit {
   contractEditForm: ContractForm = emptyContractForm();
   newOfficeForm: OfficeForm = emptyOfficeForm();
   officeEditForm: OfficeForm = emptyOfficeForm();
-  newBranchForm = { branchName: '' };
-  branchEditForm = { branchName: '' };
+  newBranchForm: BranchForm = emptyBranchForm();
+  branchEditForm: BranchForm = emptyBranchForm();
   editingContract = signal<Record<string, unknown> | null>(null);
   editingRentPayment = signal<Record<string, unknown> | null>(null);
   rentEditForm: Partial<RentPaymentPayload> = {};
@@ -595,23 +616,24 @@ export class AppComponent implements OnInit {
 
   startCreateBranch(): void {
     this.editingBranch.set(null);
-    this.branchEditForm = { branchName: '' };
-    this.newBranchForm = { branchName: '' };
+    this.branchEditForm = emptyBranchForm();
+    this.newBranchForm = emptyBranchForm();
     this.creatingBranch.set(true);
   }
 
   cancelCreateBranch(): void {
     this.creatingBranch.set(false);
-    this.newBranchForm = { branchName: '' };
+    this.newBranchForm = emptyBranchForm();
   }
 
   createBranch(): void {
-    if (!this.newBranchForm.branchName.trim()) {
-      this.error.set('請輸入分館名稱。');
+    const validationError = this.validateBranchForm(this.newBranchForm);
+    if (validationError) {
+      this.error.set(validationError);
       return;
     }
     this.saving.set(true);
-    const payload: BranchPayload = { branchName: this.newBranchForm.branchName.trim() };
+    const payload: BranchPayload = this.toBranchPayload(this.newBranchForm);
     this.api.createBranch(payload).subscribe({
       next: (created) => {
         this.saving.set(false);
@@ -621,34 +643,43 @@ export class AppComponent implements OnInit {
         this.branches.update((rows) => [...rows, created]);
         this.cancelCreateBranch();
       },
-      error: () => {
+      error: (err: HttpErrorResponse) => {
         this.saving.set(false);
-        this.error.set('分館新增失敗。');
+        this.error.set(this.branchApiErrorMessage(err, '分館新增失敗。'));
       }
     });
   }
 
   startEditBranch(branch: BranchSummary): void {
     this.creatingBranch.set(false);
-    this.newBranchForm = { branchName: '' };
+    this.newBranchForm = emptyBranchForm();
     this.editingBranch.set(branch);
-    this.branchEditForm = { branchName: branch.branch_name };
+    this.branchEditForm = {
+      branchName: branch.branch_name ?? '',
+      branchCode: branch.branch_code ?? '',
+      branchAddress: branch.branch_address ?? '',
+      taxId: branch.tax_id ?? '',
+      bankAccount: branch.bank_account ?? '',
+      bankBranch: branch.bank_branch ?? '',
+      bankAccountName: branch.bank_account_name ?? ''
+    };
   }
 
   cancelEditBranch(): void {
     this.editingBranch.set(null);
-    this.branchEditForm = { branchName: '' };
+    this.branchEditForm = emptyBranchForm();
   }
 
   saveBranchEdit(): void {
     const branch = this.editingBranch();
     if (!branch) return;
-    if (!this.branchEditForm.branchName.trim()) {
-      this.error.set('請輸入分館名稱。');
+    const validationError = this.validateBranchForm(this.branchEditForm);
+    if (validationError) {
+      this.error.set(validationError);
       return;
     }
     this.saving.set(true);
-    const payload: BranchPayload = { branchName: this.branchEditForm.branchName.trim() };
+    const payload: BranchPayload = this.toBranchPayload(this.branchEditForm);
     this.api.updateBranch(branch.branch_id, payload).subscribe({
       next: (updated) => {
         this.saving.set(false);
@@ -658,11 +689,67 @@ export class AppComponent implements OnInit {
         this.branches.update((rows) => rows.map((r) => (r.branch_id === updated.branch_id ? updated : r)));
         this.cancelEditBranch();
       },
-      error: () => {
+      error: (err: HttpErrorResponse) => {
         this.saving.set(false);
-        this.error.set('分館更新失敗。');
+        this.error.set(this.branchApiErrorMessage(err, '分館更新失敗。'));
       }
     });
+  }
+
+  digitsOnly(value: string, maxLength: number): string {
+    return (value ?? '').replace(/\D/g, '').slice(0, maxLength);
+  }
+
+  private toBranchPayload(form: BranchForm): BranchPayload {
+    return {
+      branchName: form.branchName.trim(),
+      branchCode: form.branchCode.trim() || undefined,
+      branchAddress: form.branchAddress.trim() || undefined,
+      taxId: form.taxId.trim() || undefined,
+      bankAccount: form.bankAccount.trim() || undefined,
+      bankBranch: form.bankBranch.trim() || undefined,
+      bankAccountName: form.bankAccountName.trim() || undefined
+    };
+  }
+
+  private validateBranchForm(form: BranchForm): string | null {
+    const name = form.branchName.trim();
+    if (!name) {
+      return '請輸入分館名稱。';
+    }
+    if (name.length > 100) {
+      return '分館名稱長度不可超過 100 個字元。';
+    }
+    const code = form.branchCode.trim();
+    if (code && (!/^\d+$/.test(code) || code.length > 50)) {
+      return '分館編號僅限數字，長度不可超過 50 個字元。';
+    }
+    const address = form.branchAddress.trim();
+    if (address.length > 255) {
+      return '分館地址長度不可超過 255 個字元。';
+    }
+    const taxId = form.taxId.trim();
+    if (taxId && !/^\d{8}$/.test(taxId)) {
+      return '統一編號須為 8 碼數字。';
+    }
+    const bankAccount = form.bankAccount.trim();
+    if (bankAccount && (!/^\d+$/.test(bankAccount) || bankAccount.length > 30)) {
+      return '銀行帳號僅限數字，長度不可超過 30 個字元。';
+    }
+    const bankBranch = form.bankBranch.trim();
+    if (bankBranch.length > 100) {
+      return '銀行分行長度不可超過 100 個字元。';
+    }
+    const bankAccountName = form.bankAccountName.trim();
+    if (bankAccountName.length > 100) {
+      return '戶名長度不可超過 100 個字元。';
+    }
+    return null;
+  }
+
+  private branchApiErrorMessage(err: HttpErrorResponse, fallback: string): string {
+    const detail = err?.error?.error;
+    return typeof detail === 'string' && detail ? `${fallback}（${detail}）` : fallback;
   }
 
   canEditOffice(office: OfficeSummary): boolean {

@@ -1200,7 +1200,31 @@
           <form class="customer-form" (ngSubmit)="createBranch()">
             <label>
               分館名稱
-              <input name="newBranchName" [(ngModel)]="newBranchForm.branchName" required />
+              <input name="newBranchName" [(ngModel)]="newBranchForm.branchName" required maxlength="100" />
+            </label>
+            <label>
+              分館編號
+              <input name="newBranchCode" [ngModel]="newBranchForm.branchCode" (ngModelChange)="newBranchForm.branchCode = digitsOnly($event, 50)" inputmode="numeric" maxlength="50" pattern="\d*" />
+            </label>
+            <label>
+              分館地址
+              <input name="newBranchAddress" [(ngModel)]="newBranchForm.branchAddress" maxlength="255" />
+            </label>
+            <label>
+              統一編號
+              <input name="newBranchTaxId" [ngModel]="newBranchForm.taxId" (ngModelChange)="newBranchForm.taxId = digitsOnly($event, 8)" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="8 碼數字" />
+            </label>
+            <label>
+              銀行帳號
+              <input name="newBranchBankAccount" [ngModel]="newBranchForm.bankAccount" (ngModelChange)="newBranchForm.bankAccount = digitsOnly($event, 30)" inputmode="numeric" maxlength="30" pattern="\d*" />
+            </label>
+            <label>
+              銀行分行
+              <input name="newBranchBankBranch" [(ngModel)]="newBranchForm.bankBranch" maxlength="100" />
+            </label>
+            <label>
+              戶名
+              <input name="newBranchBankAccountName" [(ngModel)]="newBranchForm.bankAccountName" maxlength="100" />
             </label>
             <div class="form-actions wide">
               <button type="submit" [disabled]="saving()">新增</button>
@@ -1219,7 +1243,31 @@
           <form class="customer-form" (ngSubmit)="saveBranchEdit()">
             <label>
               分館名稱
-              <input name="editBranchName" [(ngModel)]="branchEditForm.branchName" required />
+              <input name="editBranchName" [(ngModel)]="branchEditForm.branchName" required maxlength="100" />
+            </label>
+            <label>
+              分館編號
+              <input name="editBranchCode" [ngModel]="branchEditForm.branchCode" (ngModelChange)="branchEditForm.branchCode = digitsOnly($event, 50)" inputmode="numeric" maxlength="50" pattern="\d*" />
+            </label>
+            <label>
+              分館地址
+              <input name="editBranchAddress" [(ngModel)]="branchEditForm.branchAddress" maxlength="255" />
+            </label>
+            <label>
+              統一編號
+              <input name="editBranchTaxId" [ngModel]="branchEditForm.taxId" (ngModelChange)="branchEditForm.taxId = digitsOnly($event, 8)" inputmode="numeric" maxlength="8" pattern="\d{8}" placeholder="8 碼數字" />
+            </label>
+            <label>
+              銀行帳號
+              <input name="editBranchBankAccount" [ngModel]="branchEditForm.bankAccount" (ngModelChange)="branchEditForm.bankAccount = digitsOnly($event, 30)" inputmode="numeric" maxlength="30" pattern="\d*" />
+            </label>
+            <label>
+              銀行分行
+              <input name="editBranchBankBranch" [(ngModel)]="branchEditForm.bankBranch" maxlength="100" />
+            </label>
+            <label>
+              戶名
+              <input name="editBranchBankAccountName" [(ngModel)]="branchEditForm.bankAccountName" maxlength="100" />
             </label>
             <div class="form-actions wide">
               <button type="submit" [disabled]="saving()">儲存修改</button>
@@ -1232,11 +1280,23 @@
           <div class="simple-row header branch-row">
             <span>編號</span>
             <span>分館名稱</span>
+            <span>分館編號</span>
+            <span>分館地址</span>
+            <span>統一編號</span>
+            <span>銀行帳號</span>
+            <span>銀行分行</span>
+            <span>戶名</span>
             <span *ngIf="canManageBranch()">操作</span>
           </div>
           <div class="simple-row branch-row" *ngFor="let row of branchRows()">
             <span>{{ row.branch_id }}</span>
             <span>{{ row.branch_name }}</span>
+            <span>{{ row.branch_code }}</span>
+            <span>{{ row.branch_address }}</span>
+            <span>{{ row.tax_id }}</span>
+            <span>{{ row.bank_account }}</span>
+            <span>{{ row.bank_branch }}</span>
+            <span>{{ row.bank_account_name }}</span>
             <span *ngIf="canManageBranch()">
               <button type="button" class="ghost compact-button" (click)="startEditBranch(row)">修改</button>
             </span>

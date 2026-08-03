@@ -32,6 +32,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         migrateContractLeaseStatus();
         migrateRefundsTable();
         migrateChargeListsTable();
+        migrateBranchFields();
     }
 
     private void migrateRoleNames() {
@@ -329,6 +330,15 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
             jdbc.execute("CREATE INDEX " + indexName + " ON " + table + "(" + column + ")");
             return null;
         });
+    }
+
+    private void migrateBranchFields() {
+        addColumnIfMissing("branches", "branch_code",       "VARCHAR(50)");
+        addColumnIfMissing("branches", "branch_address",    "VARCHAR(255)");
+        addColumnIfMissing("branches", "tax_id",            "VARCHAR(30)");
+        addColumnIfMissing("branches", "bank_account",      "VARCHAR(50)");
+        addColumnIfMissing("branches", "bank_branch",       "VARCHAR(100)");
+        addColumnIfMissing("branches", "bank_account_name", "VARCHAR(100)");
     }
 
     private void migrateContractLeaseStatus() {

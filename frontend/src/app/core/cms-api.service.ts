@@ -178,10 +178,22 @@ export interface OfficePayload {
 export interface BranchSummary {
   branch_id: number;
   branch_name: string;
+  branch_code: string | null;
+  branch_address: string | null;
+  tax_id: string | null;
+  bank_account: string | null;
+  bank_branch: string | null;
+  bank_account_name: string | null;
 }
 
 export interface BranchPayload {
   branchName: string;
+  branchCode?: string;
+  branchAddress?: string;
+  taxId?: string;
+  bankAccount?: string;
+  bankBranch?: string;
+  bankAccountName?: string;
 }
 
 export interface RoleSummary {

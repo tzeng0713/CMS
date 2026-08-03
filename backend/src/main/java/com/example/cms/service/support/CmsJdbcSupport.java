@@ -39,6 +39,20 @@ public abstract class CmsJdbcSupport {
         return value == null ? "" : value.trim();
     }
 
+    protected String optionalPattern(String value, String fieldName, int maxLength, String regex) {
+        String trimmed = blankToNull(value);
+        if (trimmed == null) {
+            return null;
+        }
+        if (trimmed.length() > maxLength) {
+            throw new IllegalArgumentException(fieldName + " must be at most " + maxLength + " characters");
+        }
+        if (regex != null && !trimmed.matches(regex)) {
+            throw new IllegalArgumentException(fieldName + " has an invalid format");
+        }
+        return trimmed;
+    }
+
     protected LocalDate localDate(String value) {
         if (value == null || value.isBlank()) {
             return null;
