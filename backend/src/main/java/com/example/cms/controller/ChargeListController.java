@@ -26,8 +26,7 @@ public class ChargeListController {
     public Map<String, Object> chargeLists(@RequestParam(required = false) Long chargeListId,
                                            @RequestParam(required = false) Long customerId,
                                            @RequestParam(required = false) Long contractId,
-                                           @RequestParam(required = false) String feeStartMonth,
-                                           @RequestParam(required = false) String feeEndMonth,
+                                           @RequestParam(required = false) String feeMonth,
                                            @RequestParam(required = false) Integer status,
                                            @RequestParam(required = false) Long createdBy,
                                            @RequestParam(required = false) String issuedFrom,
@@ -36,7 +35,7 @@ public class ChargeListController {
                                            @RequestParam(required = false) Integer pageSize,
                                            @RequestParam(required = false) String sortBy,
                                            @RequestParam(required = false) String sortDir) {
-        return service.chargeLists(chargeListId, customerId, contractId, feeStartMonth, feeEndMonth,
+        return service.chargeLists(chargeListId, customerId, contractId, feeMonth,
                 status, createdBy, issuedFrom, issuedTo, page, pageSize, sortBy, sortDir);
     }
 

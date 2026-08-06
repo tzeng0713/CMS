@@ -12,8 +12,7 @@
 
 | 欄位名稱 | 資料型別 | 必填 | 說明 |
 |----------|----------|------|------|
-| `fee_start_month` | CHAR(7) | ✓ | 費用起月（YYYY-MM） |
-| `fee_end_month` | CHAR(7) | ✓ | 費用迄月（YYYY-MM），不可早於起月 |
+| `fee_month` | CHAR(7) | ✓ | 費用月份（YYYY-MM），單一月份 |
 
 ## 金額明細
 
@@ -22,10 +21,11 @@
 | `management_fee` | DECIMAL(12,2) | ✓ | 管理費（預設 0，不可為負數） |
 | `electricity_fee` | DECIMAL(12,2) | ✓ | 電費（預設 0，不可為負數） |
 | `printing_fee` | DECIMAL(12,2) | ✓ | 列印費（預設 0，不可為負數） |
+| `meeting_room_fee` | DECIMAL(12,2) | ✓ | 會議室費（預設 0，不可為負數） |
 | `tax` | DECIMAL(12,2) | ✓ | 營業稅（預設 0，不可為負數） |
 | `advance_payment` | DECIMAL(12,2) | ✓ | 代墊費（預設 0，不可為負數） |
 | `repair_fee` | DECIMAL(12,2) | ✓ | 修繕費（預設 0，不可為負數） |
-| `total_amount` | DECIMAL(12,2) | ✓ | 收費總金額。前端不可送入，後端於寫入前依上述 6 項金額重新計算 |
+| `total_amount` | DECIMAL(12,2) | ✓ | 收費總金額。前端不可送入，後端於寫入前依上述 7 項金額重新計算 |
 
 ## 狀態
 
@@ -48,5 +48,4 @@
 - `idx_charge_lists_contract_id` (`contract_id`)
 - `idx_charge_lists_status` (`status`)
 - `idx_charge_lists_issued_at` (`issued_at`)
-- `idx_charge_lists_fee_start_month` (`fee_start_month`)
-- `idx_charge_lists_fee_end_month` (`fee_end_month`)
+- `idx_charge_lists_fee_month` (`fee_month`)

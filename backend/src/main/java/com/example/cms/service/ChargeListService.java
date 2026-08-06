@@ -20,8 +20,7 @@ public class ChargeListService extends CmsJdbcSupport {
     private static final Map<String, String> SORT_COLUMNS = Map.of(
             "chargeListId", "cl.charge_list_id",
             "customerId", "cl.customer_id",
-            "feeStartMonth", "cl.fee_start_month",
-            "feeEndMonth", "cl.fee_end_month",
+            "feeMonth", "cl.fee_month",
             "totalAmount", "cl.total_amount",
             "status", "cl.status",
             "issuedAt", "cl.issued_at"
@@ -32,11 +31,10 @@ public class ChargeListService extends CmsJdbcSupport {
     }
 
     public Map<String, Object> chargeLists(Long chargeListId, Long customerId, Long contractId,
-                                           String feeStartMonth, String feeEndMonth, Integer status,
+                                           String feeMonth, Integer status,
                                            Long createdBy, String issuedFrom, String issuedTo,
                                            Integer page, Integer pageSize, String sortBy, String sortDir) {
-        String feeStartMonthText = blankToEmpty(feeStartMonth);
-        String feeEndMonthText = blankToEmpty(feeEndMonth);
+        String feeMonthText = blankToEmpty(feeMonth);
         String issuedFromText = blankToNull(issuedFrom);
         String issuedToText = blankToNull(issuedTo);
 
@@ -44,8 +42,7 @@ public class ChargeListService extends CmsJdbcSupport {
                  WHERE (? IS NULL OR cl.charge_list_id = ?)
                    AND (? IS NULL OR cl.customer_id = ?)
                    AND (? IS NULL OR cl.contract_id = ?)
-                   AND (? = '' OR cl.fee_start_month = ?)
-                   AND (? = '' OR cl.fee_end_month = ?)
+                   AND (? = '' OR cl.fee_month = ?)
                    AND (? IS NULL OR cl.status = ?)
                    AND (? IS NULL OR cl.created_by = ?)
                    AND (? IS NULL OR DATE(cl.issued_at) >= ?)
@@ -55,8 +52,7 @@ public class ChargeListService extends CmsJdbcSupport {
         args.add(chargeListId); args.add(chargeListId);
         args.add(customerId); args.add(customerId);
         args.add(contractId); args.add(contractId);
-        args.add(feeStartMonthText); args.add(feeStartMonthText);
-        args.add(feeEndMonthText); args.add(feeEndMonthText);
+        args.add(feeMonthText); args.add(feeMonthText);
         args.add(status); args.add(status);
         args.add(createdBy); args.add(createdBy);
         args.add(issuedFromText); args.add(issuedFromText);
@@ -96,37 +92,37 @@ public class ChargeListService extends CmsJdbcSupport {
         requireExistingCustomer(request.customerId());
         requireExistingContract(request.contractId());
         requireContractBelongsToCustomer(request.contractId(), request.customerId());
-        requireValidMonthRange(request.feeStartMonth(), request.feeEndMonth());
+        requireValidMonth(request.feeMonth());
         requireNonNegativeAmounts(request);
         BigDecimal totalAmount = calculateTotalAmount(request);
         Long id = nextId("charge_lists", "charge_list_id");
         Long staffId = request.updatedBy() == null ? 1L : request.updatedBy();
         jdbc.update("""
                 INSERT INTO charge_lists (
-                    charge_list_id, customer_id, contract_id, fee_start_month, fee_end_month,
-                    management_fee, electricity_fee, printing_fee, tax, advance_payment, repair_fee,
+                    charge_list_id, customer_id, contract_id, fee_month,
+                    management_fee, electricity_fee, printing_fee, meeting_room_fee, tax, advance_payment, repair_fee,
                     total_amount, status, created_by, issued_at, updated_by, updated_at
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 2, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
                 """,
-                id, request.customerId(), request.contractId(), request.feeStartMonth(), request.feeEndMonth(),
+                id, request.customerId(), request.contractId(), request.feeMonth(),
                 zeroIfNull(request.managementFee()), zeroIfNull(request.electricityFee()), zeroIfNull(request.printingFee()),
-                zeroIfNull(request.tax()), zeroIfNull(request.advancePayment()), zeroIfNull(request.repairFee()),
-                totalAmount, staffId, staffId);
+                zeroIfNull(request.meetingRoomFee()), zeroIfNull(request.tax()), zeroIfNull(request.advancePayment()),
+                zeroIfNull(request.repairFee()), totalAmount, staffId, staffId);
         return chargeListDetail(id);
     }
 
     public Map<String, Object> updateChargeList(long id, ChargeListRequest request) {
-        requireValidMonthRange(request.feeStartMonth(), request.feeEndMonth());
+        requireValidMonth(request.feeMonth());
         requireNonNegativeAmounts(request);
         BigDecimal totalAmount = calculateTotalAmount(request);
         Long staffId = request.updatedBy() == null ? 1L : request.updatedBy();
         int updated = jdbc.update("""
                 UPDATE charge_lists
-                SET fee_start_month = ?,
-                    fee_end_month = ?,
+                SET fee_month = ?,
                     management_fee = ?,
                     electricity_fee = ?,
                     printing_fee = ?,
+                    meeting_room_fee = ?,
                     tax = ?,
                     advance_payment = ?,
                     repair_fee = ?,
@@ -135,10 +131,10 @@ public class ChargeListService extends CmsJdbcSupport {
                     updated_at = CURRENT_TIMESTAMP
                 WHERE charge_list_id = ?
                 """,
-                request.feeStartMonth(), request.feeEndMonth(),
+                request.feeMonth(),
                 zeroIfNull(request.managementFee()), zeroIfNull(request.electricityFee()), zeroIfNull(request.printingFee()),
-                zeroIfNull(request.tax()), zeroIfNull(request.advancePayment()), zeroIfNull(request.repairFee()),
-                totalAmount, staffId, id);
+                zeroIfNull(request.meetingRoomFee()), zeroIfNull(request.tax()), zeroIfNull(request.advancePayment()),
+                zeroIfNull(request.repairFee()), totalAmount, staffId, id);
         if (updated == 0) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "charge list not found");
         }
@@ -147,7 +143,9 @@ public class ChargeListService extends CmsJdbcSupport {
 
     private String chargeListListSql() {
         return """
-                SELECT cl.*, c.company_name, o.office_no, b.branch_name, co.rent AS contract_rent, s.staff_name AS created_by_name
+                SELECT cl.*, c.company_name, o.office_no, b.branch_name,
+                       b.bank_account, b.bank_branch, b.bank_account_name,
+                       co.rent AS contract_rent, s.staff_name AS created_by_name
                 FROM charge_lists cl
                 JOIN customers c ON c.customer_id = cl.customer_id
                 LEFT JOIN contracts co ON co.contract_id = cl.contract_id
@@ -180,12 +178,8 @@ public class ChargeListService extends CmsJdbcSupport {
         }
     }
 
-    private void requireValidMonthRange(String feeStartMonth, String feeEndMonth) {
-        String start = requiredMonth(feeStartMonth, "feeStartMonth");
-        String end = requiredMonth(feeEndMonth, "feeEndMonth");
-        if (start.compareTo(end) > 0) {
-            throw new IllegalArgumentException("feeStartMonth must not be after feeEndMonth");
-        }
+    private void requireValidMonth(String feeMonth) {
+        requiredMonth(feeMonth, "feeMonth");
     }
 
     private String requiredMonth(String value, String fieldName) {
@@ -199,6 +193,7 @@ public class ChargeListService extends CmsJdbcSupport {
         requireNonNegative(request.managementFee(), "managementFee");
         requireNonNegative(request.electricityFee(), "electricityFee");
         requireNonNegative(request.printingFee(), "printingFee");
+        requireNonNegative(request.meetingRoomFee(), "meetingRoomFee");
         requireNonNegative(request.tax(), "tax");
         requireNonNegative(request.advancePayment(), "advancePayment");
         requireNonNegative(request.repairFee(), "repairFee");
@@ -214,6 +209,7 @@ public class ChargeListService extends CmsJdbcSupport {
         return zeroIfNull(request.managementFee())
                 .add(zeroIfNull(request.electricityFee()))
                 .add(zeroIfNull(request.printingFee()))
+                .add(zeroIfNull(request.meetingRoomFee()))
                 .add(zeroIfNull(request.tax()))
                 .add(zeroIfNull(request.advancePayment()))
                 .add(zeroIfNull(request.repairFee()));

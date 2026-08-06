@@ -98,11 +98,11 @@ type ContractForm = {
 type ChargeListForm = {
   customerId: number | null;
   contractId: number | null;
-  feeStartMonth: string;
-  feeEndMonth: string;
+  feeMonth: string;
   managementFee: number;
   electricityFee: number;
   printingFee: number;
+  meetingRoomFee: number;
   tax: number;
   advancePayment: number;
   repairFee: number;
@@ -173,21 +173,18 @@ const emptyCustomerForm = (): CustomerForm => ({
 const emptyChargeListForm = (): ChargeListForm => ({
   customerId: null,
   contractId: null,
-  feeStartMonth: '',
-  feeEndMonth: '',
+  feeMonth: '',
   managementFee: 0,
   electricityFee: 0,
   printingFee: 0,
+  meetingRoomFee: 0,
   tax: 0,
   advancePayment: 0,
   repairFee: 0,
   updatedBy: 1
 });
 
-const CHARGE_LIST_ISSUER_NAME = '全方位商務中心有限公司';
-const CHARGE_LIST_BANK_INFO = '華南銀行008(南京東路分行)';
-const CHARGE_LIST_BANK_ACCOUNT_NAME = '全方位商務中心有限公司';
-const CHARGE_LIST_BANK_ACCOUNT_NUMBER = '112-1011-03671';
+const CHARGE_LIST_LOGO_PATH = 'assets/afw-logo.png';
 
 const emptyContractForm = (): ContractForm => ({
   customerId: null,
@@ -216,10 +213,7 @@ const emptyContractForm = (): ContractForm => ({
   styleUrl: './app.component.scss'
 })
 export class AppComponent implements OnInit {
-  readonly chargeListIssuerName = CHARGE_LIST_ISSUER_NAME;
-  readonly chargeListBankInfo = CHARGE_LIST_BANK_INFO;
-  readonly chargeListBankAccountName = CHARGE_LIST_BANK_ACCOUNT_NAME;
-  readonly chargeListBankAccountNumber = CHARGE_LIST_BANK_ACCOUNT_NUMBER;
+  readonly chargeListLogoPath = CHARGE_LIST_LOGO_PATH;
   readonly roleOptions = ['主管', '督導秘書', '一般秘書'];
   readonly statusOptions = [
     { value: 0, label: '租賃中' },
@@ -365,8 +359,7 @@ export class AppComponent implements OnInit {
     chargeListId: null,
     customerId: null,
     contractId: null,
-    feeStartMonth: '',
-    feeEndMonth: '',
+    feeMonth: '',
     status: null,
     createdBy: null,
     issuedFrom: '',
@@ -416,8 +409,7 @@ export class AppComponent implements OnInit {
   };
   newChargeListForm: ChargeListForm = {
     ...emptyChargeListForm(),
-    feeStartMonth: this.currentMonthValue(),
-    feeEndMonth: this.currentMonthValue()
+    feeMonth: this.currentMonthValue()
   };
   chargeListEditForm: ChargeListForm = emptyChargeListForm();
 
@@ -1440,8 +1432,7 @@ export class AppComponent implements OnInit {
       chargeListId: null,
       customerId: null,
       contractId: null,
-      feeStartMonth: '',
-      feeEndMonth: '',
+      feeMonth: '',
       status: null,
       createdBy: null,
       issuedFrom: '',
@@ -1528,6 +1519,7 @@ export class AppComponent implements OnInit {
       Number(form.managementFee || 0) +
       Number(form.electricityFee || 0) +
       Number(form.printingFee || 0) +
+      Number(form.meetingRoomFee || 0) +
       Number(form.tax || 0) +
       Number(form.advancePayment || 0) +
       Number(form.repairFee || 0)
@@ -1537,7 +1529,7 @@ export class AppComponent implements OnInit {
   normalizeChargeListFeeField(
     event: Event,
     form: ChargeListForm,
-    field: 'managementFee' | 'electricityFee' | 'printingFee' | 'tax' | 'advancePayment' | 'repairFee'
+    field: 'managementFee' | 'electricityFee' | 'printingFee' | 'meetingRoomFee' | 'tax' | 'advancePayment' | 'repairFee'
   ): void {
     const input = event.target as HTMLInputElement;
     const normalized = Math.max(0, Number(input.value) || 0);
@@ -1550,8 +1542,8 @@ export class AppComponent implements OnInit {
       this.error.set('請先搜尋並選擇客戶與租約。');
       return;
     }
-    if (!this.newChargeListForm.feeStartMonth || !this.newChargeListForm.feeEndMonth) {
-      this.error.set('請填寫費用起訖月。');
+    if (!this.newChargeListForm.feeMonth) {
+      this.error.set('請填寫費用月份。');
       return;
     }
     if (!window.confirm('確定要新增這筆收費清單嗎？')) {
@@ -1566,8 +1558,7 @@ export class AppComponent implements OnInit {
         this.success.set('收費清單已新增。');
         this.newChargeListForm = {
           ...emptyChargeListForm(),
-          feeStartMonth: this.currentMonthValue(),
-          feeEndMonth: this.currentMonthValue()
+          feeMonth: this.currentMonthValue()
         };
         this.chargeListCustomerSearch = '';
         this.selectedChargeListCustomer.set(null);
@@ -1585,11 +1576,11 @@ export class AppComponent implements OnInit {
     this.chargeListEditForm = {
       customerId: row.customer_id,
       contractId: row.contract_id,
-      feeStartMonth: row.fee_start_month,
-      feeEndMonth: row.fee_end_month,
+      feeMonth: row.fee_month,
       managementFee: Number(row.management_fee ?? 0),
       electricityFee: Number(row.electricity_fee ?? 0),
       printingFee: Number(row.printing_fee ?? 0),
+      meetingRoomFee: Number(row.meeting_room_fee ?? 0),
       tax: Number(row.tax ?? 0),
       advancePayment: Number(row.advance_payment ?? 0),
       repairFee: Number(row.repair_fee ?? 0),
@@ -1607,8 +1598,8 @@ export class AppComponent implements OnInit {
     if (!row) {
       return;
     }
-    if (!this.chargeListEditForm.feeStartMonth || !this.chargeListEditForm.feeEndMonth) {
-      this.error.set('請填寫費用起訖月。');
+    if (!this.chargeListEditForm.feeMonth) {
+      this.error.set('請填寫費用月份。');
       return;
     }
     if (!window.confirm('確定要儲存這筆收費清單的修改嗎？')) {
@@ -1626,7 +1617,7 @@ export class AppComponent implements OnInit {
       },
       error: () => {
         this.saving.set(false);
-        this.error.set('收費清單更新失敗，請確認費用起訖月與金額是否正確。');
+        this.error.set('收費清單更新失敗，請確認費用月份與金額是否正確。');
       }
     });
   }
@@ -1636,12 +1627,7 @@ export class AppComponent implements OnInit {
   }
 
   formatFeePeriod(row: ChargeListSummary): string {
-    return `${row.fee_start_month} ~ ${row.fee_end_month}`;
-  }
-
-  feeCellValue(value: unknown): string {
-    const amount = Number(value ?? 0);
-    return amount ? this.money(amount) : '';
+    return row.fee_month || '-';
   }
 
   chargeListGrandTotal(row: ChargeListSummary): number {
@@ -1658,6 +1644,16 @@ export class AppComponent implements OnInit {
     }
     const rocYear = date.getFullYear() - 1911;
     return `${rocYear}年${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+
+  formatRocFeeMonth(feeMonth: unknown): string {
+    const match = /^(\d{4})-(\d{2})$/.exec(String(feeMonth ?? ''));
+    if (!match) {
+      return '-';
+    }
+    const rocYear = Number(match[1]) - 1911;
+    const month = Number(match[2]);
+    return `${rocYear} 年 ${month} 月 1 日`;
   }
 
   exportChargeListImage(row: ChargeListSummary): void {
@@ -1702,11 +1698,11 @@ export class AppComponent implements OnInit {
     return {
       customerId: form.customerId ?? undefined,
       contractId: form.contractId ?? undefined,
-      feeStartMonth: form.feeStartMonth,
-      feeEndMonth: form.feeEndMonth,
+      feeMonth: form.feeMonth,
       managementFee: form.managementFee,
       electricityFee: form.electricityFee,
       printingFee: form.printingFee,
+      meetingRoomFee: form.meetingRoomFee,
       tax: form.tax,
       advancePayment: form.advancePayment,
       repairFee: form.repairFee,
@@ -1863,6 +1859,11 @@ export class AppComponent implements OnInit {
       currency: 'TWD',
       maximumFractionDigits: 0
     }).format(n);
+  }
+
+  printMoney(value: unknown): string {
+    const n = Number(value ?? 0);
+    return `NT$${new Intl.NumberFormat('zh-TW', { maximumFractionDigits: 0 }).format(n)}`;
   }
 
   value(row: Record<string, unknown>, key: string): string {

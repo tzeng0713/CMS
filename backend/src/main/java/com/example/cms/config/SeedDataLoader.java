@@ -150,14 +150,14 @@ public class SeedDataLoader implements CommandLineRunner {
     private void insertChargeLists(List<Map<String, Object>> rows) {
         rows.forEach(r -> jdbc.update("""
                 INSERT INTO charge_lists (
-                    charge_list_id, customer_id, contract_id, fee_start_month, fee_end_month,
-                    management_fee, electricity_fee, printing_fee, tax, advance_payment, repair_fee,
+                    charge_list_id, customer_id, contract_id, fee_month,
+                    management_fee, electricity_fee, printing_fee, meeting_room_fee, tax, advance_payment, repair_fee,
                     total_amount, status, created_by, updated_by
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, n(r, "chargeListId"), n(r, "customerId"), n(r, "contractId"),
-                s(r, "feeStartMonth"), s(r, "feeEndMonth"), bdOrZero(r, "managementFee"),
-                bdOrZero(r, "electricityFee"), bdOrZero(r, "printingFee"), bdOrZero(r, "tax"),
-                bdOrZero(r, "advancePayment"), bdOrZero(r, "repairFee"), bdOrZero(r, "totalAmount"),
+                s(r, "feeMonth"), bdOrZero(r, "managementFee"),
+                bdOrZero(r, "electricityFee"), bdOrZero(r, "printingFee"), bdOrZero(r, "meetingRoomFee"),
+                bdOrZero(r, "tax"), bdOrZero(r, "advancePayment"), bdOrZero(r, "repairFee"), bdOrZero(r, "totalAmount"),
                 n(r, "status"), n(r, "createdBy"), n(r, "updatedBy")));
     }
 

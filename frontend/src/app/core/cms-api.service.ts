@@ -235,12 +235,15 @@ export interface ChargeListSummary {
   company_name: string;
   office_no: string | null;
   branch_name: string | null;
+  bank_account: string | null;
+  bank_branch: string | null;
+  bank_account_name: string | null;
   contract_rent: number | null;
-  fee_start_month: string;
-  fee_end_month: string;
+  fee_month: string;
   management_fee: number;
   electricity_fee: number;
   printing_fee: number;
+  meeting_room_fee: number;
   tax: number;
   advance_payment: number;
   repair_fee: number;
@@ -256,11 +259,11 @@ export interface ChargeListSummary {
 export interface ChargeListPayload {
   customerId?: number;
   contractId?: number;
-  feeStartMonth?: string;
-  feeEndMonth?: string;
+  feeMonth?: string;
   managementFee?: number;
   electricityFee?: number;
   printingFee?: number;
+  meetingRoomFee?: number;
   tax?: number;
   advancePayment?: number;
   repairFee?: number;
@@ -271,8 +274,7 @@ export interface ChargeListSearchFilters {
   chargeListId?: number | null;
   customerId?: number | null;
   contractId?: number | null;
-  feeStartMonth?: string;
-  feeEndMonth?: string;
+  feeMonth?: string;
   status?: number | null;
   createdBy?: number | null;
   issuedFrom?: string;

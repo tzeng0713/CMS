@@ -1400,12 +1400,8 @@
             </select>
           </label>
           <label>
-            費用起月
-            <input type="month" name="chargeListFilterFeeStartMonth" [(ngModel)]="chargeListFilters.feeStartMonth" />
-          </label>
-          <label>
-            費用迄月
-            <input type="month" name="chargeListFilterFeeEndMonth" [(ngModel)]="chargeListFilters.feeEndMonth" />
+            費用月份
+            <input type="month" name="chargeListFilterFeeMonth" [(ngModel)]="chargeListFilters.feeMonth" />
           </label>
           <label>
             開單人
@@ -1436,7 +1432,7 @@
             <span class="sortable" (click)="toggleChargeListSort('chargeListId')">編號</span>
             <span>客戶名稱</span>
             <span>辦公室名稱</span>
-            <span class="sortable" (click)="toggleChargeListSort('feeStartMonth')">費用期間</span>
+            <span class="sortable" (click)="toggleChargeListSort('feeMonth')">費用月份</span>
             <span>租金</span>
             <span class="sortable" (click)="toggleChargeListSort('totalAmount')">雜支總金額</span>
             <span class="sortable" (click)="toggleChargeListSort('status')">單據狀態</span>
@@ -1493,12 +1489,8 @@
               <input type="text" [value]="editing.office_no || '-'" readonly />
             </label>
             <label>
-              費用起月
-              <input type="month" name="editChargeListFeeStartMonth" [(ngModel)]="chargeListEditForm.feeStartMonth" required />
-            </label>
-            <label>
-              費用迄月
-              <input type="month" name="editChargeListFeeEndMonth" [(ngModel)]="chargeListEditForm.feeEndMonth" required />
+              費用月份
+              <input type="month" name="editChargeListFeeMonth" [(ngModel)]="chargeListEditForm.feeMonth" required />
             </label>
             <label>
               管理費
@@ -1520,6 +1512,17 @@
                 name="editChargeListElectricityFee"
                 [(ngModel)]="chargeListEditForm.electricityFee"
                 (blur)="normalizeChargeListFeeField($event, chargeListEditForm, 'electricityFee')"
+              />
+            </label>
+            <label>
+              會議室
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                name="editChargeListMeetingRoomFee"
+                [(ngModel)]="chargeListEditForm.meetingRoomFee"
+                (blur)="normalizeChargeListFeeField($event, chargeListEditForm, 'meetingRoomFee')"
               />
             </label>
             <label>
@@ -1628,12 +1631,8 @@
             </select>
           </label>
           <label>
-            費用起月
-            <input type="month" name="newChargeListFeeStartMonth" [(ngModel)]="newChargeListForm.feeStartMonth" required />
-          </label>
-          <label>
-            費用迄月
-            <input type="month" name="newChargeListFeeEndMonth" [(ngModel)]="newChargeListForm.feeEndMonth" required />
+            費用月份
+            <input type="month" name="newChargeListFeeMonth" [(ngModel)]="newChargeListForm.feeMonth" required />
           </label>
           <label>
             管理費
@@ -1655,6 +1654,17 @@
               name="newChargeListElectricityFee"
               [(ngModel)]="newChargeListForm.electricityFee"
               (blur)="normalizeChargeListFeeField($event, newChargeListForm, 'electricityFee')"
+            />
+          </label>
+          <label>
+            會議室
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              name="newChargeListMeetingRoomFee"
+              [(ngModel)]="newChargeListForm.meetingRoomFee"
+              (blur)="normalizeChargeListFeeField($event, newChargeListForm, 'meetingRoomFee')"
             />
           </label>
           <label>
@@ -1711,36 +1721,52 @@
         </form>
 
         <div class="charge-list-print-area" #chargeListPrintArea *ngIf="exportingChargeList() as exportRow">
-          <div class="print-header">
-            <div class="print-header-left">
-              <p>辦公室：{{ exportRow.office_no || '-' }}</p>
-              <p>公司：{{ exportRow.company_name }}</p>
-              <p class="print-period">費用期間：{{ formatFeePeriod(exportRow) }}</p>
-            </div>
-            <div class="print-header-right">
-              <strong>{{ chargeListIssuerName }}</strong>
-            </div>
+          <div class="print-logo-row">
+            <img class="print-logo-img" [src]="chargeListLogoPath" alt="AFW 全方位商務中心" />
+          </div>
+          <div class="print-divider-solid"></div>
+
+          <div class="print-meta">
+            <p>辦公室：{{ exportRow.office_no || '-' }}</p>
+            <p>公司：{{ exportRow.company_name }}</p>
           </div>
 
           <div class="print-title-row">
+            <span class="print-title-line"></span>
+            <span class="print-title-ornament">◆</span>
             <h3>收費清單</h3>
-            <span>{{ formatRocDate(exportRow.issued_at) }}</span>
+            <span class="print-title-ornament">◆</span>
+            <span class="print-title-line"></span>
           </div>
 
-          <div class="print-item-row"><span>租金</span><span>{{ feeCellValue(exportRow.contract_rent) }}</span></div>
-          <div class="print-item-row"><span>管理費</span><span>{{ feeCellValue(exportRow.management_fee) }}</span></div>
-          <div class="print-item-row"><span>電費</span><span>{{ feeCellValue(exportRow.electricity_fee) }}</span></div>
-          <div class="print-item-row"><span>列印</span><span>{{ feeCellValue(exportRow.printing_fee) }}</span></div>
-          <div class="print-item-row"><span>營業稅</span><span>{{ feeCellValue(exportRow.tax) }}</span></div>
-          <div class="print-item-row"><span>代墊費</span><span>{{ feeCellValue(exportRow.advance_payment) }}</span></div>
-          <div class="print-item-row"><span>修繕費</span><span>{{ feeCellValue(exportRow.repair_fee) }}</span></div>
+          <div class="print-date-row">
+            <span class="print-date-line"></span>
+            <span class="print-date-text">{{ formatRocFeeMonth(exportRow.fee_month) }}</span>
+            <span class="print-date-line"></span>
+          </div>
 
-          <div class="print-total-row"><span>合計</span><span>{{ money(chargeListGrandTotal(exportRow)) }}</span></div>
+          <div class="print-table">
+            <div class="print-table-header"><span>項目</span><span>金額</span></div>
+            <div class="print-item-row"><span>租金</span><span class="print-amount">{{ printMoney(exportRow.contract_rent) }}</span></div>
+            <div class="print-item-row"><span>管理費</span><span class="print-amount">{{ printMoney(exportRow.management_fee) }}</span></div>
+            <div class="print-item-row"><span>電費</span><span class="print-amount">{{ printMoney(exportRow.electricity_fee) }}</span></div>
+            <div class="print-item-row"><span>會議室</span><span class="print-amount">{{ printMoney(exportRow.meeting_room_fee) }}</span></div>
+            <div class="print-item-row"><span>營業稅</span><span class="print-amount">{{ printMoney(exportRow.tax) }}</span></div>
+            <div class="print-item-row"><span>列印</span><span class="print-amount">{{ printMoney(exportRow.printing_fee) }}</span></div>
+            <div class="print-item-row"><span>代墊費</span><span class="print-amount">{{ printMoney(exportRow.advance_payment) }}</span></div>
+            <div class="print-item-row"><span>修繕費</span><span class="print-amount">{{ printMoney(exportRow.repair_fee) }}</span></div>
+            <div class="print-total-row"><span>合計</span><span class="print-amount">{{ printMoney(chargeListGrandTotal(exportRow)) }}</span></div>
+          </div>
+
+          <div class="print-divider-dashed"></div>
 
           <div class="print-footer">
-            <p>{{ chargeListBankInfo }}</p>
-            <p>戶名:{{ chargeListBankAccountName }} 帳號:{{ chargeListBankAccountNumber }}</p>
+            <p><span class="print-footer-icon">🏦</span>{{ exportRow.bank_branch || '-' }}</p>
+            <p><span class="print-footer-icon">👤</span>戶名：{{ exportRow.bank_account_name || '-' }}</p>
+            <p><span class="print-footer-icon">💳</span>帳號：{{ exportRow.bank_account || '-' }}</p>
           </div>
+
+          <div class="print-divider-solid print-divider-solid-reverse"></div>
         </div>
 
         <div class="modal-overlay" *ngIf="chargeListPreviewImage() as previewSrc">

@@ -254,25 +254,29 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
     }
 
     private void migrateChargeListsTable() {
+        migrateChargeListsFeeMonth();
         addColumnIfMissing("charge_lists", "repair_fee", "DECIMAL(12,2) DEFAULT 0");
+        addColumnIfMissing("charge_lists", "meeting_room_fee", "DECIMAL(12,2) DEFAULT 0");
         addColumnIfMissing("charge_lists", "total_amount", "DECIMAL(12,2) DEFAULT 0");
         addColumnIfMissing("charge_lists", "status", "TINYINT DEFAULT 2");
         addColumnIfMissing("charge_lists", "created_by", "BIGINT");
 
         jdbc.update("""
                 UPDATE charge_lists
-                SET management_fee  = COALESCE(management_fee, 0),
-                    electricity_fee = COALESCE(electricity_fee, 0),
-                    printing_fee    = COALESCE(printing_fee, 0),
-                    tax             = COALESCE(tax, 0),
-                    advance_payment = COALESCE(advance_payment, 0),
-                    repair_fee      = COALESCE(repair_fee, 0),
-                    status          = COALESCE(status, 2),
-                    created_by      = COALESCE(created_by, updated_by)
+                SET management_fee   = COALESCE(management_fee, 0),
+                    electricity_fee  = COALESCE(electricity_fee, 0),
+                    printing_fee     = COALESCE(printing_fee, 0),
+                    meeting_room_fee = COALESCE(meeting_room_fee, 0),
+                    tax              = COALESCE(tax, 0),
+                    advance_payment  = COALESCE(advance_payment, 0),
+                    repair_fee       = COALESCE(repair_fee, 0),
+                    status           = COALESCE(status, 2),
+                    created_by       = COALESCE(created_by, updated_by)
                 """);
         jdbc.update("""
                 UPDATE charge_lists
-                SET total_amount = management_fee + electricity_fee + printing_fee + tax + advance_payment + repair_fee
+                SET total_amount = management_fee + electricity_fee + printing_fee + meeting_room_fee
+                    + tax + advance_payment + repair_fee
                 WHERE total_amount IS NULL OR total_amount = 0
                 """);
 
@@ -280,11 +284,11 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
             String db = connection.getMetaData().getDatabaseProductName().toLowerCase();
             if (!db.contains("mysql")) return null;
 
-            jdbc.execute("ALTER TABLE charge_lists MODIFY fee_start_month CHAR(7)");
-            jdbc.execute("ALTER TABLE charge_lists MODIFY fee_end_month CHAR(7)");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY fee_month CHAR(7)");
             jdbc.execute("ALTER TABLE charge_lists MODIFY management_fee DECIMAL(12,2) NOT NULL DEFAULT 0");
             jdbc.execute("ALTER TABLE charge_lists MODIFY electricity_fee DECIMAL(12,2) NOT NULL DEFAULT 0");
             jdbc.execute("ALTER TABLE charge_lists MODIFY printing_fee DECIMAL(12,2) NOT NULL DEFAULT 0");
+            jdbc.execute("ALTER TABLE charge_lists MODIFY meeting_room_fee DECIMAL(12,2) NOT NULL DEFAULT 0");
             jdbc.execute("ALTER TABLE charge_lists MODIFY tax DECIMAL(12,2) NOT NULL DEFAULT 0");
             jdbc.execute("ALTER TABLE charge_lists MODIFY advance_payment DECIMAL(12,2) NOT NULL DEFAULT 0");
             jdbc.execute("ALTER TABLE charge_lists MODIFY repair_fee DECIMAL(12,2) NOT NULL DEFAULT 0");
@@ -299,8 +303,35 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         addIndexIfMissing("charge_lists", "idx_charge_lists_contract_id", "contract_id");
         addIndexIfMissing("charge_lists", "idx_charge_lists_status", "status");
         addIndexIfMissing("charge_lists", "idx_charge_lists_issued_at", "issued_at");
-        addIndexIfMissing("charge_lists", "idx_charge_lists_fee_start_month", "fee_start_month");
-        addIndexIfMissing("charge_lists", "idx_charge_lists_fee_end_month", "fee_end_month");
+        addIndexIfMissing("charge_lists", "idx_charge_lists_fee_month", "fee_month");
+    }
+
+    // Charge lists used to bill a fee-month range (fee_start_month/fee_end_month); the
+    // feature was simplified to bill a single month, so on MySQL we fold the range down
+    // to fee_month by reusing the old start month and dropping the end month column.
+    // Dev/test data is not preserved beyond that (confirmed acceptable).
+    private void migrateChargeListsFeeMonth() {
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            boolean hasFeeMonth;
+            try (var cols = connection.getMetaData().getColumns(null, null, "charge_lists", "fee_month")) {
+                hasFeeMonth = cols.next();
+            }
+            if (hasFeeMonth) {
+                return null;
+            }
+            String db = connection.getMetaData().getDatabaseProductName().toLowerCase();
+            boolean hasFeeStartMonth;
+            try (var cols = connection.getMetaData().getColumns(null, null, "charge_lists", "fee_start_month")) {
+                hasFeeStartMonth = cols.next();
+            }
+            if (db.contains("mysql") && hasFeeStartMonth) {
+                jdbc.execute("ALTER TABLE charge_lists CHANGE COLUMN fee_start_month fee_month CHAR(7)");
+                jdbc.execute("ALTER TABLE charge_lists DROP COLUMN fee_end_month");
+            } else {
+                jdbc.execute("ALTER TABLE charge_lists ADD COLUMN fee_month CHAR(7)");
+            }
+            return null;
+        });
     }
 
     private void addForeignKeyIfMissing(String table, String fkName, String column, String refTable, String refColumn) {

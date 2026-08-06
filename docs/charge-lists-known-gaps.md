@@ -8,10 +8,10 @@
   - 且目前專案並沒有獨立的「收租管理」模組，只有 `rent_payments`（租金繳交紀錄），語意上最接近但沒有 `charge_list_id` 關聯欄位，未來要接上這條回寫邏輯前，需要先確認 `rent_payments` 是否要補這個欄位。
   - `refunds` 表已經有 `charge_list_id` FK（既有 migration 加的），但退款完成後回寫 `charge_lists.status` 的程式碼同樣沒有實作。
 
-## 2. 公司抬頭 / 銀行資訊為寫死常數
+## 2. 公司抬頭 / 銀行資訊
 
-- 匯出圖片的「全方位商務中心有限公司」「華南銀行008(南京東路分行)」「戶名/帳號」目前是寫死在 `app.component.ts` 的常數，不是可設定值。若日後銀行帳戶異動或要支援多分館不同抬頭，需要改成設定檔或資料庫欄位。
-- **AFW Logo 圖示**：目前只有純文字抬頭，尚未放入實際 logo 圖檔（等待提供）。
+- 銀行資訊（分行/戶名/帳號）已改為從租約對應的辦公室 → 分館（`branches.bank_branch` / `bank_account_name` / `bank_account`）讀取，不再是前端寫死常數。若某分館尚未在「分館管理」填寫銀行資料，匯出圖片會顯示「-」。
+- **AFW Logo 圖示**：已於 `.charge-list-print-area` 加入 `<img src="assets/afw-logo.png">`，圖檔本身由使用者自行放入 `frontend/src/assets/afw-logo.png`（不在版本控制的程式碼變更範圍內）。
 
 - 補充說明：匯出圖片上的「合計」刻意加總租約租金（`contract_rent + total_amount`），這個加總**只存在於匯出圖片**，資料庫 `total_amount` 欄位與列表頁「收費總金額」都維持不含租金，這是確認過的設計，不是缺漏。
 
