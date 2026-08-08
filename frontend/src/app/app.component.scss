@@ -1392,7 +1392,9 @@ $charge-list-slate: #6b6f76;
     flex-direction: column;
   }
 
-  .filter-bar {
+  .filter-bar,
+  .filter-bar.customer-filter,
+  .filter-bar.charge-list-filter {
     grid-template-columns: 1fr;
   }
 }
