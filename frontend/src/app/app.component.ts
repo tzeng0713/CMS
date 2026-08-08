@@ -1634,6 +1634,18 @@ export class AppComponent implements OnInit {
     return Number(row.contract_rent ?? 0) + Number(row.total_amount ?? 0);
   }
 
+  formatDateTime(value: unknown): string {
+    if (value === null || value === undefined || value === '') {
+      return '-';
+    }
+    const date = new Date(String(value).replace(' ', 'T'));
+    if (Number.isNaN(date.getTime())) {
+      return '-';
+    }
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
   formatRocDate(value: unknown): string {
     if (value === null || value === undefined || value === '') {
       return '-';

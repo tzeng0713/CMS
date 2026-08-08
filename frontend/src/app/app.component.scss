@@ -233,6 +233,7 @@ button {
 }
 
 .panel {
+  min-width: 0;
   padding: 16px;
 }
 
@@ -960,17 +961,17 @@ input:disabled {
 }
 
 .charge-list-row {
-  min-width: 1420px;
+  min-width: 1180px;
   grid-template-columns:
-    minmax(80px, 0.5fr)
+    minmax(70px, 0.45fr)
     minmax(180px, 1.1fr)
-    minmax(140px, 0.8fr)
-    minmax(160px, 0.9fr)
     minmax(110px, 0.65fr)
+    minmax(95px, 0.55fr)
+    minmax(100px, 0.6fr)
     minmax(130px, 0.75fr)
     minmax(90px, 0.55fr)
     minmax(110px, 0.65fr)
-    minmax(160px, 0.9fr)
+    minmax(150px, 0.85fr)
     minmax(140px, 0.8fr);
 }
 

@@ -1449,7 +1449,7 @@
             <span>{{ money(row.total_amount) }}</span>
             <span>{{ displayChargeListStatus(row.status) }}</span>
             <span>{{ row.created_by_name || '-' }}</span>
-            <span>{{ row.issued_at }}</span>
+            <span>{{ formatDateTime(row.issued_at) }}</span>
             <span>
               <button type="button" class="ghost compact-button" (click)="startEditChargeList(row)">修改</button>
               <button type="button" class="ghost compact-button" (click)="exportChargeListImage(row)">匯出圖片</button>
