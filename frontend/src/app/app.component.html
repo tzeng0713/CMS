@@ -1791,24 +1791,370 @@
       <section class="panel">
         <div class="panel-header">
           <div>
-            <h2>退款紀錄</h2>
-            <p>退租原因與退款金額。</p>
+            <h2>退款管理</h2>
+            <p>退款申請、主管審核與應收帳款處理。</p>
           </div>
         </div>
-        <div class="simple-table">
-          <div class="simple-row header four">
-            <span>公司</span>
-            <span>原因</span>
+
+        <section class="filter-bar">
+          <label>
+            公司名稱
+            <input type="search" name="refundFilterCompanyName" [(ngModel)]="refundFilters.companyName" />
+          </label>
+          <label>
+            統一編號
+            <input type="text" name="refundFilterTaxId" [(ngModel)]="refundFilters.taxId" />
+          </label>
+          <label>
+            建立日期（起）
+            <input type="date" name="refundFilterDateFrom" [(ngModel)]="refundFilters.dateFrom" />
+          </label>
+          <label>
+            建立日期（迄）
+            <input type="date" name="refundFilterDateTo" [(ngModel)]="refundFilters.dateTo" />
+          </label>
+          <label>
+            狀態
+            <select name="refundFilterStatus" [(ngModel)]="refundFilters.status">
+              <option value="">全部</option>
+              <option value="草稿">草稿</option>
+              <option value="待審核">待審核</option>
+              <option value="審核通過">審核通過</option>
+              <option value="已退款">已退款</option>
+              <option value="已取消">已取消</option>
+            </select>
+          </label>
+          <div class="filter-actions">
+            <button type="button" (click)="searchRefunds()">搜尋</button>
+            <button type="button" class="ghost" (click)="resetRefundFilters()">清除條件</button>
+          </div>
+        </section>
+
+        <div class="empty-state" *ngIf="!refundRows().length">目前沒有退款資料。</div>
+        <div class="simple-table" *ngIf="refundRows().length">
+          <div class="simple-row header refund-row">
+            <span>客戶 / 統編</span>
+            <span>退款原因</span>
             <span>退款金額</span>
-            <span>備註</span>
+            <span>狀態</span>
           </div>
-          <div class="simple-row four" *ngFor="let row of refunds()">
-            <span>{{ value(row, 'company_name') || value(row, 'matched_company_name') }}</span>
-            <span>{{ value(row, 'reason') }}</span>
-            <span>{{ money(row['refund_amount']) }}</span>
-            <span>{{ value(row, 'note') }}</span>
+          <div class="simple-row refund-row row-clickable" *ngFor="let row of refundRows()" (click)="openRefundDetail(row)">
+            <span>{{ row.company_name || row.matched_company_name || '-' }}<br />{{ row.tax_id || '-' }}</span>
+            <span>{{ row.refund_reason || '-' }}</span>
+            <span>{{ money(row.refund_amount) }}</span>
+            <span>{{ row.refund_status }}</span>
           </div>
         </div>
+
+        <div class="pagination-bar" *ngIf="refundRows().length">
+          <button type="button" class="ghost compact-button" [disabled]="refundPage() === 0" (click)="changeRefundPage(-1)">
+            上一頁
+          </button>
+          <span>第 {{ refundPage() + 1 }} / {{ refundTotalPages() }} 頁（共 {{ refundTotal() }} 筆）</span>
+          <button
+            type="button"
+            class="ghost compact-button"
+            [disabled]="refundPage() + 1 >= refundTotalPages()"
+            (click)="changeRefundPage(1)"
+          >
+            下一頁
+          </button>
+        </div>
+
+        <div class="modal-overlay" *ngIf="viewingRefund() as detail">
+          <div class="modal-dialog wide">
+            <div class="modal-header">
+              <h3>退款詳細資料</h3>
+              <button type="button" class="ghost compact-button" (click)="closeRefundDetail()">關閉</button>
+            </div>
+            <div class="modal-body">
+            <div class="refund-detail-content">
+              <dl class="refund-detail-grid">
+                <div>
+                  <dt>客戶</dt>
+                  <dd>{{ detail.company_name || detail.matched_company_name || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>統一編號</dt>
+                  <dd>{{ detail.tax_id || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>租約編號</dt>
+                  <dd>{{ detail.contract_id }}</dd>
+                </div>
+                <div>
+                  <dt>狀態</dt>
+                  <dd>{{ detail.refund_status }}</dd>
+                </div>
+                <div>
+                  <dt>退款原因</dt>
+                  <dd>{{ detail.refund_reason || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>退款金額</dt>
+                  <dd>{{ money(detail.refund_amount) }}</dd>
+                </div>
+                <div>
+                  <dt>調整金額 / 備註</dt>
+                  <dd>{{ money(detail.adjustment_amount) }} / {{ detail.adjustment_note || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>扣款總額</dt>
+                  <dd>{{ money(detail.deduction_total) }}</dd>
+                </div>
+                <div>
+                  <dt>建立人 / 時間</dt>
+                  <dd>{{ detail.created_by_name || '-' }} / {{ formatDateTime(detail.created_at) }}</dd>
+                </div>
+                <div>
+                  <dt>審核人 / 時間</dt>
+                  <dd>{{ detail.reviewed_by_name || '-' }} / {{ formatDateTime(detail.reviewed_at) }}</dd>
+                </div>
+                <div>
+                  <dt>退款方式</dt>
+                  <dd>{{ detail.payment_method || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>收款帳戶</dt>
+                  <dd>{{ detail.bank_code || '-' }} / {{ detail.bank_account || '-' }} / {{ detail.bank_account_name || '-' }}</dd>
+                </div>
+                <div>
+                  <dt>退款日期</dt>
+                  <dd>{{ detail.refunded_at || '-' }}</dd>
+                </div>
+              </dl>
+              <div class="refund-detail-actions">
+                <button
+                  type="button"
+                  class="ghost compact-button"
+                  *ngIf="detail.refund_status === '草稿' || detail.refund_status === '待審核'"
+                  (click)="closeRefundDetail(); startEditRefund(detail)"
+                >
+                  修改
+                </button>
+                <button
+                  type="button"
+                  class="ghost compact-button"
+                  *ngIf="detail.refund_status === '草稿'"
+                  (click)="submitRefundForReview(detail)"
+                >
+                  送交審核
+                </button>
+                <button
+                  type="button"
+                  class="ghost compact-button"
+                  *ngIf="canReviewRefund() && detail.refund_status === '待審核'"
+                  (click)="reviewRefund(detail)"
+                >
+                  審核通過
+                </button>
+                <button
+                  type="button"
+                  class="ghost compact-button"
+                  *ngIf="detail.refund_status === '審核通過'"
+                  (click)="closeRefundDetail(); markRefunded(detail)"
+                >
+                  辦理退款
+                </button>
+                <button
+                  type="button"
+                  class="ghost compact-button"
+                  *ngIf="detail.refund_status !== '已退款' && detail.refund_status !== '已取消'"
+                  (click)="cancelRefund(detail)"
+                >
+                  取消
+                </button>
+              </div>
+            </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="rent-edit-panel" *ngIf="editingRefund() as editing">
+          <div class="panel-header">
+            <div>
+              <h3>{{ editing.refund_status === '審核通過' ? '辦理退款' : '修改退款資料' }}</h3>
+              <p>{{ editing.company_name || editing.matched_company_name }} / 退款編號 {{ editing.refund_id }}</p>
+            </div>
+          </div>
+          <form class="customer-form" (ngSubmit)="saveRefundEdit()" (keydown.enter)="$event.preventDefault()">
+            <label>
+              客戶（不可修改）
+              <input type="text" [value]="editing.company_name || editing.matched_company_name" readonly />
+            </label>
+            <label>
+              租約編號（不可修改）
+              <input type="text" [value]="editing.contract_id" readonly />
+            </label>
+            <label>
+              退款原因
+              <input
+                type="text"
+                name="editRefundReason"
+                [(ngModel)]="refundEditForm.refundReason"
+                [readonly]="editing.refund_status === '審核通過'"
+              />
+            </label>
+            <label>
+              調整金額（可正可負）
+              <input
+                type="number"
+                step="0.01"
+                name="editRefundAdjustmentAmount"
+                [(ngModel)]="refundEditForm.adjustmentAmount"
+                [readonly]="editing.refund_status === '審核通過'"
+              />
+            </label>
+            <label>
+              調整金額備註
+              <input
+                type="text"
+                name="editRefundAdjustmentNote"
+                [(ngModel)]="refundEditForm.adjustmentNote"
+                [readonly]="editing.refund_status === '審核通過'"
+              />
+            </label>
+            <label>
+              扣款總額
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                name="editRefundDeductionTotal"
+                [(ngModel)]="refundEditForm.deductionTotal"
+                [readonly]="editing.refund_status === '審核通過'"
+              />
+            </label>
+            <label>
+              退款方式
+              <input type="text" name="editRefundPaymentMethod" [(ngModel)]="refundEditForm.paymentMethod" />
+            </label>
+            <label>
+              收款銀行代碼
+              <input type="text" name="editRefundBankCode" [(ngModel)]="refundEditForm.bankCode" />
+            </label>
+            <label>
+              收款帳號
+              <input type="text" name="editRefundBankAccount" [(ngModel)]="refundEditForm.bankAccount" />
+            </label>
+            <label>
+              收款戶名
+              <input type="text" name="editRefundBankAccountName" [(ngModel)]="refundEditForm.bankAccountName" />
+            </label>
+            <label *ngIf="editing.refund_status === '審核通過'">
+              退款日期
+              <input type="date" name="editRefundedAt" [(ngModel)]="refundEditForm.refundedAt" />
+            </label>
+            <label>
+              目前狀態（系統維護，不可修改）
+              <input type="text" [value]="editing.refund_status" readonly />
+            </label>
+            <div class="form-actions wide">
+              <button type="submit" [disabled]="saving()">
+                {{ editing.refund_status === '審核通過' ? '確認退款完成' : '儲存修改' }}
+              </button>
+              <button type="button" class="ghost" (click)="cancelEditRefund()">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="panel-header">
+          <div>
+            <h3>新增退款</h3>
+            <p>先搜尋客戶並選擇租約，可直接匯入收費清單帶出扣款金額。</p>
+          </div>
+        </div>
+
+        <div class="lookup">
+          <label>
+            客戶
+            <input
+              type="search"
+              name="refundCustomerSearch"
+              placeholder="輸入公司名稱"
+              [(ngModel)]="refundCustomerSearch"
+              (ngModelChange)="lookupRefundCustomers()"
+            />
+          </label>
+          <div class="lookup-list" *ngIf="refundCustomerOptions().length">
+            <button type="button" *ngFor="let option of refundCustomerOptions()" (click)="selectRefundCustomer(option)">
+              <strong>{{ option.company_name }}</strong>
+              <span>{{ option.tax_id || '-' }}</span>
+            </button>
+          </div>
+        </div>
+
+        <section class="selected-customer" *ngIf="selectedRefundCustomer() as refundCustomer">
+          <strong>{{ refundCustomer.company_name }}</strong>
+          <span>統編 {{ refundCustomer.tax_id || '-' }}</span>
+        </section>
+
+        <form
+          class="customer-form"
+          (ngSubmit)="createRefund()"
+          (keydown.enter)="$event.preventDefault()"
+          *ngIf="selectedRefundCustomer() as refundCustomer"
+        >
+          <label>
+            租約
+            <select name="newRefundContract" [(ngModel)]="newRefundForm.contractId" required>
+              <option [ngValue]="null">請選擇租約</option>
+              <option *ngFor="let contract of refundCustomer.contracts" [ngValue]="contract['contract_id']">
+                {{ contract['office_no'] || '登記' }} / 押金 {{ money(contract['deposit']) }}
+              </option>
+            </select>
+          </label>
+          <label class="wide">
+            匯入收費清單編號（選填）
+            <input type="number" name="refundImportChargeListId" [(ngModel)]="refundImportChargeListId" />
+            <button type="button" class="ghost compact-button" (click)="importChargeListIntoRefund(newRefundForm)">
+              帶入扣款金額
+            </button>
+          </label>
+          <label>
+            退款原因
+            <input type="text" name="newRefundReason" [(ngModel)]="newRefundForm.refundReason" required />
+          </label>
+          <label>
+            調整金額（可正可負）
+            <input type="number" step="0.01" name="newRefundAdjustmentAmount" [(ngModel)]="newRefundForm.adjustmentAmount" />
+          </label>
+          <label>
+            調整金額備註
+            <input type="text" name="newRefundAdjustmentNote" [(ngModel)]="newRefundForm.adjustmentNote" />
+          </label>
+          <label>
+            扣款總額
+            <input type="number" min="0" step="0.01" name="newRefundDeductionTotal" [(ngModel)]="newRefundForm.deductionTotal" />
+          </label>
+          <label>
+            退款方式
+            <input type="text" name="newRefundPaymentMethod" [(ngModel)]="newRefundForm.paymentMethod" />
+          </label>
+          <label>
+            收款銀行代碼
+            <input type="text" name="newRefundBankCode" [(ngModel)]="newRefundForm.bankCode" />
+          </label>
+          <label>
+            收款帳號
+            <input type="text" name="newRefundBankAccount" [(ngModel)]="newRefundForm.bankAccount" />
+          </label>
+          <label>
+            收款戶名
+            <input type="text" name="newRefundBankAccountName" [(ngModel)]="newRefundForm.bankAccountName" />
+          </label>
+          <label>
+            送出後狀態
+            <select name="newRefundStatus" [(ngModel)]="newRefundForm.refundStatus">
+              <option value="草稿">草稿</option>
+              <option value="待審核">送交主管審核</option>
+            </select>
+          </label>
+          <div class="form-actions wide">
+            <button type="submit" [disabled]="saving()">新增退款</button>
+          </div>
+        </form>
+
       </section>
     </section>
 

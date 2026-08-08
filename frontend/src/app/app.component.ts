@@ -22,7 +22,10 @@ import {
   OfficePayload,
   OfficeSummary,
   RoleSummary,
-  RentPaymentPayload
+  RentPaymentPayload,
+  RefundPayload,
+  RefundSearchFilters,
+  RefundSummary
 } from './core/cms-api.service';
 
 type ViewKey =
@@ -108,6 +111,40 @@ type ChargeListForm = {
   repairFee: number;
   updatedBy: number;
 };
+
+type RefundForm = {
+  customerId: number | null;
+  contractId: number | null;
+  chargeListId: number | null;
+  refundReason: string;
+  adjustmentAmount: number;
+  adjustmentNote: string;
+  deductionTotal: number;
+  paymentMethod: string;
+  bankCode: string;
+  bankAccount: string;
+  bankAccountName: string;
+  refundStatus: string;
+  refundedAt: string;
+  staffId: number;
+};
+
+const emptyRefundForm = (): RefundForm => ({
+  customerId: null,
+  contractId: null,
+  chargeListId: null,
+  refundReason: '',
+  adjustmentAmount: 0,
+  adjustmentNote: '',
+  deductionTotal: 0,
+  paymentMethod: '',
+  bankCode: '',
+  bankAccount: '',
+  bankAccountName: '',
+  refundStatus: '草稿',
+  refundedAt: '',
+  staffId: 1
+});
 
 type OfficeContactForm = {
   personName: string;
@@ -318,7 +355,16 @@ export class AppComponent implements OnInit {
   chargeListPreviewRow = signal<ChargeListSummary | null>(null);
   chargeListCustomerOptions = signal<CustomerSummary[]>([]);
   selectedChargeListCustomer = signal<CustomerDetail | null>(null);
-  refunds = signal<Array<Record<string, unknown>>>([]);
+  refundRows = signal<RefundSummary[]>([]);
+  refundTotal = signal(0);
+  refundPage = signal(0);
+  readonly refundPageSize = 20;
+  editingRefund = signal<RefundSummary | null>(null);
+  viewingRefund = signal<RefundSummary | null>(null);
+  refundCustomerSearch = '';
+  refundCustomerOptions = signal<CustomerSummary[]>([]);
+  selectedRefundCustomer = signal<CustomerDetail | null>(null);
+  refundImportChargeListId: number | null = null;
   salesTargets = signal<Array<Record<string, unknown>>>([]);
   newCustomerOptions = signal<CustomerSummary[]>([]);
   rentCustomerOptions = signal<CustomerSummary[]>([]);
@@ -369,6 +415,15 @@ export class AppComponent implements OnInit {
   chargeListSortDir: 'asc' | 'desc' = 'desc';
   chargeListFilterCustomerSearch = '';
   chargeListFilterCustomerOptions = signal<CustomerSummary[]>([]);
+  refundFilters: RefundSearchFilters = {
+    companyName: '',
+    taxId: '',
+    dateFrom: '',
+    dateTo: '',
+    status: ''
+  };
+  refundSortBy = 'createdAt';
+  refundSortDir: 'asc' | 'desc' = 'desc';
   staffBranchFilter: number | null = null;
   contractCustomerSearch = '';
   chargeListCustomerSearch = '';
@@ -412,6 +467,8 @@ export class AppComponent implements OnInit {
     feeMonth: this.currentMonthValue()
   };
   chargeListEditForm: ChargeListForm = emptyChargeListForm();
+  newRefundForm: RefundForm = emptyRefundForm();
+  refundEditForm: RefundForm = emptyRefundForm();
 
   @ViewChild('chargeListPrintArea') chargeListPrintArea?: ElementRef<HTMLDivElement>;
 
@@ -419,6 +476,7 @@ export class AppComponent implements OnInit {
   sameOwnerCompanies = computed(() => this.selectedCustomer()?.sameOwnerCompanies ?? []);
   relatedCompanies = computed(() => this.selectedCustomer()?.relatedCompanies ?? []);
   chargeListTotalPages = computed(() => Math.max(1, Math.ceil(this.chargeListTotal() / this.chargeListPageSize)));
+  refundTotalPages = computed(() => Math.max(1, Math.ceil(this.refundTotal() / this.refundPageSize)));
 
   constructor(private readonly api: CmsApiService, private readonly router: Router) {}
 
@@ -558,6 +616,10 @@ export class AppComponent implements OnInit {
     this.chargeListRows.set([]);
     this.chargeListTotal.set(0);
     this.editingChargeList.set(null);
+    this.refundRows.set([]);
+    this.refundTotal.set(0);
+    this.editingRefund.set(null);
+    this.viewingRefund.set(null);
     this.staffRows.set([]);
     this.router.navigateByUrl('/home');
     this.error.set('');
@@ -740,8 +802,14 @@ export class AppComponent implements OnInit {
   }
 
   private branchApiErrorMessage(err: HttpErrorResponse, fallback: string): string {
-    const detail = err?.error?.error;
-    return typeof detail === 'string' && detail ? `${fallback}（${detail}）` : fallback;
+    const detail = err?.error?.error ?? err?.error?.message;
+    if (typeof detail === 'string' && detail) {
+      return `${fallback}（${detail}）`;
+    }
+    if (err?.status) {
+      return `${fallback}（HTTP ${err.status}）`;
+    }
+    return fallback;
   }
 
   canEditOffice(office: OfficeSummary): boolean {
@@ -1723,10 +1791,272 @@ export class AppComponent implements OnInit {
   }
 
   loadRefunds(): void {
-    this.api.refunds().subscribe({
-      next: (rows) => this.refunds.set(rows),
+    this.api.refunds({
+      ...this.refundFilters,
+      page: this.refundPage(),
+      pageSize: this.refundPageSize,
+      sortBy: this.refundSortBy,
+      sortDir: this.refundSortDir
+    }).subscribe({
+      next: (result) => {
+        this.refundRows.set(result.content);
+        this.refundTotal.set(result.totalElements);
+      },
       error: () => this.error.set('無法載入退款紀錄。')
     });
+  }
+
+  resetRefundFilters(): void {
+    this.refundFilters = { companyName: '', taxId: '', dateFrom: '', dateTo: '', status: '' };
+    this.refundPage.set(0);
+    this.loadRefunds();
+  }
+
+  searchRefunds(): void {
+    this.refundPage.set(0);
+    this.loadRefunds();
+  }
+
+  changeRefundPage(delta: number): void {
+    const next = this.refundPage() + delta;
+    if (next < 0 || next >= this.refundTotalPages()) {
+      return;
+    }
+    this.refundPage.set(next);
+    this.loadRefunds();
+  }
+
+  canReviewRefund(): boolean {
+    return this.currentUser()?.canReviewRefund === true;
+  }
+
+  lookupRefundCustomers(): void {
+    const term = this.refundCustomerSearch.trim();
+    if (!term) {
+      this.refundCustomerOptions.set([]);
+      return;
+    }
+    this.api.customerLookup(term).subscribe({
+      next: (rows) => this.refundCustomerOptions.set(rows),
+      error: () => this.error.set('無法查詢客戶資料。')
+    });
+  }
+
+  selectRefundCustomer(customer: CustomerSummary): void {
+    this.api.customerDetail(customer.customer_id).subscribe({
+      next: (value) => {
+        this.selectedRefundCustomer.set(value);
+        this.refundCustomerSearch = value.company_name;
+        this.refundCustomerOptions.set([]);
+        this.newRefundForm.customerId = value.customer_id;
+        const firstContract = value.contracts?.[0] as Record<string, unknown> | undefined;
+        this.newRefundForm.contractId = firstContract ? Number(firstContract['contract_id']) : null;
+      },
+      error: () => this.error.set('無法載入客戶租約資料。')
+    });
+  }
+
+  importChargeListIntoRefund(form: RefundForm): void {
+    if (!this.refundImportChargeListId) {
+      this.error.set('請輸入收費清單編號。');
+      return;
+    }
+    this.api.importChargeListForRefund(this.refundImportChargeListId).subscribe({
+      next: (result) => {
+        form.chargeListId = result.chargeListId;
+        form.deductionTotal = Number(result.deductionTotal ?? 0);
+        if (!form.customerId) {
+          form.customerId = result.customerId;
+        }
+        if (!form.contractId && result.contractId) {
+          form.contractId = result.contractId;
+        }
+        this.error.set('');
+        this.success.set(`已帶入收費清單金額，原始應退金額 ${this.money(result.baseAmount)}，扣款總額 ${this.money(result.deductionTotal)}。`);
+      },
+      error: () => this.error.set('找不到該收費清單。')
+    });
+  }
+
+  createRefund(): void {
+    if (!this.newRefundForm.customerId || !this.newRefundForm.contractId) {
+      this.error.set('請先搜尋並選擇客戶與租約。');
+      return;
+    }
+    if (!this.newRefundForm.refundReason.trim()) {
+      this.error.set('請填寫退款原因。');
+      return;
+    }
+    if (!window.confirm('確定要新增這筆退款資料嗎？')) {
+      return;
+    }
+    this.newRefundForm.staffId = this.currentStaffId();
+    this.saving.set(true);
+    this.api.createRefund(this.toRefundPayload(this.newRefundForm)).subscribe({
+      next: (result) => {
+        this.saving.set(false);
+        this.error.set('');
+        this.success.set(result.message ?? '退款資料已新增。');
+        this.newRefundForm = emptyRefundForm();
+        this.refundCustomerSearch = '';
+        this.selectedRefundCustomer.set(null);
+        this.refundImportChargeListId = null;
+        this.loadRefunds();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '退款資料新增失敗，請確認必填欄位與金額是否正確。'));
+      }
+    });
+  }
+
+  startEditRefund(row: RefundSummary): void {
+    this.editingRefund.set(row);
+    this.refundEditForm = {
+      customerId: row.customer_id,
+      contractId: row.contract_id,
+      chargeListId: row.charge_list_id,
+      refundReason: row.refund_reason ?? '',
+      adjustmentAmount: Number(row.adjustment_amount ?? 0),
+      adjustmentNote: row.adjustment_note ?? '',
+      deductionTotal: Number(row.deduction_total ?? 0),
+      paymentMethod: row.payment_method ?? '',
+      bankCode: row.bank_code ?? '',
+      bankAccount: row.bank_account ?? '',
+      bankAccountName: row.bank_account_name ?? '',
+      refundStatus: row.refund_status,
+      refundedAt: row.refunded_at ?? '',
+      staffId: this.currentStaffId()
+    };
+  }
+
+  markRefunded(row: RefundSummary): void {
+    this.startEditRefund(row);
+    this.refundEditForm.refundStatus = '已退款';
+  }
+
+  submitRefundForReview(row: RefundSummary): void {
+    if (!window.confirm('確定要將這筆退款送交主管審核嗎？')) {
+      return;
+    }
+    const payload = this.toRefundPayload({
+      customerId: row.customer_id,
+      contractId: row.contract_id,
+      chargeListId: row.charge_list_id,
+      refundReason: row.refund_reason ?? '',
+      adjustmentAmount: Number(row.adjustment_amount ?? 0),
+      adjustmentNote: row.adjustment_note ?? '',
+      deductionTotal: Number(row.deduction_total ?? 0),
+      paymentMethod: row.payment_method ?? '',
+      bankCode: row.bank_code ?? '',
+      bankAccount: row.bank_account ?? '',
+      bankAccountName: row.bank_account_name ?? '',
+      refundStatus: '待審核',
+      refundedAt: row.refunded_at ?? '',
+      staffId: this.currentStaffId()
+    });
+    this.api.updateRefund(row.refund_id, payload).subscribe({
+      next: (result) => {
+        this.error.set('');
+        this.success.set('已送交主管審核。');
+        if (this.viewingRefund()?.refund_id === result.refund_id) {
+          this.viewingRefund.set(result);
+        }
+        this.loadRefunds();
+      },
+      error: (err: HttpErrorResponse) => this.error.set(this.branchApiErrorMessage(err, '送交審核失敗。'))
+    });
+  }
+
+  cancelEditRefund(): void {
+    this.editingRefund.set(null);
+    this.refundEditForm = emptyRefundForm();
+  }
+
+  saveRefundEdit(): void {
+    const row = this.editingRefund();
+    if (!row) {
+      return;
+    }
+    if (!window.confirm('確定要儲存這筆退款資料的修改嗎？')) {
+      return;
+    }
+    this.refundEditForm.staffId = this.currentStaffId();
+    this.saving.set(true);
+    this.api.updateRefund(row.refund_id, this.toRefundPayload(this.refundEditForm)).subscribe({
+      next: (result) => {
+        this.saving.set(false);
+        this.error.set('');
+        this.success.set(result.message ?? '退款資料已更新。');
+        this.cancelEditRefund();
+        this.loadRefunds();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '退款資料更新失敗，請確認欄位是否正確。'));
+      }
+    });
+  }
+
+  cancelRefund(row: RefundSummary): void {
+    if (!window.confirm('確定要取消這筆退款資料嗎？')) {
+      return;
+    }
+    this.api.cancelRefund(row.refund_id, this.currentStaffId()).subscribe({
+      next: (result) => {
+        this.error.set('');
+        this.success.set('退款已取消。');
+        if (this.viewingRefund()?.refund_id === result.refund_id) {
+          this.viewingRefund.set(result);
+        }
+        this.loadRefunds();
+      },
+      error: (err: HttpErrorResponse) => this.error.set(this.branchApiErrorMessage(err, '取消退款失敗。'))
+    });
+  }
+
+  openRefundDetail(row: RefundSummary): void {
+    this.viewingRefund.set(row);
+  }
+
+  closeRefundDetail(): void {
+    this.viewingRefund.set(null);
+  }
+
+  reviewRefund(row: RefundSummary): void {
+    if (!window.confirm('確定要審核通過這筆退款嗎？')) {
+      return;
+    }
+    this.api.reviewRefund(row.refund_id, this.currentStaffId()).subscribe({
+      next: (result) => {
+        if (this.viewingRefund()?.refund_id === result.refund_id) {
+          this.viewingRefund.set(result);
+        }
+        this.error.set('');
+        this.success.set('退款已審核通過。');
+        this.loadRefunds();
+      },
+      error: (err: HttpErrorResponse) => this.error.set(this.branchApiErrorMessage(err, '審核失敗。'))
+    });
+  }
+
+  private toRefundPayload(form: RefundForm): RefundPayload {
+    return {
+      customerId: form.customerId ?? undefined,
+      contractId: form.contractId ?? undefined,
+      chargeListId: form.chargeListId ?? undefined,
+      refundReason: form.refundReason,
+      adjustmentAmount: form.adjustmentAmount,
+      adjustmentNote: form.adjustmentNote,
+      deductionTotal: form.deductionTotal,
+      paymentMethod: form.paymentMethod,
+      bankCode: form.bankCode,
+      bankAccount: form.bankAccount,
+      bankAccountName: form.bankAccountName,
+      refundStatus: form.refundStatus,
+      refundedAt: form.refundedAt,
+      staffId: form.staffId
+    };
   }
 
   loadMetadata(): void {

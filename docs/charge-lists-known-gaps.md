@@ -4,9 +4,9 @@
 
 ## 1. 業務邏輯尚未串接
 
-- **收租管理／退款管理回寫 `status`**：目前 `status`（1=已結清 / 2=未結清）只能由其他模組回寫，但實際回寫邏輯完全沒有實作，本次刻意排除（使用者已確認「之後再處理」）。
-  - 且目前專案並沒有獨立的「收租管理」模組，只有 `rent_payments`（租金繳交紀錄），語意上最接近但沒有 `charge_list_id` 關聯欄位，未來要接上這條回寫邏輯前，需要先確認 `rent_payments` 是否要補這個欄位。
-  - `refunds` 表已經有 `charge_list_id` FK（既有 migration 加的），但退款完成後回寫 `charge_lists.status` 的程式碼同樣沒有實作。
+- **收租管理回寫 `status`**：目前專案並沒有獨立的「收租管理」模組，只有 `rent_payments`（租金繳交紀錄），語意上最接近但沒有 `charge_list_id` 關聯欄位，這條回寫邏輯仍未實作，之後要接上前需要先確認 `rent_payments` 是否要補這個欄位。
+  - ✅ **退款管理回寫 `status` 已實作**：`refunds.charge_list_id` 關聯的收費清單，會在退款狀態轉為「已退款」時由 `RefundService.markChargeListSettled()` 自動寫回 `status = 1`（已結清）；退款超額扣款時也會透過 `RefundService.createShortfallChargeList()` 自動建立一筆未結清收費清單。詳見 [refund-feature-spec.md](refund-feature-spec.md)。
+  - 目前僅處理「已退款」→「已結清」的正向流程，退款**取消**時不會回頭處理已關聯收費清單的狀態，屬於刻意簡化（見 refund-feature-spec.md 第 8 節）。
 
 ## 2. 公司抬頭 / 銀行資訊
 

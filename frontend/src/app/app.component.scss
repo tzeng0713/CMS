@@ -975,6 +975,47 @@ input:disabled {
     minmax(140px, 0.8fr);
 }
 
+.refund-row {
+  grid-template-columns:
+    minmax(0, 1.4fr)
+    minmax(0, 1.4fr)
+    minmax(0, 0.8fr)
+    minmax(0, 0.7fr);
+  gap: 8px;
+}
+
+.refund-detail-content {
+  width: 100%;
+  text-align: left;
+}
+
+.refund-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 20px;
+  margin: 0 0 14px;
+}
+
+.refund-detail-grid dt {
+  font-size: 12px;
+  color: #64748b;
+  margin-bottom: 2px;
+}
+
+.refund-detail-grid dd {
+  margin: 0;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+
+.refund-detail-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
 .pagination-bar {
   display: flex;
   align-items: center;
@@ -1195,6 +1236,10 @@ $charge-list-slate: #6b6f76;
   box-shadow: 0 20px 45px rgba(15, 23, 42, 0.35);
 }
 
+.modal-dialog.wide {
+  max-width: 640px;
+}
+
 .modal-header {
   display: flex;
   align-items: center;
@@ -1267,6 +1312,15 @@ $charge-list-slate: #6b6f76;
 
 .compact-button {
   padding: 7px 10px;
+}
+
+.simple-row.row-clickable {
+  cursor: pointer;
+}
+
+.simple-row.row-clickable:hover {
+  background: #f0f9ff;
+  border-color: #bae6fd;
 }
 
 .simple-row.header .sortable {

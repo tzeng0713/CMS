@@ -164,13 +164,13 @@ public class SeedDataLoader implements CommandLineRunner {
     private void insertRefunds(List<Map<String, Object>> rows) {
         rows.forEach(r -> jdbc.update("""
                 INSERT INTO refunds (
-                    refund_id, customer_id, contract_id, charge_list_id, company_name, reason,
+                    refund_id, customer_id, contract_id, charge_list_id, company_name, refund_reason,
                     adjustment_amount, adjustment_note, deduction_total, refund_amount, refund_status,
                     payment_method, bank_code, bank_account, bank_account_name, refunded_at,
                     termination_staff_id, created_by, reviewed_by, updated_by
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, n(r, "refundId"), n(r, "customerId"), n(r, "contractId"), n(r, "chargeListId"),
-                s(r, "companyName"), s(r, "reason"), bdOrZero(r, "adjustmentAmount"),
+                s(r, "companyName"), s(r, "refundReason"), bdOrZero(r, "adjustmentAmount"),
                 s(r, "adjustmentNote"), bdOrZero(r, "deductionTotal"), bdOrZero(r, "refundAmount"),
                 s(r, "refundStatus"), s(r, "paymentMethod"), s(r, "bankCode"), s(r, "bankAccount"),
                 s(r, "bankAccountName"), s(r, "refundedAt"), n(r, "terminationStaffId"),

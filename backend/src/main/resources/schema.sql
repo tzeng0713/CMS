@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS refunds (
   contract_id BIGINT,
   charge_list_id BIGINT,
   company_name VARCHAR(255),
-  reason VARCHAR(500),
+  refund_reason VARCHAR(500),
   adjustment_amount DECIMAL(12,2) DEFAULT 0,
   adjustment_note VARCHAR(1000),
   deduction_total DECIMAL(12,2),

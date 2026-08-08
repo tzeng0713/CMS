@@ -1,5 +1,7 @@
 # refunds 資料表欄位說明
 
+> 完整功能規格與流程（狀態機、審核流程、超額扣款轉應收帳款、API、前端操作）請見 [refund-feature-spec.md](refund-feature-spec.md)。本文件僅列欄位定義。
+
 ## 基本資訊
 
 | 欄位名稱 | 資料型別 | 必填 | 說明 |
@@ -14,7 +16,7 @@
 
 | 欄位名稱 | 資料型別 | 必填 | 說明 |
 |----------|----------|------|------|
-| `reason` | VARCHAR(500) | | 退款原因：`正常退租` / `中途解約` / `其他` |
+| `refund_reason` | VARCHAR(500) | | 退款原因（原欄位名 `reason`，已透過 migration 改名） |
 
 ## 金額計算
 
@@ -39,7 +41,7 @@
 | 欄位名稱 | 資料型別 | 必填 | 說明 |
 |----------|----------|------|------|
 | `termination_staff_id` | BIGINT | | 解約職員編號（FK → staff） |
-| `refund_status` | VARCHAR(20) | | 退款狀態：`待審核` / `已撥款` / `已作廢` |
+| `refund_status` | VARCHAR(20) | | 退款狀態：`草稿` / `待審核` / `審核通過` / `已退款` / `已取消` |
 | `refunded_at` | VARCHAR(30) | | 退款時間（撥款後押上的日期） |
 
 ## 建立資訊
@@ -62,3 +64,7 @@
 |----------|----------|------|------|
 | `updated_by` | BIGINT | | 最後修改人（FK → staff） |
 | `updated_at` | TIMESTAMP | | 最後修改時間（自動更新） |
+
+## 超額扣款的應收帳款
+
+退款扣款總額大於應退金額時，系統**不會**另外建表，而是自動在既有的 `charge_lists`（收費清單）表建立一筆未結清紀錄，並透過 `refunds.charge_list_id` 連結。完整規則見 [refund-feature-spec.md](refund-feature-spec.md#22-應收帳款共用-charge_lists不新增資料表)。

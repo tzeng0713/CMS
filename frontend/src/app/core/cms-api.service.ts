@@ -57,6 +57,7 @@ export interface AuthUser {
   canEditAllBranches: boolean;
   canViewAllOffices: boolean;
   canManageBranch: boolean;
+  canReviewRefund: boolean;
 }
 
 export interface CustomerSummary {
@@ -292,6 +293,76 @@ export interface PagedResult<T> {
   pageSize: number;
 }
 
+export interface RefundSummary {
+  refund_id: number;
+  customer_id: number;
+  contract_id: number;
+  charge_list_id: number | null;
+  company_name: string | null;
+  matched_company_name: string | null;
+  tax_id: string | null;
+  contract_deposit: number | null;
+  refund_reason: string | null;
+  adjustment_amount: number;
+  adjustment_note: string | null;
+  deduction_total: number;
+  refund_amount: number;
+  refund_status: string;
+  payment_method: string | null;
+  bank_code: string | null;
+  bank_account: string | null;
+  bank_account_name: string | null;
+  refunded_at: string | null;
+  termination_staff_id: number | null;
+  termination_staff_name: string | null;
+  created_by: number | null;
+  created_by_name: string | null;
+  created_at: string;
+  reviewed_by: number | null;
+  reviewed_by_name: string | null;
+  reviewed_at: string | null;
+  updated_by: number | null;
+  updated_at: string;
+  message?: string;
+}
+
+export interface RefundPayload {
+  customerId?: number;
+  contractId?: number;
+  chargeListId?: number | null;
+  refundReason?: string;
+  adjustmentAmount?: number;
+  adjustmentNote?: string;
+  deductionTotal?: number;
+  paymentMethod?: string;
+  bankCode?: string;
+  bankAccount?: string;
+  bankAccountName?: string;
+  refundStatus?: string;
+  refundedAt?: string;
+  staffId?: number;
+}
+
+export interface RefundSearchFilters {
+  companyName?: string;
+  taxId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+  sortBy?: string;
+  sortDir?: string;
+}
+
+export interface ImportChargeListResult {
+  customerId: number;
+  contractId: number | null;
+  chargeListId: number;
+  baseAmount: number;
+  deductionTotal: number;
+}
+
 @Injectable({ providedIn: 'root' })
 export class CmsApiService {
   private readonly baseUrl = environment.apiBaseUrl;
@@ -446,8 +517,35 @@ export class CmsApiService {
     return this.http.put<ChargeListSummary>(`${this.baseUrl}/charge-lists/${id}`, payload);
   }
 
-  refunds(): Observable<Array<Record<string, unknown>>> {
-    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/refunds`);
+  refunds(filters: RefundSearchFilters = {}): Observable<PagedResult<RefundSummary>> {
+    const params = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    );
+    return this.http.get<PagedResult<RefundSummary>>(`${this.baseUrl}/refunds`, { params });
+  }
+
+  refundDetail(id: number): Observable<RefundSummary> {
+    return this.http.get<RefundSummary>(`${this.baseUrl}/refunds/${id}`);
+  }
+
+  createRefund(payload: RefundPayload): Observable<RefundSummary> {
+    return this.http.post<RefundSummary>(`${this.baseUrl}/refunds`, payload);
+  }
+
+  updateRefund(id: number, payload: RefundPayload): Observable<RefundSummary> {
+    return this.http.put<RefundSummary>(`${this.baseUrl}/refunds/${id}`, payload);
+  }
+
+  cancelRefund(id: number, staffId: number): Observable<RefundSummary> {
+    return this.http.patch<RefundSummary>(`${this.baseUrl}/refunds/${id}/cancel`, { staffId });
+  }
+
+  reviewRefund(id: number, reviewerId: number): Observable<RefundSummary> {
+    return this.http.patch<RefundSummary>(`${this.baseUrl}/refunds/${id}/review`, { reviewerId });
+  }
+
+  importChargeListForRefund(chargeListId: number): Observable<ImportChargeListResult> {
+    return this.http.post<ImportChargeListResult>(`${this.baseUrl}/refunds/import-charge-list`, { chargeListId });
   }
 
   createRentPayment(payload: RentPaymentPayload): Observable<Record<string, unknown>> {

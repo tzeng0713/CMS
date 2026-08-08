@@ -213,7 +213,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
     }
 
     private void migrateRefundsTable() {
-        // rename note → adjustment_note (MySQL only; H2 gets clean schema from schema.sql)
+        // rename note → adjustment_note, reason → refund_reason (MySQL only; H2 gets clean schema from schema.sql)
         jdbc.execute((ConnectionCallback<Void>) connection -> {
             String db = connection.getMetaData().getDatabaseProductName().toLowerCase();
             if (!db.contains("mysql")) return null;
@@ -226,6 +226,16 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
             }
             if (hasNote && !hasAdjNote) {
                 jdbc.execute("ALTER TABLE refunds CHANGE note adjustment_note VARCHAR(1000)");
+            }
+            boolean hasReason = false, hasRefundReason = false;
+            try (var cols = connection.getMetaData().getColumns(null, null, "refunds", "reason")) {
+                hasReason = cols.next();
+            }
+            try (var cols = connection.getMetaData().getColumns(null, null, "refunds", "refund_reason")) {
+                hasRefundReason = cols.next();
+            }
+            if (hasReason && !hasRefundReason) {
+                jdbc.execute("ALTER TABLE refunds CHANGE reason refund_reason VARCHAR(500)");
             }
             return null;
         });
@@ -251,7 +261,14 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         addForeignKeyIfMissing("refunds", "fk_refunds_reviewed_by", "reviewed_by", "staff", "staff_id");
         addIndexIfMissing("refunds", "idx_refunds_status", "refund_status");
         addIndexIfMissing("refunds", "idx_refunds_refunded_at", "refunded_at");
+
+        jdbc.update("""
+                UPDATE refunds
+                SET refund_status = CASE WHEN refunded_at IS NOT NULL THEN '已退款' ELSE '草稿' END
+                WHERE refund_status IS NULL OR refund_status = ''
+                """);
     }
+
 
     private void migrateChargeListsTable() {
         migrateChargeListsFeeMonth();
