@@ -24,11 +24,11 @@ public class BranchService extends CmsJdbcSupport {
         Long id = nextId("branches", "branch_id");
         jdbc.update("""
                 INSERT INTO branches
-                    (branch_id, branch_name, branch_code, branch_address, tax_id, bank_account, bank_branch, bank_account_name)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    (branch_id, branch_name, company_name, branch_code, branch_address, tax_id, bank_account, bank_branch, bank_account_name)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                id, normalized.branchName(), normalized.branchCode(), normalized.branchAddress(), normalized.taxId(),
-                normalized.bankAccount(), normalized.bankBranch(), normalized.bankAccountName());
+                id, normalized.branchName(), normalized.companyName(), normalized.branchCode(), normalized.branchAddress(),
+                normalized.taxId(), normalized.bankAccount(), normalized.bankBranch(), normalized.bankAccountName());
         return jdbc.queryForMap("SELECT * FROM branches WHERE branch_id = ?", id);
     }
 
@@ -36,24 +36,25 @@ public class BranchService extends CmsJdbcSupport {
         BranchRequest normalized = validate(request);
         jdbc.update("""
                 UPDATE branches
-                SET branch_name = ?, branch_code = ?, branch_address = ?, tax_id = ?,
+                SET branch_name = ?, company_name = ?, branch_code = ?, branch_address = ?, tax_id = ?,
                     bank_account = ?, bank_branch = ?, bank_account_name = ?
                 WHERE branch_id = ?
                 """,
-                normalized.branchName(), normalized.branchCode(), normalized.branchAddress(), normalized.taxId(),
-                normalized.bankAccount(), normalized.bankBranch(), normalized.bankAccountName(), id);
+                normalized.branchName(), normalized.companyName(), normalized.branchCode(), normalized.branchAddress(),
+                normalized.taxId(), normalized.bankAccount(), normalized.bankBranch(), normalized.bankAccountName(), id);
         return jdbc.queryForMap("SELECT * FROM branches WHERE branch_id = ?", id);
     }
 
     private BranchRequest validate(BranchRequest request) {
         String name = requiredBranchName(request.branchName());
+        String companyName = optionalPattern(request.companyName(), "companyName", 100, null);
         String branchCode = optionalPattern(request.branchCode(), "branchCode", 50, "^\\d+$");
         String branchAddress = optionalPattern(request.branchAddress(), "branchAddress", 255, null);
         String taxId = optionalPattern(request.taxId(), "taxId", 8, "^\\d{8}$");
         String bankAccount = optionalPattern(request.bankAccount(), "bankAccount", 30, "^\\d+$");
         String bankBranch = optionalPattern(request.bankBranch(), "bankBranch", 100, null);
         String bankAccountName = optionalPattern(request.bankAccountName(), "bankAccountName", 100, null);
-        return new BranchRequest(name, branchCode, branchAddress, taxId, bankAccount, bankBranch, bankAccountName);
+        return new BranchRequest(name, companyName, branchCode, branchAddress, taxId, bankAccount, bankBranch, bankAccountName);
     }
 
     private String requiredBranchName(String value) {

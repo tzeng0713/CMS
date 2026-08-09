@@ -381,6 +381,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
     }
 
     private void migrateBranchFields() {
+        addColumnIfMissing("branches", "company_name",      "VARCHAR(100)");
         addColumnIfMissing("branches", "branch_code",       "VARCHAR(50)");
         addColumnIfMissing("branches", "branch_address",    "VARCHAR(255)");
         addColumnIfMissing("branches", "tax_id",            "VARCHAR(30)");

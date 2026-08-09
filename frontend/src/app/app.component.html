@@ -1203,6 +1203,10 @@
               <input name="newBranchName" [(ngModel)]="newBranchForm.branchName" required maxlength="100" />
             </label>
             <label>
+              公司名稱
+              <input name="newBranchCompanyName" [(ngModel)]="newBranchForm.companyName" maxlength="100" placeholder="通報公文用之公司全名" />
+            </label>
+            <label>
               分館編號
               <input name="newBranchCode" [ngModel]="newBranchForm.branchCode" (ngModelChange)="newBranchForm.branchCode = digitsOnly($event, 50)" inputmode="numeric" maxlength="50" pattern="\d*" />
             </label>
@@ -1246,6 +1250,10 @@
               <input name="editBranchName" [(ngModel)]="branchEditForm.branchName" required maxlength="100" />
             </label>
             <label>
+              公司名稱
+              <input name="editBranchCompanyName" [(ngModel)]="branchEditForm.companyName" maxlength="100" placeholder="通報公文用之公司全名" />
+            </label>
+            <label>
               分館編號
               <input name="editBranchCode" [ngModel]="branchEditForm.branchCode" (ngModelChange)="branchEditForm.branchCode = digitsOnly($event, 50)" inputmode="numeric" maxlength="50" pattern="\d*" />
             </label>
@@ -1280,6 +1288,7 @@
           <div class="simple-row header branch-row">
             <span>編號</span>
             <span>分館名稱</span>
+            <span>公司名稱</span>
             <span>分館編號</span>
             <span>分館地址</span>
             <span>統一編號</span>
@@ -1291,6 +1300,7 @@
           <div class="simple-row branch-row" *ngFor="let row of branchRows()">
             <span>{{ row.branch_id }}</span>
             <span>{{ row.branch_name }}</span>
+            <span>{{ row.company_name }}</span>
             <span>{{ row.branch_code }}</span>
             <span>{{ row.branch_address }}</span>
             <span>{{ row.tax_id }}</span>

@@ -179,6 +179,7 @@ export interface OfficePayload {
 export interface BranchSummary {
   branch_id: number;
   branch_name: string;
+  company_name: string | null;
   branch_code: string | null;
   branch_address: string | null;
   tax_id: string | null;
@@ -189,6 +190,7 @@ export interface BranchSummary {
 
 export interface BranchPayload {
   branchName: string;
+  companyName?: string;
   branchCode?: string;
   branchAddress?: string;
   taxId?: string;

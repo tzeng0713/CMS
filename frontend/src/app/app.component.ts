@@ -167,6 +167,7 @@ const emptyOfficeForm = (): OfficeForm => ({
 
 type BranchForm = {
   branchName: string;
+  companyName: string;
   branchCode: string;
   branchAddress: string;
   taxId: string;
@@ -177,6 +178,7 @@ type BranchForm = {
 
 const emptyBranchForm = (): BranchForm => ({
   branchName: '',
+  companyName: '',
   branchCode: '',
   branchAddress: '',
   taxId: '',
@@ -710,6 +712,7 @@ export class AppComponent implements OnInit {
     this.editingBranch.set(branch);
     this.branchEditForm = {
       branchName: branch.branch_name ?? '',
+      companyName: branch.company_name ?? '',
       branchCode: branch.branch_code ?? '',
       branchAddress: branch.branch_address ?? '',
       taxId: branch.tax_id ?? '',
@@ -757,6 +760,7 @@ export class AppComponent implements OnInit {
   private toBranchPayload(form: BranchForm): BranchPayload {
     return {
       branchName: form.branchName.trim(),
+      companyName: form.companyName.trim() || undefined,
       branchCode: form.branchCode.trim() || undefined,
       branchAddress: form.branchAddress.trim() || undefined,
       taxId: form.taxId.trim() || undefined,
@@ -773,6 +777,10 @@ export class AppComponent implements OnInit {
     }
     if (name.length > 100) {
       return '分館名稱長度不可超過 100 個字元。';
+    }
+    const companyName = form.companyName.trim();
+    if (companyName.length > 100) {
+      return '公司名稱長度不可超過 100 個字元。';
     }
     const code = form.branchCode.trim();
     if (code && (!/^\d+$/.test(code) || code.length > 50)) {

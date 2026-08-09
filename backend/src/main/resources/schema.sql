@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 CREATE TABLE IF NOT EXISTS branches (
   branch_id BIGINT PRIMARY KEY,
   branch_name VARCHAR(100) NOT NULL,
+  company_name VARCHAR(100),
   branch_code VARCHAR(50),
   branch_address VARCHAR(255),
   tax_id VARCHAR(30),
