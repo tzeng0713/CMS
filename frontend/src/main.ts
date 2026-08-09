@@ -21,6 +21,7 @@ const routes: Routes = [
   { path: 'charges', component: RouteSinkComponent },
   { path: 'refunds', component: RouteSinkComponent },
   { path: 'targets', component: RouteSinkComponent },
+  { path: 'tax-bureau-notices', component: RouteSinkComponent },
   { path: '**', redirectTo: 'home' }
 ];
 

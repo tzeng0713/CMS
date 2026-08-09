@@ -25,7 +25,11 @@ import {
   RentPaymentPayload,
   RefundPayload,
   RefundSearchFilters,
-  RefundSummary
+  RefundSummary,
+  TaxBureauNoticeBranchInfo,
+  TaxBureauNoticeGroup,
+  TaxBureauNoticeItem,
+  TaxBureauNoticeType
 } from './core/cms-api.service';
 
 type ViewKey =
@@ -43,7 +47,8 @@ type ViewKey =
   | 'targets'
   | 'office-search'
   | 'office-new'
-  | 'branch-management';
+  | 'branch-management'
+  | 'tax-bureau-notices';
 
 type NotificationKind = 'expiring' | 'unpaid' | 'incomplete';
 
@@ -310,7 +315,8 @@ export class AppComponent implements OnInit {
       children: [
         { key: 'charges', label: '收費清單' },
         { key: 'refunds', label: '退款紀錄' },
-        { key: 'targets', label: '業績目標' }
+        { key: 'targets', label: '業績目標' },
+        { key: 'tax-bureau-notices', label: '國稅局通報' }
       ]
     }
   ];
@@ -367,6 +373,14 @@ export class AppComponent implements OnInit {
   refundCustomerOptions = signal<CustomerSummary[]>([]);
   selectedRefundCustomer = signal<CustomerDetail | null>(null);
   refundImportChargeListId: number | null = null;
+  taxNoticeYearMonth = this.currentMonthValue();
+  taxNoticeType: TaxBureauNoticeType = 'BOTH';
+  taxNoticeGroups = signal<TaxBureauNoticeGroup[]>([]);
+  taxNoticeUnassigned = signal<TaxBureauNoticeItem[]>([]);
+  taxNoticeSelected = signal<Set<string>>(new Set());
+  taxNoticeBranchInfo = signal<Record<number, TaxBureauNoticeBranchInfo>>({});
+  taxNoticeLoading = signal(false);
+  taxNoticeGenerating = signal(false);
   salesTargets = signal<Array<Record<string, unknown>>>([]);
   newCustomerOptions = signal<CustomerSummary[]>([]);
   rentCustomerOptions = signal<CustomerSummary[]>([]);
@@ -579,6 +593,9 @@ export class AppComponent implements OnInit {
         break;
       case 'targets':
         this.loadMetadata();
+        break;
+      case 'tax-bureau-notices':
+        this.loadTaxBureauNoticePreview();
         break;
     }
   }
@@ -1798,6 +1815,153 @@ export class AppComponent implements OnInit {
     };
   }
 
+  loadTaxBureauNoticePreview(): void {
+    this.taxNoticeLoading.set(true);
+    this.api.taxBureauNoticePreview(this.taxNoticeYearMonth, this.taxNoticeType).subscribe({
+      next: (preview) => {
+        this.taxNoticeLoading.set(false);
+        this.taxNoticeGroups.set(preview.groups);
+        this.taxNoticeUnassigned.set(preview.unassigned);
+        const selected = new Set<string>();
+        preview.groups.forEach((group) =>
+          group.items.forEach((item) => selected.add(this.taxNoticeItemKey(item)))
+        );
+        this.taxNoticeSelected.set(selected);
+        const info = { ...this.taxNoticeBranchInfo() };
+        preview.groups.forEach((group) => {
+          if (!info[group.branchId]) {
+            info[group.branchId] = this.loadStoredTaxNoticeBranchInfo(group.branchId);
+          }
+        });
+        this.taxNoticeBranchInfo.set(info);
+      },
+      error: () => {
+        this.taxNoticeLoading.set(false);
+        this.error.set('無法載入國稅局通報名單。');
+      }
+    });
+  }
+
+  taxNoticeItemKey(item: TaxBureauNoticeItem): string {
+    return `${item.contractId}-${item.moveType}`;
+  }
+
+  isTaxNoticeItemSelected(item: TaxBureauNoticeItem): boolean {
+    return this.taxNoticeSelected().has(this.taxNoticeItemKey(item));
+  }
+
+  toggleTaxNoticeItem(item: TaxBureauNoticeItem): void {
+    const key = this.taxNoticeItemKey(item);
+    const next = new Set(this.taxNoticeSelected());
+    if (next.has(key)) {
+      next.delete(key);
+    } else {
+      next.add(key);
+    }
+    this.taxNoticeSelected.set(next);
+  }
+
+  toggleTaxNoticeGroup(group: TaxBureauNoticeGroup, checked: boolean): void {
+    const next = new Set(this.taxNoticeSelected());
+    group.items.forEach((item) => {
+      const key = this.taxNoticeItemKey(item);
+      if (checked) {
+        next.add(key);
+      } else {
+        next.delete(key);
+      }
+    });
+    this.taxNoticeSelected.set(next);
+  }
+
+  isTaxNoticeGroupFullySelected(group: TaxBureauNoticeGroup): boolean {
+    return group.items.length > 0 && group.items.every((item) => this.isTaxNoticeItemSelected(item));
+  }
+
+  toggleTaxNoticeGroupSelection(group: TaxBureauNoticeGroup): void {
+    this.toggleTaxNoticeGroup(group, !this.isTaxNoticeGroupFullySelected(group));
+  }
+
+  taxNoticeBranchInfoFor(branchId: number): TaxBureauNoticeBranchInfo {
+    return this.taxNoticeBranchInfo()[branchId] ?? { branchId, taxOfficeName: '', responsiblePerson: '', contactPhone: '' };
+  }
+
+  updateTaxNoticeBranchInfo(branchId: number, field: 'taxOfficeName' | 'responsiblePerson' | 'contactPhone', value: string): void {
+    const info = { ...this.taxNoticeBranchInfo() };
+    const current = info[branchId] ?? { branchId, taxOfficeName: '', responsiblePerson: '', contactPhone: '' };
+    const updated = { ...current, [field]: value };
+    info[branchId] = updated;
+    this.taxNoticeBranchInfo.set(info);
+    this.storeTaxNoticeBranchInfo(updated);
+  }
+
+  hasTaxNoticeSelection(): boolean {
+    return this.taxNoticeSelected().size > 0;
+  }
+
+  generateTaxBureauNotice(): void {
+    const selected = this.taxNoticeSelected();
+    const items = this.taxNoticeGroups()
+      .flatMap((group) => group.items)
+      .filter((item) => selected.has(this.taxNoticeItemKey(item)))
+      .map((item) => ({ contractId: item.contractId, moveType: item.moveType }));
+    if (!items.length) {
+      this.error.set('請至少選擇一筆要通報的公司。');
+      return;
+    }
+    const branchIds = new Set(this.taxNoticeGroups().map((group) => group.branchId));
+    const branchInfo = Array.from(branchIds).map((branchId) => this.taxNoticeBranchInfoFor(branchId));
+
+    this.taxNoticeGenerating.set(true);
+    this.api.generateTaxBureauNotice({ yearMonth: this.taxNoticeYearMonth, items, branchInfo }).subscribe({
+      next: (blob) => {
+        this.taxNoticeGenerating.set(false);
+        this.error.set('');
+        this.success.set('國稅局通報檔案已產生。');
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `國稅局通報_${this.taxNoticeYearMonth}.xlsx`;
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => {
+        this.taxNoticeGenerating.set(false);
+        this.error.set('國稅局通報檔案產生失敗。');
+      }
+    });
+  }
+
+  private taxNoticeBranchInfoStorageKey(branchId: number): string {
+    return `cmsTaxNoticeBranchInfo:${branchId}`;
+  }
+
+  private loadStoredTaxNoticeBranchInfo(branchId: number): TaxBureauNoticeBranchInfo {
+    try {
+      const raw = localStorage.getItem(this.taxNoticeBranchInfoStorageKey(branchId));
+      if (!raw) {
+        return { branchId, taxOfficeName: '', responsiblePerson: '', contactPhone: '' };
+      }
+      const parsed = JSON.parse(raw);
+      return {
+        branchId,
+        taxOfficeName: parsed.taxOfficeName ?? '',
+        responsiblePerson: parsed.responsiblePerson ?? '',
+        contactPhone: parsed.contactPhone ?? ''
+      };
+    } catch {
+      return { branchId, taxOfficeName: '', responsiblePerson: '', contactPhone: '' };
+    }
+  }
+
+  private storeTaxNoticeBranchInfo(info: TaxBureauNoticeBranchInfo): void {
+    try {
+      localStorage.setItem(this.taxNoticeBranchInfoStorageKey(info.branchId), JSON.stringify(info));
+    } catch {
+      // localStorage unavailable (e.g. private browsing) — form still works for this session.
+    }
+  }
+
   loadRefunds(): void {
     this.api.refunds({
       ...this.refundFilters,
@@ -2403,7 +2567,8 @@ export class AppComponent implements OnInit {
       '/staff': 'staff-overview',
       '/charges': 'charges',
       '/refunds': 'refunds',
-      '/targets': 'targets'
+      '/targets': 'targets',
+      '/tax-bureau-notices': 'tax-bureau-notices'
     };
     this.activateView(routeMap[path] ?? 'home');
   }
@@ -2425,7 +2590,8 @@ export class AppComponent implements OnInit {
       'staff-overview': '/staff',
       charges: '/charges',
       refunds: '/refunds',
-      targets: '/targets'
+      targets: '/targets',
+      'tax-bureau-notices': '/tax-bureau-notices'
     };
     return routeMap[view];
   }

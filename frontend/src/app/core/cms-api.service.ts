@@ -365,6 +365,56 @@ export interface ImportChargeListResult {
   deductionTotal: number;
 }
 
+export type TaxBureauNoticeType = 'MOVE_OUT' | 'MOVE_IN' | 'BOTH';
+
+export interface TaxBureauNoticeItem {
+  contractId: number;
+  customerId: number;
+  companyName: string;
+  taxId: string | null;
+  officeNo: string | null;
+  moveType: 'MOVE_OUT' | 'MOVE_IN';
+  moveTypeLabel: string;
+  noticeDate: string;
+  noticeDateText: string;
+}
+
+export interface TaxBureauNoticeGroup {
+  branchId: number;
+  branchName: string;
+  branchCompanyName: string | null;
+  branchCode: string | null;
+  branchAddress: string | null;
+  moveType: 'MOVE_OUT' | 'MOVE_IN';
+  moveTypeLabel: string;
+  items: TaxBureauNoticeItem[];
+}
+
+export interface TaxBureauNoticePreview {
+  yearMonth: string;
+  type: TaxBureauNoticeType;
+  groups: TaxBureauNoticeGroup[];
+  unassigned: TaxBureauNoticeItem[];
+}
+
+export interface TaxBureauNoticeSelection {
+  contractId: number;
+  moveType: 'MOVE_OUT' | 'MOVE_IN';
+}
+
+export interface TaxBureauNoticeBranchInfo {
+  branchId: number;
+  taxOfficeName?: string;
+  responsiblePerson?: string;
+  contactPhone?: string;
+}
+
+export interface TaxBureauNoticeGenerateRequest {
+  yearMonth: string;
+  items: TaxBureauNoticeSelection[];
+  branchInfo: TaxBureauNoticeBranchInfo[];
+}
+
 @Injectable({ providedIn: 'root' })
 export class CmsApiService {
   private readonly baseUrl = environment.apiBaseUrl;
@@ -560,5 +610,15 @@ export class CmsApiService {
 
   metadata(): Observable<Record<string, unknown>> {
     return this.http.get<Record<string, unknown>>(`${this.baseUrl}/metadata`);
+  }
+
+  taxBureauNoticePreview(yearMonth: string, type: TaxBureauNoticeType = 'BOTH'): Observable<TaxBureauNoticePreview> {
+    return this.http.get<TaxBureauNoticePreview>(`${this.baseUrl}/tax-bureau-notices/preview`, {
+      params: { yearMonth, type }
+    });
+  }
+
+  generateTaxBureauNotice(payload: TaxBureauNoticeGenerateRequest): Observable<Blob> {
+    return this.http.post(`${this.baseUrl}/tax-bureau-notices/generate`, payload, { responseType: 'blob' });
   }
 }

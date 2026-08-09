@@ -2192,6 +2192,113 @@
         </div>
       </section>
     </section>
+
+    <section class="single-view" *ngIf="activeView() === 'tax-bureau-notices'">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>國稅局通報</h2>
+            <p>
+              依月份彙整當月遷離／遷入的公司名單，產生通報檔案（.xlsx）供下載送件。系統依租約起租日／終止日自動篩選，送出前請確認名單是否需要人工增減。
+            </p>
+          </div>
+        </div>
+
+        <div class="tax-notice-filters">
+          <label>
+            月份
+            <input type="month" name="taxNoticeYearMonth" [(ngModel)]="taxNoticeYearMonth" />
+          </label>
+          <label>
+            類型
+            <select name="taxNoticeType" [(ngModel)]="taxNoticeType">
+              <option value="BOTH">遷離＋遷入</option>
+              <option value="MOVE_OUT">僅遷離</option>
+              <option value="MOVE_IN">僅遷入</option>
+            </select>
+          </label>
+          <button type="button" (click)="loadTaxBureauNoticePreview()" [disabled]="taxNoticeLoading()">
+            {{ taxNoticeLoading() ? '查詢中…' : '查詢' }}
+          </button>
+          <button
+            type="button"
+            (click)="generateTaxBureauNotice()"
+            [disabled]="taxNoticeGenerating() || !hasTaxNoticeSelection()"
+          >
+            {{ taxNoticeGenerating() ? '產生中…' : '產生並下載通報檔案' }}
+          </button>
+        </div>
+
+        <div class="tax-notice-warning" *ngIf="taxNoticeUnassigned().length">
+          <strong>以下租約未設定辦公室／分館，無法自動歸入通報名單，請先至租約管理補上辦公室資料：</strong>
+          <ul>
+            <li *ngFor="let item of taxNoticeUnassigned()">
+              {{ item.companyName }}（{{ item.taxId }}）－{{ item.moveTypeLabel }} {{ item.noticeDateText }}
+            </li>
+          </ul>
+        </div>
+
+        <div class="tax-notice-group" *ngFor="let group of taxNoticeGroups()">
+          <div class="tax-notice-group-header">
+            <div>
+              <h3>{{ group.branchName }}（{{ group.moveTypeLabel }}）</h3>
+              <p>門牌 {{ group.branchCode }}．{{ group.branchAddress }}</p>
+            </div>
+            <label class="tax-notice-select-all">
+              <input type="checkbox" [checked]="isTaxNoticeGroupFullySelected(group)" (change)="toggleTaxNoticeGroupSelection(group)" />
+              全選
+            </label>
+          </div>
+
+          <div class="tax-notice-branch-info">
+            <label>
+              受文者（國稅局分局）
+              <input
+                [ngModel]="taxNoticeBranchInfoFor(group.branchId).taxOfficeName"
+                (ngModelChange)="updateTaxNoticeBranchInfo(group.branchId, 'taxOfficeName', $event)"
+                name="taxOffice{{ group.branchId }}-{{ group.moveType }}"
+                placeholder="例：台北市國稅局大安分局"
+              />
+            </label>
+            <label>
+              負責人
+              <input
+                [ngModel]="taxNoticeBranchInfoFor(group.branchId).responsiblePerson"
+                (ngModelChange)="updateTaxNoticeBranchInfo(group.branchId, 'responsiblePerson', $event)"
+                name="taxPerson{{ group.branchId }}-{{ group.moveType }}"
+              />
+            </label>
+            <label>
+              電話
+              <input
+                [ngModel]="taxNoticeBranchInfoFor(group.branchId).contactPhone"
+                (ngModelChange)="updateTaxNoticeBranchInfo(group.branchId, 'contactPhone', $event)"
+                name="taxPhone{{ group.branchId }}-{{ group.moveType }}"
+              />
+            </label>
+          </div>
+
+          <div class="simple-table">
+            <div class="simple-row header tax-notice-row">
+              <span></span>
+              <span>公司名稱</span>
+              <span>統一編號</span>
+              <span>通報日期</span>
+            </div>
+            <div class="simple-row tax-notice-row" *ngFor="let item of group.items">
+              <span><input type="checkbox" [checked]="isTaxNoticeItemSelected(item)" (change)="toggleTaxNoticeItem(item)" /></span>
+              <span>{{ item.companyName }}</span>
+              <span>{{ item.taxId }}</span>
+              <span>{{ item.noticeDateText }}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="empty-hint" *ngIf="!taxNoticeGroups().length && !taxNoticeUnassigned().length && !taxNoticeLoading()">
+          本月無需通報的公司。
+        </div>
+      </section>
+    </section>
   </main>
   <router-outlet></router-outlet>
 </div>
