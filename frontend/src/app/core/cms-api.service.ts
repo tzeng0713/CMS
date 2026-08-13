@@ -80,8 +80,17 @@ export interface CustomerSummary {
   lease_status: string | null;
   rent: number | null;
   deposit: number | null;
+  signed_date_text: string | null;
+  end_date_text: string | null;
   office_no: string | null;
   branch_name: string | null;
+}
+
+export interface CustomerPage {
+  content: CustomerSummary[];
+  totalElements: number;
+  page: number;
+  pageSize: number;
 }
 
 export interface CustomerDetail extends CustomerSummary {
@@ -129,6 +138,7 @@ export interface CustomerSearchFilters {
   companyName?: string;
   taxId?: string;
   phone?: string;
+  accountInfo?: string;
   ownerName?: string;
   branchId?: number | null;
   officeNo?: string;
@@ -224,11 +234,25 @@ export interface ContractPayload {
   updatedBy?: number;
 }
 
+export interface ContractWithFirstPaymentPayload {
+  contract: ContractPayload;
+  firstPaymentAmount?: number | null;
+  firstPaymentDateText?: string;
+}
+
 export interface ContractSearchFilters {
   companyName?: string;
+  taxId?: string;
   startDateText?: string;
   endDateText?: string;
   leaseStatus?: string;
+}
+
+export interface RentPaymentSearchFilters {
+  companyName?: string;
+  taxId?: string;
+  paymentDateStartText?: string;
+  paymentDateEndText?: string;
 }
 
 export interface ChargeListSummary {
@@ -433,16 +457,20 @@ export class CmsApiService {
     return this.http.get<Dashboard>(`${this.baseUrl}/dashboard`);
   }
 
-  customers(searchOrFilters: string | CustomerSearchFilters = ''): Observable<CustomerSummary[]> {
-    const params =
-      typeof searchOrFilters === 'string'
-        ? searchOrFilters
-          ? { search: searchOrFilters }
-          : {}
-        : Object.fromEntries(
-            Object.entries(searchOrFilters).filter(([, value]) => value !== undefined && value !== null && value !== '')
-          );
-    return this.http.get<CustomerSummary[]>(`${this.baseUrl}/customers`, {
+  customers(searchOrFilters: string | CustomerSearchFilters = '', page = 0, pageSize = 20): Observable<CustomerPage> {
+    const params: Record<string, string | number> = { page, pageSize };
+    if (typeof searchOrFilters === 'string') {
+      if (searchOrFilters) {
+        params['search'] = searchOrFilters;
+      }
+    } else {
+      Object.entries(searchOrFilters).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '') {
+          params[key] = value;
+        }
+      });
+    }
+    return this.http.get<CustomerPage>(`${this.baseUrl}/customers`, {
       params
     });
   }
@@ -508,8 +536,12 @@ export class CmsApiService {
     return this.http.put<OfficeSummary>(`${this.baseUrl}/offices/${id}`, payload);
   }
 
-  contracts(searchOrFilters: string | ContractSearchFilters = ''): Observable<Array<Record<string, unknown>>> {
-    const params =
+  contracts(
+    searchOrFilters: string | ContractSearchFilters = '',
+    page = 0,
+    pageSize = 20
+  ): Observable<PagedResult<Record<string, unknown>>> {
+    const filters =
       typeof searchOrFilters === 'string'
         ? searchOrFilters
           ? { search: searchOrFilters }
@@ -517,13 +549,17 @@ export class CmsApiService {
         : Object.fromEntries(
             Object.entries(searchOrFilters).filter(([, value]) => value !== undefined && value !== null && value !== '')
           );
-    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/contracts`, {
-      params
+    return this.http.get<PagedResult<Record<string, unknown>>>(`${this.baseUrl}/contracts`, {
+      params: { ...filters, page, pageSize }
     });
   }
 
   createContract(payload: ContractPayload): Observable<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>(`${this.baseUrl}/contracts`, payload);
+  }
+
+  createContractWithFirstPayment(payload: ContractWithFirstPaymentPayload): Observable<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/contracts/with-first-payment`, payload);
   }
 
   latestContract(customerId: number): Observable<Record<string, unknown>> {
@@ -544,9 +580,21 @@ export class CmsApiService {
     return this.http.put<Record<string, unknown>>(`${this.baseUrl}/staff/${id}`, payload);
   }
 
-  rentPayments(search = ''): Observable<Array<Record<string, unknown>>> {
-    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/rent-payments`, {
-      params: search ? { search } : {}
+  rentPayments(
+    searchOrFilters: string | RentPaymentSearchFilters = '',
+    page = 0,
+    pageSize = 20
+  ): Observable<PagedResult<Record<string, unknown>>> {
+    const filters =
+      typeof searchOrFilters === 'string'
+        ? searchOrFilters
+          ? { search: searchOrFilters }
+          : {}
+        : Object.fromEntries(
+            Object.entries(searchOrFilters).filter(([, value]) => value !== undefined && value !== null && value !== '')
+          );
+    return this.http.get<PagedResult<Record<string, unknown>>>(`${this.baseUrl}/rent-payments`, {
+      params: { ...filters, page, pageSize }
     });
   }
 

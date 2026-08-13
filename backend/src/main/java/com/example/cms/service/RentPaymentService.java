@@ -5,7 +5,8 @@ import com.example.cms.service.support.CmsJdbcSupport;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Service
@@ -15,21 +16,55 @@ public class RentPaymentService extends CmsJdbcSupport {
         super(jdbc);
     }
 
-    public List<Map<String, Object>> rentPayments(String search) {
+    public Map<String, Object> rentPayments(String search, String companyName, String taxId,
+                                            String paymentDateStartText, String paymentDateEndText,
+                                            Integer page, Integer pageSize) {
         String searchText = search == null ? "" : search.trim();
-        String like = "%" + searchText + "%";
-        return jdbc.queryForList("""
-                SELECT rp.*, c.company_name, c.owner_name, c.tax_id
-                FROM rent_payments rp
-                JOIN customers c ON c.customer_id = rp.customer_id
+        String searchLike = "%" + searchText + "%";
+        String companyNameText = companyName == null ? "" : companyName.trim();
+        String companyNameLike = "%" + companyNameText + "%";
+        String taxIdText = taxId == null ? "" : taxId.trim();
+        String taxIdLike = "%" + taxIdText + "%";
+        String paymentDateStart = paymentDateStartText == null ? "" : paymentDateStartText.trim();
+        String paymentDateEnd = paymentDateEndText == null ? "" : paymentDateEndText.trim();
+        String where = """
                 WHERE (? = '%%'
                    OR c.company_name LIKE ?
                    OR c.owner_name LIKE ?
-                   OR c.tax_id LIKE ?
-                   OR rp.receipt_no LIKE ?)
-                ORDER BY rp.rent_payment_id DESC
-                LIMIT 300
-                """, like, like, like, like, like);
+                  OR c.tax_id LIKE ?
+                  OR rp.receipt_no LIKE ?)
+                  AND (? = '' OR c.company_name LIKE ?)
+                  AND (? = '' OR c.tax_id LIKE ?)
+                  AND (? = '' OR rp.payment_date_text >= ?)
+                  AND (? = '' OR rp.payment_date_text <= ?)
+                """;
+        Object[] filterArguments = {
+                searchLike, searchLike, searchLike, searchLike, searchLike,
+                companyNameText, companyNameLike, taxIdText, taxIdLike,
+                paymentDateStart, paymentDateStart, paymentDateEnd, paymentDateEnd
+        };
+        int size = pageSize == null || pageSize <= 0 ? 20 : Math.min(pageSize, 200);
+        int pageNumber = page == null || page < 0 ? 0 : page;
+        var pageArguments = new ArrayList<>(java.util.List.of(filterArguments));
+        pageArguments.add(size);
+        pageArguments.add(pageNumber * size);
+        var rows = jdbc.queryForList("""
+                SELECT rp.*, c.company_name, c.owner_name, c.tax_id
+                FROM rent_payments rp
+                JOIN customers c ON c.customer_id = rp.customer_id
+                """ + where + " ORDER BY rp.rent_payment_id DESC LIMIT ? OFFSET ?", pageArguments.toArray());
+        Long total = jdbc.queryForObject("""
+                SELECT COUNT(*)
+                FROM rent_payments rp
+                JOIN customers c ON c.customer_id = rp.customer_id
+                """ + where, Long.class, filterArguments);
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("content", rows);
+        result.put("totalElements", total == null ? 0L : total);
+        result.put("page", pageNumber);
+        result.put("pageSize", size);
+        return result;
     }
 
     public Map<String, Object> createRentPayment(RentPaymentRequest request) {
