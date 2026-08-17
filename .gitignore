@@ -22,6 +22,9 @@ outputs/
 *.xlsx
 PROJECT_AUDIT.md
 
+# Local use-case docs
+docs/*-use-cases.md
+
 # OS/editor files
 .DS_Store
 Thumbs.db
