@@ -11,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -24,8 +23,14 @@ public class RentPaymentController {
     }
 
     @GetMapping
-    public List<Map<String, Object>> rentPayments(@RequestParam(required = false) String search) {
-        return service.rentPayments(search);
+    public Map<String, Object> rentPayments(@RequestParam(required = false) String search,
+                                            @RequestParam(required = false) String companyName,
+                                            @RequestParam(required = false) String taxId,
+                                            @RequestParam(required = false) String paymentDateStartText,
+                                            @RequestParam(required = false) String paymentDateEndText,
+                                            @RequestParam(required = false) Integer page,
+                                            @RequestParam(required = false) Integer pageSize) {
+        return service.rentPayments(search, companyName, taxId, paymentDateStartText, paymentDateEndText, page, pageSize);
     }
 
     @PostMapping

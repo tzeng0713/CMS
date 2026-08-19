@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, ElementRef, OnInit, ViewChild, computed, signal } from '@angular/core';
+import { Component, ElementRef, HostListener, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import html2canvas from 'html2canvas';
@@ -29,7 +29,8 @@ import {
   TaxBureauNoticeBranchInfo,
   TaxBureauNoticeGroup,
   TaxBureauNoticeItem,
-  TaxBureauNoticeType
+  TaxBureauNoticeType,
+  RentPaymentSearchFilters
 } from './core/cms-api.service';
 
 type ViewKey =
@@ -51,6 +52,11 @@ type ViewKey =
   | 'tax-bureau-notices';
 
 type NotificationKind = 'expiring' | 'unpaid' | 'incomplete';
+
+type Toast = {
+  message: string;
+  kind: 'success' | 'error';
+};
 
 interface NavItem {
   key: ViewKey;
@@ -229,6 +235,10 @@ const emptyChargeListForm = (): ChargeListForm => ({
 });
 
 const CHARGE_LIST_LOGO_PATH = 'assets/afw-logo.png';
+const CHARGE_LIST_ISSUER_NAME = '全方位商務中心有限公司';
+const CHARGE_LIST_BANK_INFO = '華南銀行008(南京東路分行)';
+const CHARGE_LIST_BANK_ACCOUNT_NAME = '全方位商務中心有限公司';
+const CHARGE_LIST_BANK_ACCOUNT_NUMBER = '112-1011-03671';
 
 const emptyContractForm = (): ContractForm => ({
   customerId: null,
@@ -258,6 +268,11 @@ const emptyContractForm = (): ContractForm => ({
 })
 export class AppComponent implements OnInit {
   readonly chargeListLogoPath = CHARGE_LIST_LOGO_PATH;
+  readonly todayLabel = this.formatTodayLabel();
+  readonly chargeListIssuerName = CHARGE_LIST_ISSUER_NAME;
+  readonly chargeListBankInfo = CHARGE_LIST_BANK_INFO;
+  readonly chargeListBankAccountName = CHARGE_LIST_BANK_ACCOUNT_NAME;
+  readonly chargeListBankAccountNumber = CHARGE_LIST_BANK_ACCOUNT_NUMBER;
   readonly roleOptions = ['主管', '督導秘書', '一般秘書'];
   readonly statusOptions = [
     { value: 0, label: '租賃中' },
@@ -272,6 +287,15 @@ export class AppComponent implements OnInit {
   ];
   readonly contractRentalStatusOptions = ['登記', '辦公室', '登記+辦公室', '個人名義'];
   readonly contractStatusOptions = ['綁約中', '已解約'];
+
+  private formatTodayLabel(): string {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    const weekday = ['日', '一', '二', '三', '四', '五', '六'][today.getDay()];
+    return `${year}-${month}-${day} (${weekday})`;
+  }
 
   private readonly allNavGroups: NavGroup[] = [
     {
@@ -289,10 +313,10 @@ export class AppComponent implements OnInit {
       ]
     },
     {
-      label: '租金管理',
+      label: '對帳管理',
       children: [
-        { key: 'rent-search', label: '查詢租金' },
-        { key: 'rent-new', label: '新增租金' }
+        { key: 'rent-search', label: '查詢對帳' },
+        { key: 'rent-new', label: '新增對帳' }
       ]
     },
     {
@@ -340,11 +364,21 @@ export class AppComponent implements OnInit {
   currentUser = signal<AuthUser | null>(this.loadStoredUser());
   authMode = signal<'login' | 'register'>('login');
   activeView = signal<ViewKey>('home');
+  isNarrowViewport = signal(this.isNarrowWindow());
+  desktopSidebarCollapsed = signal(false);
+  mobileSidebarOpen = signal(false);
+  sidebarOpen = computed(() =>
+    this.isNarrowViewport() ? this.mobileSidebarOpen() : !this.desktopSidebarCollapsed()
+  );
   dashboard = signal<Dashboard | null>(null);
   expiringNotificationPage = signal(1);
   unpaidNotificationPage = signal(1);
   incompleteNotificationPage = signal(1);
   customers = signal<CustomerSummary[]>([]);
+  customerTotal = signal(0);
+  customerPage = signal(0);
+  customerPageSize = signal(20);
+  advancedFiltersOpen = signal(true);
   selectedCustomer = signal<CustomerDetail | null>(null);
   contracts = signal<Array<Record<string, unknown>>>([]);
   offices = signal<OfficeSummary[]>([]);
@@ -352,7 +386,13 @@ export class AppComponent implements OnInit {
   roles = signal<RoleSummary[]>([]);
   staffOptions = signal<Array<Record<string, unknown>>>([]);
   staffRows = signal<Array<Record<string, unknown>>>([]);
+  contractTotal = signal(0);
+  contractPage = signal(0);
+  contractPageSize = signal(20);
   rentPayments = signal<Array<Record<string, unknown>>>([]);
+  rentPaymentTotal = signal(0);
+  rentPaymentPage = signal(0);
+  rentPaymentPageSize = signal(20);
   chargeListRows = signal<ChargeListSummary[]>([]);
   chargeListTotal = signal(0);
   chargeListPage = signal(0);
@@ -397,12 +437,22 @@ export class AppComponent implements OnInit {
   editingCustomer = signal(false);
   error = signal('');
   success = signal('');
+  toast = signal<Toast | null>(null);
+  newCustomerFieldErrors = signal<Record<string, string>>({});
+  customerEditFieldErrors = signal<Record<string, string>>({});
+  private toastTimeoutId: ReturnType<typeof setTimeout> | null = null;
   search = '';
-  rentSearch = '';
+  rentPaymentFilters: RentPaymentSearchFilters = {
+    companyName: '',
+    taxId: '',
+    paymentDateStartText: '',
+    paymentDateEndText: ''
+  };
   customerFilters: CustomerSearchFilters = {
     companyName: '',
     taxId: '',
     phone: '',
+    accountInfo: '',
     ownerName: '',
     branchId: null,
     officeNo: '',
@@ -413,6 +463,7 @@ export class AppComponent implements OnInit {
   readonly notificationPageSize = 5;
   contractFilters: ContractSearchFilters = {
     companyName: '',
+    taxId: '',
     startDateText: '',
     endDateText: '',
     leaseStatus: ''
@@ -464,8 +515,11 @@ export class AppComponent implements OnInit {
   newCustomerLeaseImage: File | null = null;
   newCustomerFirstPaymentAmount: number | null = null;
   newCustomerFirstPaymentDateText = '';
+  customerNewStep = signal<1 | 2>(1);
   customerEditForm: CustomerForm = emptyCustomerForm();
   newContractForm: ContractForm = emptyContractForm();
+  newContractFirstPaymentAmount: number | null = null;
+  newContractFirstPaymentDateText = '';
   contractEditForm: ContractForm = emptyContractForm();
   newOfficeForm: OfficeForm = emptyOfficeForm();
   officeEditForm: OfficeForm = emptyOfficeForm();
@@ -487,14 +541,65 @@ export class AppComponent implements OnInit {
   refundEditForm: RefundForm = emptyRefundForm();
 
   @ViewChild('chargeListPrintArea') chargeListPrintArea?: ElementRef<HTMLDivElement>;
+  @ViewChild('newCompanyNameInput') newCompanyNameInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('editCompanyNameInput') editCompanyNameInput?: ElementRef<HTMLInputElement>;
 
   selectedCustomerId = computed(() => this.selectedCustomer()?.customer_id ?? null);
   sameOwnerCompanies = computed(() => this.selectedCustomer()?.sameOwnerCompanies ?? []);
   relatedCompanies = computed(() => this.selectedCustomer()?.relatedCompanies ?? []);
+  pageTitle = computed(() => {
+    const titles: Partial<Record<ViewKey, string>> = {
+      home: '客戶與租金作業總覽',
+      'customer-search': '查詢客戶',
+      'contract-search': '查詢租約',
+      'rent-search': '查詢對帳'
+    };
+    return titles[this.activeView()] ?? 'AFW 商務中心';
+  });
+  pageSubtitle = computed(() => {
+    const subtitles: Partial<Record<ViewKey, string>> = {
+      home: 'Customer Operations',
+      'customer-search': 'Customer Search',
+      'contract-search': 'Contract Search',
+      'rent-search': 'Reconciliation Search'
+    };
+    return subtitles[this.activeView()] ?? 'AFW Business Center';
+  });
+  customerTotalPages = computed(() => Math.max(1, Math.ceil(this.customerTotal() / this.customerPageSize())));
+  contractTotalPages = computed(() => Math.max(1, Math.ceil(this.contractTotal() / this.contractPageSize())));
+  rentPaymentTotalPages = computed(() => Math.max(1, Math.ceil(this.rentPaymentTotal() / this.rentPaymentPageSize())));
   chargeListTotalPages = computed(() => Math.max(1, Math.ceil(this.chargeListTotal() / this.chargeListPageSize)));
   refundTotalPages = computed(() => Math.max(1, Math.ceil(this.refundTotal() / this.refundPageSize)));
 
   constructor(private readonly api: CmsApiService, private readonly router: Router) {}
+
+  showToast(message: string, kind: Toast['kind'] = 'success'): void {
+    this.toast.set({ message, kind });
+    if (this.toastTimeoutId !== null) {
+      clearTimeout(this.toastTimeoutId);
+    }
+    this.toastTimeoutId = setTimeout(() => {
+      this.toast.set(null);
+      this.toastTimeoutId = null;
+    }, 3600);
+  }
+
+  clearNewCustomerFieldError(field: string): void {
+    const { [field]: _removed, ...remaining } = this.newCustomerFieldErrors();
+    this.newCustomerFieldErrors.set(remaining);
+  }
+
+  clearCustomerEditFieldError(field: string): void {
+    const { [field]: _removed, ...remaining } = this.customerEditFieldErrors();
+    this.customerEditFieldErrors.set(remaining);
+  }
+
+  private requireNewCustomerCompanyName(): void {
+    this.newCustomerFieldErrors.set({ companyName: '公司名稱為必填。' });
+    this.error.set('');
+    this.customerNewStep.set(1);
+    setTimeout(() => this.newCompanyNameInput?.nativeElement.focus(), 0);
+  }
 
   ngOnInit(): void {
     this.router.events.subscribe((event) => {
@@ -527,7 +632,32 @@ export class AppComponent implements OnInit {
     if (view === 'rent-new' && !this.canCreateRent()) {
       view = 'rent-search';
     }
+    this.closeSidebarAfterNavigation();
     this.router.navigateByUrl(this.pathForView(view));
+  }
+
+  toggleSidebar(): void {
+    if (this.isNarrowViewport()) {
+      this.mobileSidebarOpen.update((isOpen) => !isOpen);
+      return;
+    }
+    this.desktopSidebarCollapsed.update((isCollapsed) => !isCollapsed);
+  }
+
+  closeSidebarAfterNavigation(): void {
+    if (this.isNarrowViewport()) {
+      this.mobileSidebarOpen.set(false);
+    }
+  }
+
+  @HostListener('window:resize')
+  onWindowResize(): void {
+    this.isNarrowViewport.set(this.isNarrowWindow());
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscapeKey(): void {
+    this.closeSidebarAfterNavigation();
   }
 
   private activateView(view: ViewKey): void {
@@ -630,6 +760,8 @@ export class AppComponent implements OnInit {
     this.dashboard.set(null);
     this.selectedCustomer.set(null);
     this.customers.set([]);
+    this.customerTotal.set(0);
+    this.customerPage.set(0);
     this.contracts.set([]);
     this.rentPayments.set([]);
     this.chargeListRows.set([]);
@@ -711,7 +843,7 @@ export class AppComponent implements OnInit {
       next: (created) => {
         this.saving.set(false);
         this.error.set('');
-        this.success.set('分館已新增。');
+        this.showToast('分館已新增。');
         this.branchRows.update((rows) => [...rows, created]);
         this.branches.update((rows) => [...rows, created]);
         this.cancelCreateBranch();
@@ -758,7 +890,7 @@ export class AppComponent implements OnInit {
       next: (updated) => {
         this.saving.set(false);
         this.error.set('');
-        this.success.set('分館已更新。');
+        this.showToast('分館已更新。');
         this.branchRows.update((rows) => rows.map((r) => (r.branch_id === updated.branch_id ? updated : r)));
         this.branches.update((rows) => rows.map((r) => (r.branch_id === updated.branch_id ? updated : r)));
         this.cancelEditBranch();
@@ -873,7 +1005,7 @@ export class AppComponent implements OnInit {
       next: () => {
         this.saving.set(false);
         this.error.set('');
-        this.success.set('辦公室已新增。');
+        this.showToast('辦公室已新增。');
         this.newOfficeForm = emptyOfficeForm();
         this.setView('office-search');
         this.loadOfficeRows();
@@ -912,7 +1044,7 @@ export class AppComponent implements OnInit {
       next: (updated) => {
         this.saving.set(false);
         this.error.set('');
-        this.success.set('辦公室已更新。');
+        this.showToast('辦公室已更新。');
         this.officeRows.update((rows) => rows.map((r) => (r.office_id === updated.office_id ? updated : r)));
         this.cancelEditOffice();
       },
@@ -947,16 +1079,19 @@ export class AppComponent implements OnInit {
   }
 
   goHome(): void {
+    this.closeSidebarAfterNavigation();
     this.router.navigateByUrl('/home');
   }
 
   loadCustomers(): void {
     this.loading.set(true);
-    this.api.customers(this.customerFilters).subscribe({
+    this.api.customers(this.customerFilters, this.customerPage(), this.customerPageSize()).subscribe({
       next: (value) => {
-        this.customers.set(value);
+        this.customers.set(value.content);
+        this.customerTotal.set(value.totalElements);
+        this.customerPage.set(value.page);
         this.loading.set(false);
-        if (!value.length) {
+        if (!value.content.length) {
           this.selectedCustomer.set(null);
           this.editingCustomer.set(false);
         }
@@ -968,17 +1103,47 @@ export class AppComponent implements OnInit {
     });
   }
 
+  searchCustomers(): void {
+    this.customerPage.set(0);
+    this.loadCustomers();
+  }
+
+  toggleAdvancedFilters(): void {
+    this.advancedFiltersOpen.update((isOpen) => !isOpen);
+  }
+
+  changeCustomerPageSize(size: number): void {
+    const pageSize = Number(size);
+    if (![10, 20, 50].includes(pageSize) || pageSize === this.customerPageSize()) {
+      return;
+    }
+    this.customerPageSize.set(pageSize);
+    this.customerPage.set(0);
+    this.loadCustomers();
+  }
+
+  changeCustomerPage(delta: number): void {
+    const next = this.customerPage() + delta;
+    if (next < 0 || next >= this.customerTotalPages()) {
+      return;
+    }
+    this.customerPage.set(next);
+    this.loadCustomers();
+  }
+
   resetCustomerFilters(): void {
     this.customerFilters = {
       companyName: '',
       taxId: '',
       phone: '',
+      accountInfo: '',
       ownerName: '',
       branchId: null,
       officeNo: '',
       ownerBirthdayMonth: null,
       contactBirthdayMonth: null
     };
+    this.customerPage.set(0);
     this.loadCustomers();
   }
 
@@ -1002,11 +1167,28 @@ export class AppComponent implements OnInit {
     }
   }
 
+  goToNewCustomerStep(step: 1 | 2): void {
+    if (step === 2 && !this.newCustomerForm.companyName.trim()) {
+      this.requireNewCustomerCompanyName();
+      return;
+    }
+    this.customerNewStep.set(step);
+  }
+
+  cancelNewCustomer(): void {
+    if (this.hasNewCustomerChanges() && !window.confirm('尚未儲存的資料將會遺失，確定要取消嗎？')) {
+      return;
+    }
+    this.resetNewCustomerFlow();
+    this.router.navigateByUrl('/customers');
+  }
+
   selectCustomer(id: number): void {
     this.api.customerDetail(id).subscribe({
       next: (value) => {
         this.selectedCustomer.set(value);
         this.customerEditForm = this.formFromCustomer(value);
+        this.customerEditFieldErrors.set({});
         this.editingCustomer.set(false);
       },
       error: () => this.error.set('無法載入客戶詳細資料。')
@@ -1018,6 +1200,8 @@ export class AppComponent implements OnInit {
   }
 
   backToCustomerList(): void {
+    this.selectedCustomer.set(null);
+    this.editingCustomer.set(false);
     this.router.navigateByUrl('/customers');
   }
 
@@ -1027,6 +1211,7 @@ export class AppComponent implements OnInit {
         next: (value) => {
           this.selectedCustomer.set(value);
           this.customerEditForm = this.formFromCustomer(value);
+          this.customerEditFieldErrors.set({});
           this.editingCustomer.set(true);
         },
         error: () => this.error.set('無法載入客戶詳細資料。')
@@ -1036,6 +1221,7 @@ export class AppComponent implements OnInit {
     const detail = this.selectedCustomer();
     if (detail) {
       this.customerEditForm = this.formFromCustomer(detail);
+      this.customerEditFieldErrors.set({});
       this.editingCustomer.set(true);
     }
   }
@@ -1045,6 +1231,7 @@ export class AppComponent implements OnInit {
     if (detail) {
       this.customerEditForm = this.formFromCustomer(detail);
     }
+    this.customerEditFieldErrors.set({});
     this.editingCustomer.set(false);
   }
 
@@ -1071,6 +1258,7 @@ export class AppComponent implements OnInit {
   fillExistingCustomerName(customer: CustomerSummary): void {
     this.newCustomerForm.companyName = customer.company_name;
     this.newCustomerOptions.set([]);
+    this.clearNewCustomerFieldError('companyName');
   }
 
   addRelatedCompany(): void {
@@ -1091,9 +1279,10 @@ export class AppComponent implements OnInit {
 
   createCustomer(): void {
     if (!this.newCustomerForm.companyName.trim()) {
-      this.error.set('公司名稱為必填。');
+      this.requireNewCustomerCompanyName();
       return;
     }
+    this.clearNewCustomerFieldError('companyName');
     if (!this.validContractStaff(this.newCustomerContractForm)) {
       return;
     }
@@ -1124,16 +1313,11 @@ export class AppComponent implements OnInit {
         next: (value) => {
           this.saving.set(false);
           this.error.set('');
-          this.success.set('客戶與租約已新增。');
+          this.showToast('客戶與租約已新增。');
           this.selectedCustomer.set(value);
           this.customerEditForm = this.formFromCustomer(value);
           this.editingCustomer.set(false);
-          this.newCustomerForm = emptyCustomerForm();
-          this.newCustomerContractForm = { ...emptyContractForm(), updatedBy: this.currentStaffId(), signerStaffId: this.currentStaffId() };
-          this.newCustomerLeaseImage = null;
-          this.newCustomerFirstPaymentAmount = null;
-          this.newCustomerFirstPaymentDateText = '';
-          this.newCustomerOptions.set([]);
+          this.resetNewCustomerFlow();
           this.loadDashboard();
           this.loadCustomers();
           this.router.navigate(['/customers', value.customer_id]);
@@ -1147,8 +1331,17 @@ export class AppComponent implements OnInit {
 
   private saveCustomer(id: number | null, form: CustomerForm, message: string): void {
     if (!form.companyName.trim()) {
-      this.error.set('公司名稱為必填。');
+      if (id !== null) {
+        this.customerEditFieldErrors.set({ companyName: '公司名稱為必填。' });
+        this.error.set('');
+        setTimeout(() => this.editCompanyNameInput?.nativeElement.focus(), 0);
+      } else {
+        this.requireNewCustomerCompanyName();
+      }
       return;
+    }
+    if (id !== null) {
+      this.clearCustomerEditFieldError('companyName');
     }
     form.updatedBy = this.currentStaffId();
     this.saving.set(true);
@@ -1160,7 +1353,7 @@ export class AppComponent implements OnInit {
       next: (value) => {
         this.saving.set(false);
         this.error.set('');
-        this.success.set(message);
+        this.showToast(message);
         this.selectedCustomer.set(value);
         this.customerEditForm = this.formFromCustomer(value);
         this.editingCustomer.set(false);
@@ -1222,7 +1415,7 @@ export class AppComponent implements OnInit {
     this.api.updateStaff(staffId, { rolePermissionId: Number(rolePermissionId) }).subscribe({
       next: () => {
         this.error.set('');
-        this.success.set('職員角色權限已更新。');
+        this.showToast('職員角色權限已更新。');
         this.loadStaffOverview();
       },
       error: () => this.error.set('職員角色權限更新失敗。')
@@ -1230,19 +1423,54 @@ export class AppComponent implements OnInit {
   }
 
   loadContracts(): void {
-    this.api.contracts(this.contractFilters).subscribe({
-      next: (rows) => this.contracts.set(rows),
-      error: () => this.error.set('無法載入租約清單。')
+    this.loading.set(true);
+    this.api.contracts(this.contractFilters, this.contractPage(), this.contractPageSize()).subscribe({
+      next: (value) => {
+        this.contracts.set(value.content);
+        this.contractTotal.set(value.totalElements);
+        this.contractPage.set(value.page);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.loading.set(false);
+        this.error.set('無法載入租約清單。');
+      }
     });
+  }
+
+  searchContracts(): void {
+    this.contractPage.set(0);
+    this.loadContracts();
+  }
+
+  changeContractPageSize(size: number): void {
+    const pageSize = Number(size);
+    if (![10, 20, 50].includes(pageSize) || pageSize === this.contractPageSize()) {
+      return;
+    }
+    this.contractPageSize.set(pageSize);
+    this.contractPage.set(0);
+    this.loadContracts();
+  }
+
+  changeContractPage(delta: number): void {
+    const next = this.contractPage() + delta;
+    if (next < 0 || next >= this.contractTotalPages()) {
+      return;
+    }
+    this.contractPage.set(next);
+    this.loadContracts();
   }
 
   resetContractFilters(): void {
     this.contractFilters = {
       companyName: '',
+      taxId: '',
       startDateText: '',
       endDateText: '',
       leaseStatus: ''
     };
+    this.contractPage.set(0);
     this.loadContracts();
   }
 
@@ -1261,6 +1489,8 @@ export class AppComponent implements OnInit {
   selectContractCustomer(customer: CustomerSummary): void {
     this.contractCustomerSearch = customer.company_name;
     this.contractCustomerOptions.set([]);
+    this.newContractFirstPaymentAmount = null;
+    this.newContractFirstPaymentDateText = '';
     this.newContractForm = {
       ...emptyContractForm(),
       customerId: customer.customer_id,
@@ -1298,7 +1528,26 @@ export class AppComponent implements OnInit {
     });
   }
 
+  hasValidNewContractPayment(): boolean {
+    const hasAmount = this.newContractFirstPaymentAmount !== null
+      && this.newContractFirstPaymentAmount !== undefined;
+    const hasDate = this.newContractFirstPaymentDateText.trim() !== '';
+    if (hasAmount !== hasDate) {
+      this.error.set('本次繳款金額與繳款日期必須一起填寫。');
+      return false;
+    }
+    if (hasAmount && (!Number.isFinite(Number(this.newContractFirstPaymentAmount))
+      || Number(this.newContractFirstPaymentAmount) <= 0)) {
+      this.error.set('本次繳款金額必須大於 0。');
+      return false;
+    }
+    return true;
+  }
+
   createContract(): void {
+    if (!this.hasValidNewContractPayment()) {
+      return;
+    }
     this.saveContract(null, this.newContractForm, '租約已續約。');
   }
 
@@ -1334,17 +1583,23 @@ export class AppComponent implements OnInit {
     this.saving.set(true);
     const request = id
       ? this.api.updateContract(id, this.toContractPayload(form))
-      : this.api.createContract(this.toContractPayload(form));
+      : this.api.createContractWithFirstPayment({
+          contract: this.toContractPayload(form),
+          firstPaymentAmount: this.newContractFirstPaymentAmount,
+          firstPaymentDateText: this.newContractFirstPaymentDateText
+        });
 
     request.subscribe({
       next: () => {
         this.saving.set(false);
         this.error.set('');
-        this.success.set(message);
+        this.showToast(message);
         if (id) {
           this.cancelEditContract();
         } else {
           this.newContractForm = { ...emptyContractForm(), updatedBy: this.currentStaffId() };
+          this.newContractFirstPaymentAmount = null;
+          this.newContractFirstPaymentDateText = '';
           this.contractCustomerSearch = '';
           this.contractCustomerOptions.set([]);
           this.setView('contract-search');
@@ -1498,10 +1753,54 @@ export class AppComponent implements OnInit {
   }
 
   loadRentPayments(): void {
-    this.api.rentPayments(this.rentSearch).subscribe({
-      next: (rows) => this.rentPayments.set(rows),
-      error: () => this.error.set('無法載入租金紀錄。')
+    this.loading.set(true);
+    this.api.rentPayments(this.rentPaymentFilters, this.rentPaymentPage(), this.rentPaymentPageSize()).subscribe({
+      next: (value) => {
+        this.rentPayments.set(value.content);
+        this.rentPaymentTotal.set(value.totalElements);
+        this.rentPaymentPage.set(value.page);
+        this.loading.set(false);
+      },
+      error: () => {
+        this.loading.set(false);
+        this.error.set('無法載入對帳紀錄。');
+      }
     });
+  }
+
+  searchRentPayments(): void {
+    this.rentPaymentPage.set(0);
+    this.loadRentPayments();
+  }
+
+  changeRentPaymentPageSize(size: number): void {
+    const pageSize = Number(size);
+    if (![10, 20, 50].includes(pageSize) || pageSize === this.rentPaymentPageSize()) {
+      return;
+    }
+    this.rentPaymentPageSize.set(pageSize);
+    this.rentPaymentPage.set(0);
+    this.loadRentPayments();
+  }
+
+  changeRentPaymentPage(delta: number): void {
+    const next = this.rentPaymentPage() + delta;
+    if (next < 0 || next >= this.rentPaymentTotalPages()) {
+      return;
+    }
+    this.rentPaymentPage.set(next);
+    this.loadRentPayments();
+  }
+
+  resetRentPaymentFilters(): void {
+    this.rentPaymentFilters = {
+      companyName: '',
+      taxId: '',
+      paymentDateStartText: '',
+      paymentDateEndText: ''
+    };
+    this.rentPaymentPage.set(0);
+    this.loadRentPayments();
   }
 
   loadChargeLists(): void {
@@ -1648,7 +1947,7 @@ export class AppComponent implements OnInit {
       next: () => {
         this.saving.set(false);
         this.error.set('');
-        this.success.set('收費清單已新增。');
+        this.showToast('收費清單已新增。');
         this.newChargeListForm = {
           ...emptyChargeListForm(),
           feeMonth: this.currentMonthValue()
@@ -1704,7 +2003,7 @@ export class AppComponent implements OnInit {
       next: () => {
         this.saving.set(false);
         this.error.set('');
-        this.success.set('收費清單已更新。');
+        this.showToast('收費清單已更新。');
         this.cancelEditChargeList();
         this.loadChargeLists();
       },
@@ -2256,7 +2555,7 @@ export class AppComponent implements OnInit {
         this.saving.set(false);
         this.error.set('');
         window.alert('新增成功');
-        this.success.set('租金紀錄已新增。');
+        this.showToast('對帳紀錄已新增。');
         this.resetRentForm();
         this.setView('rent-search');
         this.loadDashboard();
@@ -2264,7 +2563,7 @@ export class AppComponent implements OnInit {
       },
       error: () => {
         this.saving.set(false);
-        this.error.set('新增租金繳交紀錄失敗。');
+        this.error.set('新增對帳紀錄失敗。');
       }
     });
   }
@@ -2311,14 +2610,14 @@ export class AppComponent implements OnInit {
       next: () => {
         this.saving.set(false);
         this.error.set('');
-        this.success.set('租金紀錄已更新。');
+        this.showToast('對帳紀錄已更新。');
         this.cancelEditRentPayment();
         this.loadRentPayments();
         this.loadDashboard();
       },
       error: () => {
         this.saving.set(false);
-        this.error.set('租金紀錄更新失敗。');
+        this.error.set('對帳紀錄更新失敗。');
       }
     });
   }
@@ -2337,6 +2636,15 @@ export class AppComponent implements OnInit {
   displayStatus(value: unknown): string {
     const code = Number(value ?? 0);
     return this.statusOptions.find((option) => option.value === code)?.label ?? '-';
+  }
+
+  displayLeaseStatus(value: unknown): string {
+    const status = value === null || value === undefined || value === '' ? '-' : String(value);
+    return status === '綁約中' ? '續約中' : status;
+  }
+
+  displayCustomerLeaseStatus(value: unknown): string {
+    return String(value) === '已解約' ? '已解約' : '續約中';
   }
 
   displayRentalStatus(value: unknown): string {
@@ -2406,6 +2714,10 @@ export class AppComponent implements OnInit {
       sessionStorage.removeItem('cmsUser');
       return null;
     }
+  }
+
+  private isNarrowWindow(): boolean {
+    return typeof window !== 'undefined' && window.innerWidth <= 1100;
   }
 
   private currentStaffId(): number {
@@ -2514,6 +2826,61 @@ export class AppComponent implements OnInit {
     this.newCustomerForm.registrationType = this.newCustomerContractForm.rentalItem;
     const status = this.newCustomerContractForm.rentalStatus;
     this.newCustomerForm.rentalStatus = status === '登記+辦公室' ? 2 : status === '辦公室' ? 3 : 1;
+  }
+
+  private hasNewCustomerChanges(): boolean {
+    const customer = this.newCustomerForm;
+    const contract = this.newCustomerContractForm;
+    const contractDefaults = emptyContractForm();
+
+    return Boolean(
+      customer.companyName.trim() ||
+        customer.taxId.trim() ||
+        customer.ownerName.trim() ||
+        customer.ownerBirthday ||
+        customer.contactPerson.trim() ||
+        customer.contactBirthday ||
+        customer.phone.trim() ||
+        customer.forwardingAddress.trim() ||
+        customer.pettyCash !== null ||
+        customer.accountantInfo.trim() ||
+        customer.accountInfo.trim() ||
+        customer.isAgent ||
+        customer.relatedCompanyNames.some((name) => name.trim()) ||
+        customer.notes.trim() ||
+        contract.officeId !== null ||
+        contract.rentalItem !== contractDefaults.rentalItem ||
+        contract.rentalStatus !== contractDefaults.rentalStatus ||
+        contract.signedDateText ||
+        (contract.signerStaffId !== null && contract.signerStaffId !== this.currentStaffId()) ||
+        contract.partnerStaffId !== null ||
+        contract.sourceText.trim() ||
+        contract.paymentMonths !== null ||
+        contract.startDateText ||
+        contract.endDateText ||
+        contract.terminationDateText ||
+        contract.rent !== null ||
+        contract.deposit !== null ||
+        contract.leaseStatus !== contractDefaults.leaseStatus ||
+        this.newCustomerFirstPaymentAmount !== null ||
+        this.newCustomerFirstPaymentDateText ||
+        this.newCustomerLeaseImage !== null
+    );
+  }
+
+  private resetNewCustomerFlow(): void {
+    this.newCustomerForm = emptyCustomerForm();
+    this.newCustomerContractForm = {
+      ...emptyContractForm(),
+      updatedBy: this.currentStaffId(),
+      signerStaffId: this.currentStaffId()
+    };
+    this.newCustomerLeaseImage = null;
+    this.newCustomerFirstPaymentAmount = null;
+    this.newCustomerFirstPaymentDateText = '';
+    this.newCustomerOptions.set([]);
+    this.newCustomerFieldErrors.set({});
+    this.customerNewStep.set(1);
   }
 
   private currentMonthValue(): string {
