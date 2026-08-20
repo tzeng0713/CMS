@@ -41,17 +41,20 @@ public class CustomerController {
     }
 
     @GetMapping
-    public List<Map<String, Object>> customers(@RequestParam(required = false) String search,
-                                               @RequestParam(required = false) String ownerName,
-                                               @RequestParam(required = false) String companyName,
-                                               @RequestParam(required = false) String taxId,
-                                               @RequestParam(required = false) String phone,
-                                               @RequestParam(required = false) Long branchId,
-                                               @RequestParam(required = false) String officeNo,
-                                               @RequestParam(required = false) Integer ownerBirthdayMonth,
-                                               @RequestParam(required = false) Integer contactBirthdayMonth) {
-        return service.customers(search, ownerName, companyName, taxId, phone, branchId, officeNo,
-                ownerBirthdayMonth, contactBirthdayMonth);
+    public Map<String, Object> customers(@RequestParam(required = false) String search,
+                                         @RequestParam(required = false) String ownerName,
+                                         @RequestParam(required = false) String companyName,
+                                         @RequestParam(required = false) String taxId,
+                                         @RequestParam(required = false) String phone,
+                                         @RequestParam(required = false) String accountInfo,
+                                         @RequestParam(required = false) Long branchId,
+                                         @RequestParam(required = false) String officeNo,
+                                         @RequestParam(required = false) Integer ownerBirthdayMonth,
+                                         @RequestParam(required = false) Integer contactBirthdayMonth,
+                                         @RequestParam(required = false) Integer page,
+                                         @RequestParam(required = false) Integer pageSize) {
+        return service.customers(search, ownerName, companyName, taxId, phone, accountInfo, branchId, officeNo,
+                ownerBirthdayMonth, contactBirthdayMonth, page, pageSize);
     }
 
     @GetMapping("/{id}")

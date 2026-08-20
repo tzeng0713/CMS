@@ -53,14 +53,29 @@
 </section>
 
 <ng-template #appShell>
-<div class="shell">
-  <aside class="sidebar">
+<div class="shell" [class.sidebar-open]="sidebarOpen()" [class.sidebar-collapsed]="!sidebarOpen()">
+  <div class="toast-container" aria-live="polite" aria-atomic="true">
+    <div
+      class="toast"
+      *ngIf="toast() as currentToast"
+      [class.toast-error]="currentToast.kind === 'error'"
+      role="status"
+    >
+      {{ currentToast.message }}
+    </div>
+  </div>
+  <button
+    *ngIf="isNarrowViewport() && sidebarOpen()"
+    type="button"
+    class="sidebar-backdrop"
+    aria-label="關閉選單"
+    (click)="closeSidebarAfterNavigation()"
+  ></button>
+  <aside id="primary-sidebar" class="sidebar">
     <button type="button" class="brand" (click)="goHome()" aria-label="回首頁">
-      <span class="brand-mark">CMS</span>
-      <div>
-        <strong>客戶管理資訊系統</strong>
-        <small>敦化館作業資料</small>
-      </div>
+      <span class="brand-logo-frame">
+        <img src="assets/afw-logo.jpg" alt="AFW 全方位商務中心" />
+      </span>
     </button>
 
     <nav aria-label="主選單">
@@ -78,20 +93,31 @@
     </nav>
   </aside>
 
-  <main>
-    <header class="topbar">
-      <div>
-        <p>Customer Operations</p>
-        <h1>客戶與租金作業總覽</h1>
-      </div>
+  <main [class.home-page]="activeView() === 'home'" [class.customer-new-main]="activeView() === 'customer-new'">
+    <header class="topbar topbar-surface">
+      <button
+        type="button"
+        class="sidebar-toggle"
+        aria-label="切換左側選單"
+        aria-controls="primary-sidebar"
+        [attr.aria-expanded]="sidebarOpen()"
+        (click)="toggleSidebar()"
+      >
+        <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"></path></svg>
+      </button>
       <div class="topbar-actions" *ngIf="currentUser() as user">
+        <span class="today-label" *ngIf="activeView() === 'home'">今日日期：{{ todayLabel }}</span>
         <span class="user-chip">{{ user.staff_name }} / {{ user.role_name }}</span>
         <button type="button" (click)="logout()">登出</button>
       </div>
     </header>
 
+    <section class="page-heading">
+      <p>{{ pageSubtitle() }}</p>
+      <h1>{{ pageTitle() }}</h1>
+    </section>
+
     <p class="error" *ngIf="error()">{{ error() }}</p>
-    <p class="success" *ngIf="success()">{{ success() }}</p>
 
     <section class="home-view" *ngIf="activeView() === 'home' && dashboard() as d">
       <section class="kpis home-kpis" aria-label="客戶服務統計">
@@ -131,11 +157,14 @@
             <ng-template #noExpiringContracts>
               <p class="empty-state">目前沒有租約到期提醒</p>
             </ng-template>
-            <div class="notification-pager" *ngIf="d.notifications.expiringContracts.length > notificationPageSize">
-              <button type="button" class="ghost pager-button" title="上一頁" aria-label="租約到期上一頁" [disabled]="expiringNotificationPage() === 1" (click)="changeNotificationPage('expiring', -1, d.notifications.expiringContracts.length)">‹</button>
-              <span>{{ expiringNotificationPage() }} / {{ notificationTotalPages(d.notifications.expiringContracts) }}</span>
-              <button type="button" class="ghost pager-button" title="下一頁" aria-label="租約到期下一頁" [disabled]="expiringNotificationPage() === notificationTotalPages(d.notifications.expiringContracts)" (click)="changeNotificationPage('expiring', 1, d.notifications.expiringContracts.length)">›</button>
-            </div>
+            <footer class="notification-footer">
+              <span>共 {{ d.notifications.expiringContracts.length }} 筆</span>
+              <div class="notification-pager" *ngIf="d.notifications.expiringContracts.length > notificationPageSize">
+                <button type="button" class="ghost pager-button" title="上一頁" aria-label="租約到期上一頁" [disabled]="expiringNotificationPage() === 1" (click)="changeNotificationPage('expiring', -1, d.notifications.expiringContracts.length)">‹</button>
+                <span>{{ expiringNotificationPage() }} / {{ notificationTotalPages(d.notifications.expiringContracts) }}</span>
+                <button type="button" class="ghost pager-button" title="下一頁" aria-label="租約到期下一頁" [disabled]="expiringNotificationPage() === notificationTotalPages(d.notifications.expiringContracts)" (click)="changeNotificationPage('expiring', 1, d.notifications.expiringContracts.length)">›</button>
+              </div>
+            </footer>
           </section>
 
           <section class="notification-section">
@@ -158,11 +187,14 @@
             <ng-template #noUnpaidRent>
               <p class="empty-state">目前沒有租金未繳提醒</p>
             </ng-template>
-            <div class="notification-pager" *ngIf="d.notifications.unpaidRent.length > notificationPageSize">
-              <button type="button" class="ghost pager-button" title="上一頁" aria-label="租金未繳上一頁" [disabled]="unpaidNotificationPage() === 1" (click)="changeNotificationPage('unpaid', -1, d.notifications.unpaidRent.length)">‹</button>
-              <span>{{ unpaidNotificationPage() }} / {{ notificationTotalPages(d.notifications.unpaidRent) }}</span>
-              <button type="button" class="ghost pager-button" title="下一頁" aria-label="租金未繳下一頁" [disabled]="unpaidNotificationPage() === notificationTotalPages(d.notifications.unpaidRent)" (click)="changeNotificationPage('unpaid', 1, d.notifications.unpaidRent.length)">›</button>
-            </div>
+            <footer class="notification-footer">
+              <span>共 {{ d.notifications.unpaidRent.length }} 筆</span>
+              <div class="notification-pager" *ngIf="d.notifications.unpaidRent.length > notificationPageSize">
+                <button type="button" class="ghost pager-button" title="上一頁" aria-label="租金未繳上一頁" [disabled]="unpaidNotificationPage() === 1" (click)="changeNotificationPage('unpaid', -1, d.notifications.unpaidRent.length)">‹</button>
+                <span>{{ unpaidNotificationPage() }} / {{ notificationTotalPages(d.notifications.unpaidRent) }}</span>
+                <button type="button" class="ghost pager-button" title="下一頁" aria-label="租金未繳下一頁" [disabled]="unpaidNotificationPage() === notificationTotalPages(d.notifications.unpaidRent)" (click)="changeNotificationPage('unpaid', 1, d.notifications.unpaidRent.length)">›</button>
+              </div>
+            </footer>
           </section>
 
           <section class="notification-section">
@@ -185,119 +217,176 @@
             <ng-template #noIncompleteContracts>
               <p class="empty-state">目前沒有未完成租約</p>
             </ng-template>
-            <div class="notification-pager" *ngIf="d.notifications.incompleteContracts.length > notificationPageSize">
-              <button type="button" class="ghost pager-button" title="上一頁" aria-label="未完成租約上一頁" [disabled]="incompleteNotificationPage() === 1" (click)="changeNotificationPage('incomplete', -1, d.notifications.incompleteContracts.length)">‹</button>
-              <span>{{ incompleteNotificationPage() }} / {{ notificationTotalPages(d.notifications.incompleteContracts) }}</span>
-              <button type="button" class="ghost pager-button" title="下一頁" aria-label="未完成租約下一頁" [disabled]="incompleteNotificationPage() === notificationTotalPages(d.notifications.incompleteContracts)" (click)="changeNotificationPage('incomplete', 1, d.notifications.incompleteContracts.length)">›</button>
-            </div>
+            <footer class="notification-footer">
+              <span>共 {{ d.notifications.incompleteContracts.length }} 筆</span>
+              <div class="notification-pager" *ngIf="d.notifications.incompleteContracts.length > notificationPageSize">
+                <button type="button" class="ghost pager-button" title="上一頁" aria-label="未完成租約上一頁" [disabled]="incompleteNotificationPage() === 1" (click)="changeNotificationPage('incomplete', -1, d.notifications.incompleteContracts.length)">‹</button>
+                <span>{{ incompleteNotificationPage() }} / {{ notificationTotalPages(d.notifications.incompleteContracts) }}</span>
+                <button type="button" class="ghost pager-button" title="下一頁" aria-label="未完成租約下一頁" [disabled]="incompleteNotificationPage() === notificationTotalPages(d.notifications.incompleteContracts)" (click)="changeNotificationPage('incomplete', 1, d.notifications.incompleteContracts.length)">›</button>
+              </div>
+            </footer>
           </section>
         </div>
+      </section>
+
+      <section class="panel home-summary" aria-label="今日待辦摘要">
+        <div>
+          <h2>今日待辦提醒</h2>
+          <p>依通知狀態快速掌握需要優先處理的工作。</p>
+        </div>
+        <dl>
+          <div><dt>到期提醒</dt><dd>{{ d.notifications.expiringContracts.length }} 筆</dd></div>
+          <div><dt>未繳提醒</dt><dd>{{ d.notifications.unpaidRent.length }} 筆</dd></div>
+          <div><dt>未完成提醒</dt><dd>{{ d.notifications.incompleteContracts.length }} 筆</dd></div>
+          <div><dt>待辦總數</dt><dd>{{ d.notifications.expiringContracts.length + d.notifications.unpaidRent.length + d.notifications.incompleteContracts.length }} 筆</dd></div>
+        </dl>
       </section>
     </section>
 
     <section class="single-view" *ngIf="activeView() === 'customer-search'">
-      <section class="panel customer-list">
-        <div class="panel-header">
-          <div>
-            <h2>查詢客戶</h2>
-            <p>依公司、統編、電話、負責人、分館或辦公室號碼查詢。</p>
-          </div>
-        </div>
-
-        <section class="filter-bar customer-filter">
-          <label>
-            公司名稱
-            <input
-              type="search"
-              name="customerFilterCompanyName"
-              placeholder="輸入公司名稱"
-              [(ngModel)]="customerFilters.companyName"
-              (ngModelChange)="loadCustomers()"
-            />
-          </label>
-          <label>
-            統一編號
-            <input
-              type="search"
-              name="customerFilterTaxId"
-              placeholder="輸入統編"
-              [(ngModel)]="customerFilters.taxId"
-              (ngModelChange)="loadCustomers()"
-            />
-          </label>
-          <label>
-            電話
-            <input
-              type="search"
-              name="customerFilterPhone"
-              placeholder="輸入電話"
-              [(ngModel)]="customerFilters.phone"
-              (ngModelChange)="loadCustomers()"
-            />
-          </label>
-          <label>
-            負責人姓名
-            <input
-              type="search"
-              name="customerFilterOwnerName"
-              placeholder="輸入負責人"
-              [(ngModel)]="customerFilters.ownerName"
-              (ngModelChange)="loadCustomers()"
-            />
-          </label>
-          <label>
-            分館
-            <select name="customerFilterBranch" [(ngModel)]="customerFilters.branchId" (ngModelChange)="loadCustomers()">
-              <option [ngValue]="null">全部分館</option>
-              <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
-            </select>
-          </label>
-          <label>
-            辦公室號碼
-            <input
-              type="search"
-              name="customerFilterOfficeNo"
-              placeholder="輸入辦公室號碼"
-              [(ngModel)]="customerFilters.officeNo"
-              (ngModelChange)="loadCustomers()"
-            />
-          </label>
-          <label>
-            負責人生日月份
-            <select name="customerFilterOwnerBirthdayMonth" [(ngModel)]="customerFilters.ownerBirthdayMonth" (ngModelChange)="loadCustomers()">
-              <option [ngValue]="null">全部月份</option>
-              <option *ngFor="let month of birthdayMonthOptions" [ngValue]="month">{{ month }} 月</option>
-            </select>
-          </label>
-          <label>
-            聯絡人生日月份
-            <select name="customerFilterContactBirthdayMonth" [(ngModel)]="customerFilters.contactBirthdayMonth" (ngModelChange)="loadCustomers()">
-              <option [ngValue]="null">全部月份</option>
-              <option *ngFor="let month of birthdayMonthOptions" [ngValue]="month">{{ month }} 月</option>
-            </select>
-          </label>
-          <div class="filter-actions">
-            <button type="button" class="ghost" (click)="resetCustomerFilters()">清除條件</button>
-          </div>
-        </section>
-
-        <div class="table">
-          <div
-            class="row"
-            *ngFor="let customer of customers()"
-            [class.selected]="selectedCustomerId() === customer.customer_id"
-          >
-            <div class="row-main">
-              <span>
-                <strong>{{ customer.company_name }}</strong>
-                <small>負責人 {{ customer.owner_name || '-' }} / {{ customer.rental_item || customer.registration_type || '-' }}</small>
+      <section class="panel customer-list customer-search-panel">
+        <form class="customer-search-form" (ngSubmit)="searchCustomers()">
+          <div class="customer-primary-query">
+            <label class="customer-company-query">
+              <span>公司名稱</span>
+              <span class="search-input-wrap">
+                <input
+                  type="search"
+                  name="customerFilterCompanyName"
+                  placeholder="請輸入公司名稱（至少 2 個字）"
+                  [(ngModel)]="customerFilters.companyName"
+                />
+                <svg aria-hidden="true" viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="6.5"></circle>
+                  <path d="m16 16 4 4"></path>
+                </svg>
               </span>
-              <span>{{ customer.owner_name || '-' }}</span>
-              <span>{{ customer.lease_status || displayRentalStatus(customer.rental_status) }}</span>
+            </label>
+            <button type="submit" class="customer-search-submit" [disabled]="loading()">
+              {{ loading() ? '查詢中…' : '搜尋' }}
+            </button>
+            <button type="button" class="ghost customer-clear-button" [disabled]="loading()" (click)="resetCustomerFilters()">
+              清除條件
+            </button>
+          </div>
+
+          <div class="advanced-filter-bar">
+            <button
+              type="button"
+              class="advanced-filter-toggle"
+              aria-controls="customer-advanced-filters"
+              [attr.aria-expanded]="advancedFiltersOpen()"
+              (click)="toggleAdvancedFilters()"
+            >
+              <span>進階篩選</span>
+              <svg aria-hidden="true" viewBox="0 0 24 24" [class.is-collapsed]="!advancedFiltersOpen()">
+                <path d="m6 9 6 6 6-6"></path>
+              </svg>
+            </button>
+          </div>
+
+          <section id="customer-advanced-filters" class="customer-advanced-filters" [hidden]="!advancedFiltersOpen()">
+            <div class="customer-advanced-grid">
+              <label>
+                統一編號
+                <input type="search" name="customerFilterTaxId" placeholder="請輸入統一編號" [(ngModel)]="customerFilters.taxId" />
+              </label>
+              <label>
+                電話
+                <input type="search" name="customerFilterPhone" placeholder="請輸入電話" [(ngModel)]="customerFilters.phone" />
+              </label>
+              <label>
+                負責人
+                <input type="search" name="customerFilterOwnerName" placeholder="請輸入負責人" [(ngModel)]="customerFilters.ownerName" />
+              </label>
+              <label>
+                分館
+                <select name="customerFilterBranch" [(ngModel)]="customerFilters.branchId">
+                  <option [ngValue]="null">全部分館</option>
+                  <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+                </select>
+              </label>
+              <label>
+                辦公室號碼
+                <input type="search" name="customerFilterOfficeNo" placeholder="請輸入辦公室號碼" [(ngModel)]="customerFilters.officeNo" />
+              </label>
+              <label>
+                負責人生日月份
+                <select name="customerFilterOwnerBirthdayMonth" [(ngModel)]="customerFilters.ownerBirthdayMonth">
+                  <option [ngValue]="null">全部月份</option>
+                  <option *ngFor="let month of birthdayMonthOptions" [ngValue]="month">{{ month }} 月</option>
+                </select>
+              </label>
+              <label>
+                聯絡人生日月份
+                <select name="customerFilterContactBirthdayMonth" [(ngModel)]="customerFilters.contactBirthdayMonth">
+                  <option [ngValue]="null">全部月份</option>
+                  <option *ngFor="let month of birthdayMonthOptions" [ngValue]="month">{{ month }} 月</option>
+                </select>
+              </label>
+              <label>
+                帳戶資訊
+                <input type="search" name="customerFilterAccountInfo" placeholder="請輸入帳戶資訊" [(ngModel)]="customerFilters.accountInfo" />
+              </label>
             </div>
-            <button type="button" class="ghost compact-button" (click)="openCustomerDetail(customer.customer_id)">查看</button>
+          </section>
+        </form>
+
+        <div class="customer-results-toolbar">
+          <p class="customer-result-count" aria-live="polite">搜尋結果：共 {{ customerTotal() }} 筆</p>
+          <div class="customer-results-actions" *ngIf="customerTotal()">
+            <label class="customer-page-size">
+              <span>每頁顯示</span>
+              <select
+                name="customerPageSize"
+                aria-label="每頁顯示筆數"
+                [ngModel]="customerPageSize()"
+                (ngModelChange)="changeCustomerPageSize($event)"
+              >
+                <option [ngValue]="10">10 筆</option>
+                <option [ngValue]="20">20 筆</option>
+                <option [ngValue]="50">50 筆</option>
+              </select>
+            </label>
+            <div class="customer-page-summary" aria-label="搜尋結果分頁">
+              <button type="button" class="ghost compact-button pager-icon" aria-label="上一頁" [disabled]="customerPage() === 0" (click)="changeCustomerPage(-1)">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"></path></svg>
+              </button>
+              <span>第 {{ customerPage() + 1 }} 頁，共 {{ customerTotalPages() }} 頁</span>
+              <button type="button" class="ghost compact-button pager-icon" aria-label="下一頁" [disabled]="customerPage() + 1 >= customerTotalPages()" (click)="changeCustomerPage(1)">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"></path></svg>
+              </button>
+            </div>
           </div>
         </div>
+
+        <div class="simple-table customer-table customer-results-table" *ngIf="customers().length; else noCustomers">
+          <div class="simple-row header customer-row">
+            <span>公司名稱</span>
+            <span>負責人</span>
+            <span>承租項目</span>
+            <span>租約狀態</span>
+            <span>辦公室</span>
+            <span>查看</span>
+          </div>
+          <div class="simple-row customer-row" *ngFor="let customer of customers()" [class.selected]="selectedCustomerId() === customer.customer_id">
+            <span class="customer-company-name">{{ customer.company_name }}</span>
+            <span>{{ customer.owner_name || '-' }}</span>
+            <span>{{ customer.rental_item || customer.registration_type || '-' }}</span>
+            <span>
+              <span class="lease-status" [class.terminated]="displayCustomerLeaseStatus(customer.lease_status) === '已解約'">
+                {{ displayCustomerLeaseStatus(customer.lease_status) }}
+              </span>
+            </span>
+            <span>{{ customer.office_no || '-' }}</span>
+            <span>
+              <button type="button" class="customer-view-button" (click)="openCustomerDetail(customer.customer_id)">查看</button>
+            </span>
+          </div>
+        </div>
+        <ng-template #noCustomers>
+          <p class="empty-state customer-empty-state">目前沒有符合條件的客戶資料，請調整條件後再次搜尋。</p>
+        </ng-template>
       </section>
     </section>
 
@@ -311,7 +400,7 @@
               <p>負責人 {{ c.owner_name || '-' }} / {{ c.branch_name || '未指定分館' }} / 房號 {{ c.office_no || '-' }}</p>
             </div>
             <div class="header-actions">
-              <span class="status">{{ c.lease_status || displayRentalStatus(c.rental_status) }}</span>
+              <span class="status">{{ displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status)) }}</span>
               <button type="button" class="ghost" *ngIf="!editingCustomer()" (click)="startEditCustomer()">修改</button>
             </div>
           </div>
@@ -319,7 +408,17 @@
           <form class="customer-form" *ngIf="editingCustomer(); else customerReadOnly" (ngSubmit)="saveCustomerEdit()">
             <label>
               公司名稱
-              <input name="editCompanyName" [(ngModel)]="customerEditForm.companyName" required />
+              <input
+                #editCompanyNameInput
+                name="editCompanyName"
+                [(ngModel)]="customerEditForm.companyName"
+                (ngModelChange)="clearCustomerEditFieldError('companyName')"
+                [class.field-invalid]="customerEditFieldErrors()['companyName']"
+                [attr.aria-invalid]="customerEditFieldErrors()['companyName'] ? 'true' : null"
+              />
+              <span class="field-error" *ngIf="customerEditFieldErrors()['companyName']">
+                {{ customerEditFieldErrors()['companyName'] }}
+              </span>
             </label>
             <label>
               統一編號
@@ -451,7 +550,7 @@
               <article *ngFor="let contract of c.contracts">
                 <div class="contract-card-title">
                   <strong>{{ value(contract, 'rental_item') }}</strong>
-                  <span>{{ value(contract, 'lease_status') }}</span>
+                  <span>{{ displayLeaseStatus(contract['lease_status']) }}</span>
                 </div>
                 <div class="info-grid compact">
                   <div><span>承租狀態</span><strong>{{ value(contract, 'rental_status') }}</strong></div>
@@ -461,7 +560,7 @@
                   <div><span>來源</span><strong>{{ value(contract, 'source_text') }}</strong></div>
                   <div><span>分館</span><strong>{{ value(contract, 'branch_name') }}</strong></div>
                   <div><span>房號</span><strong>{{ value(contract, 'office_no') }}</strong></div>
-                  <div><span>付款月數</span><strong>{{ value(contract, 'payment_months') }}</strong></div>
+                  <div><span>付款週期</span><strong>{{ value(contract, 'payment_months') }}</strong></div>
                   <div><span>起租日期</span><strong>{{ value(contract, 'start_date_text') }}</strong></div>
                   <div><span>到期日期</span><strong>{{ value(contract, 'end_date_text') }}</strong></div>
                   <div><span>退租日期</span><strong>{{ value(contract, 'termination_date_text') }}</strong></div>
@@ -490,257 +589,287 @@
       </section>
     </section>
 
-    <section class="single-view" *ngIf="activeView() === 'customer-new'">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
+    <section class="single-view customer-new-view" *ngIf="activeView() === 'customer-new'">
+      <section class="customer-new-page">
+        <header class="customer-new-header">
+          <div class="customer-new-heading">
             <h2>新增客戶</h2>
-            <p>輸入公司名稱時會提示既有客戶，避免重複建立。</p>
+            <ol class="customer-new-stepper" aria-label="新增客戶步驟">
+              <li [class.active]="customerNewStep() === 1" [class.complete]="customerNewStep() === 2">
+                <button type="button" (click)="goToNewCustomerStep(1)" [attr.aria-current]="customerNewStep() === 1 ? 'step' : null">
+                  <span class="step-index">1</span>
+                  <span>客戶資料</span>
+                </button>
+              </li>
+              <li [class.active]="customerNewStep() === 2">
+                <button type="button" (click)="goToNewCustomerStep(2)" [attr.aria-current]="customerNewStep() === 2 ? 'step' : null">
+                  <span class="step-index">2</span>
+                  <span>租約與首筆繳款</span>
+                </button>
+              </li>
+            </ol>
+            <p>先建立客戶基本資料，再完成租約與首筆繳款設定。</p>
           </div>
-        </div>
-        <form class="customer-form" (ngSubmit)="createCustomer()">
-          <h3 class="form-section-title wide">客戶資料</h3>
-          <div class="lookup form-lookup">
-            <label>
-              公司名稱
-              <input
-                name="newCompanyName"
-                [(ngModel)]="newCustomerForm.companyName"
-                (ngModelChange)="lookupNewCustomerSuggestions()"
-                required
-              />
-            </label>
-            <div class="lookup-list" *ngIf="newCustomerOptions().length">
-              <button type="button" *ngFor="let option of newCustomerOptions()" (click)="fillExistingCustomerName(option)">
-                <strong>{{ option.company_name }}</strong>
-                <span>負責人 {{ option.owner_name || '-' }} / 統編 {{ option.tax_id || '-' }}</span>
-              </button>
-            </div>
-          </div>
-          <label>
-            統一編號
-            <input name="newTaxId" [(ngModel)]="newCustomerForm.taxId" />
-          </label>
-          <label>
-            負責人
-            <input name="newOwnerName" [(ngModel)]="newCustomerForm.ownerName" />
-          </label>
-          <label>
-            負責人生日
-            <input type="date" name="newOwnerBirthday" [(ngModel)]="newCustomerForm.ownerBirthday" />
-          </label>
-          <label>
-            聯絡人
-            <input name="newContactPerson" [(ngModel)]="newCustomerForm.contactPerson" />
-          </label>
-          <label>
-            聯絡人生日
-            <input type="date" name="newContactBirthday" [(ngModel)]="newCustomerForm.contactBirthday" />
-          </label>
-          <label>
-            電話
-            <input name="newPhone" [(ngModel)]="newCustomerForm.phone" />
-          </label>
-          <label>
-            轉寄地址
-            <input name="newForwardingAddress" [(ngModel)]="newCustomerForm.forwardingAddress" />
-          </label>
-          <label>
-            零用金
-            <input type="number" name="newPettyCash" [(ngModel)]="newCustomerForm.pettyCash" />
-          </label>
-          <label>
-            會計師資訊
-            <input name="newAccountantInfo" [(ngModel)]="newCustomerForm.accountantInfo" />
-          </label>
-          <label>
-            帳戶資訊
-            <input name="newAccountInfo" [(ngModel)]="newCustomerForm.accountInfo" />
-          </label>
-          <label class="checkbox-label">
-            <input type="checkbox" name="newIsAgent" [(ngModel)]="newCustomerForm.isAgent" />
-            代辦
-          </label>
-          <div class="wide related-company-fields">
-            <div class="field-title-row">
-              <span>相關公司</span>
-              <button type="button" class="icon-button" title="新增相關公司" aria-label="新增相關公司" (click)="addRelatedCompany()">+</button>
-            </div>
-            <div class="repeatable-field" *ngFor="let relatedName of newCustomerForm.relatedCompanyNames; let i = index; trackBy: trackByIndex">
-              <input
-                [name]="'newRelatedCompany' + i"
-                [(ngModel)]="newCustomerForm.relatedCompanyNames[i]"
-                placeholder="輸入相關公司名稱"
-              />
-              <button type="button" class="icon-button remove" title="移除相關公司" aria-label="移除相關公司" (click)="removeRelatedCompany(i)">×</button>
-            </div>
-          </div>
-          <label class="wide">
-            備註
-            <textarea name="newNotes" rows="3" [(ngModel)]="newCustomerForm.notes"></textarea>
-          </label>
+        </header>
 
-          <h3 class="form-section-title wide">租約資料</h3>
-          <label>
-            承租項目
-            <select name="newCustomerContractRentalItem" [(ngModel)]="newCustomerContractForm.rentalItem">
-              <option *ngFor="let item of rentalItemOptions" [ngValue]="item">{{ item }}</option>
-            </select>
-          </label>
-          <label>
-            承租狀態
-            <select name="newCustomerContractRentalStatus" [(ngModel)]="newCustomerContractForm.rentalStatus">
-              <option *ngFor="let status of contractRentalStatusOptions" [ngValue]="status">{{ status }}</option>
-            </select>
-          </label>
-          <label>
-            簽約日期
-            <input type="date" name="newCustomerContractSignedDate" [(ngModel)]="newCustomerContractForm.signedDateText" />
-          </label>
-          <label>
-            簽約人
-            <select name="newCustomerContractSigner" [(ngModel)]="newCustomerContractForm.signerStaffId">
-              <option [ngValue]="null">請選擇</option>
-              <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">
-                {{ value(staff, 'staff_name') }} / {{ value(staff, 'branch_name') }}
-              </option>
-            </select>
-          </label>
-          <label>
-            合作夥伴
-            <select name="newCustomerContractPartner" [(ngModel)]="newCustomerContractForm.partnerStaffId">
-              <option [ngValue]="null">無</option>
-              <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">
-                {{ value(staff, 'staff_name') }} / {{ value(staff, 'branch_name') }}
-              </option>
-            </select>
-          </label>
-          <label>
-            來源
-            <input name="newCustomerContractSource" [(ngModel)]="newCustomerContractForm.sourceText" />
-          </label>
-          <label>
-            辦公室
-            <select name="newCustomerContractOffice" [(ngModel)]="newCustomerContractForm.officeId">
-              <option [ngValue]="null">未租辦公室</option>
-              <option *ngFor="let office of offices()" [ngValue]="office.office_id">
-                {{ office.branch_name || '-' }} / {{ office.office_no || '-' }}
-              </option>
-            </select>
-          </label>
-          <label>
-            起租日期
-            <input type="date" name="newCustomerContractStart" [(ngModel)]="newCustomerContractForm.startDateText" />
-          </label>
-          <label>
-            到期日期
-            <input type="date" name="newCustomerContractEnd" [(ngModel)]="newCustomerContractForm.endDateText" />
-          </label>
-          <label>
-            退租日期
-            <input type="date" name="newCustomerContractTermination" [(ngModel)]="newCustomerContractForm.terminationDateText" />
-          </label>
-          <label>
-            付款月數
-            <input type="number" name="newCustomerContractPaymentMonths" [(ngModel)]="newCustomerContractForm.paymentMonths" />
-            <small>每次繳幾個月；6 表示每半年繳一次。</small>
-          </label>
-          <label>
-            租金
-            <input type="number" name="newCustomerContractRent" [(ngModel)]="newCustomerContractForm.rent" />
-          </label>
-          <label>
-            押金
-            <input type="number" name="newCustomerContractDeposit" [(ngModel)]="newCustomerContractForm.deposit" />
-          </label>
-          <label>
-            本次繳款金額
-            <input type="number" min="0" name="newCustomerFirstPaymentAmount" [(ngModel)]="newCustomerFirstPaymentAmount" />
-          </label>
-          <label>
-            繳款日期
-            <input type="date" name="newCustomerFirstPaymentDate" [(ngModel)]="newCustomerFirstPaymentDateText" />
-          </label>
-          <label>
-            租約狀態
-            <select name="newCustomerContractLeaseStatus" [(ngModel)]="newCustomerContractForm.leaseStatus">
-              <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ status }}</option>
-            </select>
-          </label>
-          <label class="wide">
-            租約圖片
-            <input type="file" name="newCustomerContractImage" accept="image/*,.pdf" (change)="onNewCustomerLeaseImage($event)" />
-          </label>
-          <div class="form-actions wide">
-            <button type="submit" [disabled]="saving()">新增客戶與租約</button>
-          </div>
+        <form class="customer-new-form" (ngSubmit)="customerNewStep() === 2 ? createCustomer() : goToNewCustomerStep(2)">
+          <section class="customer-new-step-content" *ngIf="customerNewStep() === 1">
+            <section class="customer-form-section">
+              <h3>客戶資料</h3>
+              <div class="customer-new-grid">
+                <div class="lookup form-lookup">
+                  <label>
+                    公司名稱
+                    <input
+                      #newCompanyNameInput
+                      name="newCompanyName"
+                      [(ngModel)]="newCustomerForm.companyName"
+                      (ngModelChange)="lookupNewCustomerSuggestions(); clearNewCustomerFieldError('companyName')"
+                      placeholder="請輸入公司名稱"
+                      [class.field-invalid]="newCustomerFieldErrors()['companyName']"
+                      [attr.aria-invalid]="newCustomerFieldErrors()['companyName'] ? 'true' : null"
+                      required
+                    />
+                    <span class="field-error" *ngIf="newCustomerFieldErrors()['companyName']">
+                      {{ newCustomerFieldErrors()['companyName'] }}
+                    </span>
+                  </label>
+                  <div class="lookup-list" *ngIf="newCustomerOptions().length">
+                    <button type="button" *ngFor="let option of newCustomerOptions()" (click)="fillExistingCustomerName(option)">
+                      <strong>{{ option.company_name }}</strong>
+                      <span>負責人 {{ option.owner_name || '-' }} / 統編 {{ option.tax_id || '-' }}</span>
+                    </button>
+                  </div>
+                </div>
+                <label>
+                  統一編號
+                  <input name="newTaxId" [(ngModel)]="newCustomerForm.taxId" placeholder="請輸入統一編號" />
+                </label>
+                <label>
+                  負責人
+                  <input name="newOwnerName" [(ngModel)]="newCustomerForm.ownerName" placeholder="請輸入負責人姓名" />
+                </label>
+                <label>
+                  聯絡人
+                  <input name="newContactPerson" [(ngModel)]="newCustomerForm.contactPerson" placeholder="請輸入聯絡人姓名" />
+                </label>
+                <label class="wide">
+                  電話
+                  <input name="newPhone" [(ngModel)]="newCustomerForm.phone" placeholder="請輸入電話（可含分機）" />
+                </label>
+              </div>
+            </section>
+
+            <section class="customer-form-section customer-form-section-muted">
+              <h3>其他資料</h3>
+              <div class="customer-new-grid customer-new-grid-three">
+                <label>
+                  負責人生日
+                  <input type="date" name="newOwnerBirthday" [(ngModel)]="newCustomerForm.ownerBirthday" />
+                </label>
+                <label>
+                  聯絡人生日
+                  <input type="date" name="newContactBirthday" [(ngModel)]="newCustomerForm.contactBirthday" />
+                </label>
+                <label>
+                  轉寄地址
+                  <input name="newForwardingAddress" [(ngModel)]="newCustomerForm.forwardingAddress" placeholder="請輸入轉寄地址" />
+                </label>
+                <label>
+                  零用金
+                  <input type="number" name="newPettyCash" [(ngModel)]="newCustomerForm.pettyCash" placeholder="請輸入零用金金額" />
+                </label>
+                <label>
+                  會計師資訊
+                  <input name="newAccountantInfo" [(ngModel)]="newCustomerForm.accountantInfo" placeholder="請輸入會計師資訊" />
+                </label>
+                <label>
+                  帳戶資訊
+                  <input name="newAccountInfo" [(ngModel)]="newCustomerForm.accountInfo" placeholder="請輸入帳戶資訊" />
+                </label>
+                <label class="checkbox-label wide">
+                  <input type="checkbox" name="newIsAgent" [(ngModel)]="newCustomerForm.isAgent" />
+                  代辦
+                </label>
+                <label class="wide">
+                  備註
+                  <textarea name="newNotes" rows="3" [(ngModel)]="newCustomerForm.notes" placeholder="請輸入備註"></textarea>
+                </label>
+              </div>
+            </section>
+
+            <section class="customer-form-section related-company-section">
+              <div class="customer-section-heading">
+                <h3>相關公司</h3>
+                <span>若有關聯公司，請逐筆新增。</span>
+              </div>
+              <div class="related-company-fields">
+                <div class="repeatable-field" *ngFor="let relatedName of newCustomerForm.relatedCompanyNames; let i = index; trackBy: trackByIndex">
+                  <input
+                    [name]="'newRelatedCompany' + i"
+                    [(ngModel)]="newCustomerForm.relatedCompanyNames[i]"
+                    placeholder="輸入相關公司名稱"
+                  />
+                  <button type="button" class="icon-button remove" title="移除相關公司" aria-label="移除相關公司" (click)="removeRelatedCompany(i)">×</button>
+                </div>
+                <button type="button" class="add-related-company" (click)="addRelatedCompany()">新增相關公司</button>
+              </div>
+            </section>
+          </section>
+
+          <section class="customer-new-step-content" *ngIf="customerNewStep() === 2">
+            <section class="customer-form-section">
+              <h3>租約資料</h3>
+              <div class="customer-new-grid">
+                <label>
+                  承租項目
+                  <select name="newCustomerContractRentalItem" [(ngModel)]="newCustomerContractForm.rentalItem">
+                    <option *ngFor="let item of rentalItemOptions" [ngValue]="item">{{ item }}</option>
+                  </select>
+                </label>
+                <label>
+                  承租狀態
+                  <select name="newCustomerContractRentalStatus" [(ngModel)]="newCustomerContractForm.rentalStatus">
+                    <option *ngFor="let status of contractRentalStatusOptions" [ngValue]="status">{{ status }}</option>
+                  </select>
+                </label>
+                <label>
+                  簽約日期
+                  <input type="date" name="newCustomerContractSignedDate" [(ngModel)]="newCustomerContractForm.signedDateText" />
+                </label>
+                <label>
+                  簽約人
+                  <select name="newCustomerContractSigner" [(ngModel)]="newCustomerContractForm.signerStaffId">
+                    <option [ngValue]="null">請選擇</option>
+                    <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">
+                      {{ value(staff, 'staff_name') }} / {{ value(staff, 'branch_name') }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  合作夥伴
+                  <select name="newCustomerContractPartner" [(ngModel)]="newCustomerContractForm.partnerStaffId">
+                    <option [ngValue]="null">無</option>
+                    <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">
+                      {{ value(staff, 'staff_name') }} / {{ value(staff, 'branch_name') }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  來源
+                  <input name="newCustomerContractSource" [(ngModel)]="newCustomerContractForm.sourceText" />
+                </label>
+                <label>
+                  辦公室
+                  <select name="newCustomerContractOffice" [(ngModel)]="newCustomerContractForm.officeId">
+                    <option [ngValue]="null">未租辦公室</option>
+                    <option *ngFor="let office of offices()" [ngValue]="office.office_id">
+                      {{ office.branch_name || '-' }} / {{ office.office_no || '-' }}
+                    </option>
+                  </select>
+                </label>
+                <label>
+                  起租日期
+                  <input type="date" name="newCustomerContractStart" [(ngModel)]="newCustomerContractForm.startDateText" />
+                </label>
+                <label>
+                  到期日期
+                  <input type="date" name="newCustomerContractEnd" [(ngModel)]="newCustomerContractForm.endDateText" />
+                </label>
+                <label>
+                  退租日期
+                  <input type="date" name="newCustomerContractTermination" [(ngModel)]="newCustomerContractForm.terminationDateText" />
+                </label>
+                <label>
+                  付款週期
+                  <input type="number" name="newCustomerContractPaymentMonths" [(ngModel)]="newCustomerContractForm.paymentMonths" />
+                </label>
+                <label>
+                  租約狀態
+                  <select name="newCustomerContractLeaseStatus" [(ngModel)]="newCustomerContractForm.leaseStatus">
+                    <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
+                  </select>
+                </label>
+                <label class="wide">
+                  租約圖片
+                  <input type="file" name="newCustomerContractImage" accept="image/*,.pdf" (change)="onNewCustomerLeaseImage($event)" />
+                </label>
+              </div>
+            </section>
+
+            <section class="customer-form-section customer-form-section-muted">
+              <h3>首筆繳款</h3>
+              <div class="customer-new-grid customer-new-grid-three">
+                <label>
+                  租金
+                  <input type="number" name="newCustomerContractRent" [(ngModel)]="newCustomerContractForm.rent" />
+                </label>
+                <label>
+                  押金
+                  <input type="number" name="newCustomerContractDeposit" [(ngModel)]="newCustomerContractForm.deposit" />
+                </label>
+                <label>
+                  本次繳款金額
+                  <input type="number" min="0" name="newCustomerFirstPaymentAmount" [(ngModel)]="newCustomerFirstPaymentAmount" />
+                </label>
+                <label>
+                  繳款日期
+                  <input type="date" name="newCustomerFirstPaymentDate" [(ngModel)]="newCustomerFirstPaymentDateText" />
+                </label>
+              </div>
+            </section>
+          </section>
+
+          <footer class="customer-new-actions">
+            <div class="customer-new-actions-left">
+              <button type="button" class="ghost" (click)="cancelNewCustomer()">取消</button>
+              <button type="button" class="draft-button" disabled title="草稿功能尚未開放">儲存草稿</button>
+            </div>
+            <div class="customer-new-actions-right">
+              <button type="button" class="ghost" *ngIf="customerNewStep() === 2" (click)="goToNewCustomerStep(1)">上一步：客戶資料</button>
+              <button type="button" class="next-step-button" *ngIf="customerNewStep() === 1" (click)="goToNewCustomerStep(2)">
+                下一步：租約與首筆繳款 <span aria-hidden="true">›</span>
+              </button>
+              <button type="submit" *ngIf="customerNewStep() === 2" [disabled]="saving()">新增客戶與租約</button>
+            </div>
+          </footer>
         </form>
       </section>
     </section>
 
     <section class="single-view" *ngIf="activeView() === 'contract-search'">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2>查詢租約</h2>
-            <p>付款月數代表每次繳幾個月；例如填 6，表示每半年繳一次。</p>
+      <section class="panel customer-search-panel search-page-panel">
+        <form class="customer-search-form compact-search-form" (ngSubmit)="searchContracts()">
+          <div class="compact-search-grid contract-search-grid">
+            <label class="customer-company-query">
+              公司名稱
+              <input type="search" name="contractFilterCompanyName" placeholder="請輸入公司名稱" [(ngModel)]="contractFilters.companyName" />
+            </label>
+            <label class="customer-company-query">
+              統一編號
+              <input type="search" name="contractFilterTaxId" placeholder="請輸入統一編號" [(ngModel)]="contractFilters.taxId" />
+            </label>
+            <label class="customer-company-query">
+              起租日期
+              <input type="date" name="contractFilterStartDate" [(ngModel)]="contractFilters.startDateText" />
+            </label>
+            <label class="customer-company-query">
+              到期日期
+              <input type="date" name="contractFilterEndDate" [(ngModel)]="contractFilters.endDateText" />
+            </label>
+            <label class="customer-company-query">
+              租約狀態
+              <select name="contractFilterLeaseStatus" [(ngModel)]="contractFilters.leaseStatus">
+                <option value="">全部狀態</option>
+                <option *ngFor="let status of contractStatusOptions" [value]="status">{{ displayLeaseStatus(status) }}</option>
+              </select>
+            </label>
+            <div class="compact-search-actions">
+              <button type="submit" class="customer-search-submit" [disabled]="loading()">{{ loading() ? '查詢中…' : '查詢' }}</button>
+              <button type="button" class="ghost customer-clear-button" [disabled]="loading()" (click)="resetContractFilters()">清除</button>
+            </div>
           </div>
-        </div>
-
-        <section class="filter-bar">
-          <label>
-            客戶名稱
-            <input
-              type="search"
-              name="contractFilterCompanyName"
-              placeholder="輸入客戶名稱"
-              [(ngModel)]="contractFilters.companyName"
-              (ngModelChange)="loadContracts()"
-            />
-          </label>
-          <label>
-            起租日期
-            <input
-              type="date"
-              name="contractFilterStartDate"
-              [(ngModel)]="contractFilters.startDateText"
-              (ngModelChange)="loadContracts()"
-            />
-          </label>
-          <label>
-            到期日期
-            <input
-              type="date"
-              name="contractFilterEndDate"
-              [(ngModel)]="contractFilters.endDateText"
-              (ngModelChange)="loadContracts()"
-            />
-          </label>
-          <fieldset class="radio-group">
-            <legend>租約狀態</legend>
-            <label>
-              <input
-                type="radio"
-                name="contractFilterLeaseStatus"
-                value=""
-                [(ngModel)]="contractFilters.leaseStatus"
-                (ngModelChange)="loadContracts()"
-              />
-              全部
-            </label>
-            <label *ngFor="let status of contractStatusOptions">
-              <input
-                type="radio"
-                name="contractFilterLeaseStatus"
-                [value]="status"
-                [(ngModel)]="contractFilters.leaseStatus"
-                (ngModelChange)="loadContracts()"
-              />
-              {{ status }}
-            </label>
-          </fieldset>
-          <button type="button" class="ghost" (click)="resetContractFilters()">清除</button>
-        </section>
+        </form>
 
         <div class="rent-edit-panel" *ngIf="editingContract() as editing">
           <div class="panel-header">
@@ -752,7 +881,7 @@
           <form class="customer-form" (ngSubmit)="saveContractEdit()">
             <div class="info-grid wide">
               <div><span>辦公室</span><strong>{{ value(editing, 'office_no') }}</strong></div>
-              <div><span>付款月數</span><strong>{{ value(editing, 'payment_months') }}</strong></div>
+              <div><span>付款週期</span><strong>{{ value(editing, 'payment_months') }}</strong></div>
               <div><span>起租日期</span><strong>{{ value(editing, 'start_date_text') }}</strong></div>
               <div><span>到期日期</span><strong>{{ value(editing, 'end_date_text') }}</strong></div>
               <div><span>退租日期</span><strong>{{ value(editing, 'termination_date_text') }}</strong></div>
@@ -762,7 +891,7 @@
             <label>
               租約狀態
               <select name="editContractLeaseStatus" [(ngModel)]="contractEditForm.leaseStatus">
-                <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ status }}</option>
+                <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
               </select>
             </label>
             <div class="form-actions wide">
@@ -772,34 +901,58 @@
           </form>
         </div>
 
-        <div class="simple-table rent-table">
-          <div class="simple-row header contract-row">
-            <span>公司</span>
+        <div class="customer-results-toolbar contract-results-toolbar">
+          <p>搜尋結果：共 {{ contractTotal() }} 筆</p>
+          <div class="customer-results-actions" *ngIf="contractTotal()">
+            <label class="customer-page-size">
+              每頁顯示
+              <select [ngModel]="contractPageSize()" (ngModelChange)="changeContractPageSize($event)" aria-label="每頁顯示筆數">
+                <option [ngValue]="10">10 筆</option>
+                <option [ngValue]="20">20 筆</option>
+                <option [ngValue]="50">50 筆</option>
+              </select>
+            </label>
+            <div class="customer-page-summary" aria-label="搜尋結果分頁">
+              <button type="button" class="ghost compact-button pager-icon" aria-label="上一頁" [disabled]="contractPage() === 0 || loading()" (click)="changeContractPage(-1)">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"></path></svg>
+              </button>
+              <span>第 {{ contractPage() + 1 }} 頁，共 {{ contractTotalPages() }} 頁</span>
+              <button type="button" class="ghost compact-button pager-icon" aria-label="下一頁" [disabled]="contractPage() + 1 >= contractTotalPages() || loading()" (click)="changeContractPage(1)">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"></path></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="simple-table customer-results-table contract-results-table" *ngIf="contracts().length; else noContracts">
+          <div class="simple-row header customer-row contract-row">
+            <span>公司名稱</span>
             <span>辦公室</span>
-            <span>付款月數</span>
+            <span>付款週期</span>
             <span>起租日期</span>
             <span>到期日期</span>
-            <span>退租日期</span>
             <span>租金</span>
             <span>押金</span>
             <span>租約狀態</span>
             <span>操作</span>
           </div>
-          <div class="simple-row contract-row" *ngFor="let row of contracts()">
+          <div class="simple-row customer-row contract-row" *ngFor="let row of contracts()">
             <span>{{ value(row, 'company_name') }}</span>
             <span>{{ value(row, 'office_no') }}</span>
             <span>{{ value(row, 'payment_months') }}</span>
             <span>{{ value(row, 'start_date_text') }}</span>
             <span>{{ value(row, 'end_date_text') }}</span>
-            <span>{{ value(row, 'termination_date_text') }}</span>
             <span>{{ money(row['rent']) }}</span>
             <span>{{ money(row['deposit']) }}</span>
-            <span>{{ value(row, 'lease_status') }}</span>
+            <span>{{ displayLeaseStatus(row['lease_status']) }}</span>
             <span>
-              <button type="button" class="ghost compact-button" (click)="startEditContract(row)">修改</button>
+              <button type="button" class="ghost compact-button table-action-button" (click)="startEditContract(row)">修改</button>
             </span>
           </div>
         </div>
+        <ng-template #noContracts>
+          <div class="empty-state customer-results-empty">目前沒有符合條件的租約資料。</div>
+        </ng-template>
       </section>
     </section>
 
@@ -880,9 +1033,8 @@
             </select>
           </label>
           <label>
-            付款月數
+            付款週期
             <input type="number" name="newContractPaymentMonths" [(ngModel)]="newContractForm.paymentMonths" />
-            <small>每次繳幾個月；3 表示每季繳，6 表示每半年繳。</small>
           </label>
           <label>
             起租日期
@@ -905,9 +1057,17 @@
             <input type="number" name="newContractDeposit" [(ngModel)]="newContractForm.deposit" />
           </label>
           <label>
+            本次繳款金額
+            <input type="number" min="0" name="newContractFirstPaymentAmount" [(ngModel)]="newContractFirstPaymentAmount" />
+          </label>
+          <label>
+            繳款日期
+            <input type="date" name="newContractFirstPaymentDate" [(ngModel)]="newContractFirstPaymentDateText" />
+          </label>
+          <label>
             租約狀態
             <select name="newContractLeaseStatus" [(ngModel)]="newContractForm.leaseStatus">
-              <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ status }}</option>
+              <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
             </select>
           </label>
           <div class="form-actions wide">
@@ -918,23 +1078,46 @@
     </section>
 
     <section class="single-view" *ngIf="activeView() === 'rent-search'">
-      <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2>查詢租金</h2>
-            <p>可依公司、負責人、統編或收據號碼搜尋。</p>
+      <section class="panel customer-search-panel search-page-panel">
+        <form class="customer-search-form compact-search-form rent-payment-search-form" (ngSubmit)="searchRentPayments()">
+          <div class="compact-search-grid reconciliation-search-grid">
+            <label class="customer-company-query">
+              公司名稱
+              <input
+                type="search"
+                name="rentPaymentFilterCompanyName"
+                placeholder="輸入公司名稱"
+                [(ngModel)]="rentPaymentFilters.companyName"
+              />
+            </label>
+            <label class="customer-company-query">
+              統一編號
+              <input
+                type="search"
+                name="rentPaymentFilterTaxId"
+                placeholder="輸入統一編號"
+                [(ngModel)]="rentPaymentFilters.taxId"
+              />
+            </label>
+            <fieldset class="compact-date-range">
+              <legend>繳款日期區間</legend>
+              <div class="compact-date-inputs">
+                <input type="date" name="rentPaymentFilterStartDate" aria-label="繳款日期起始日期" [(ngModel)]="rentPaymentFilters.paymentDateStartText" />
+                <span class="compact-date-separator" aria-hidden="true">～</span>
+                <input type="date" name="rentPaymentFilterEndDate" aria-label="繳款日期結束日期" [(ngModel)]="rentPaymentFilters.paymentDateEndText" />
+              </div>
+            </fieldset>
+            <div class="compact-search-actions">
+              <button type="submit" class="customer-search-submit" [disabled]="loading()">{{ loading() ? '查詢中…' : '查詢' }}</button>
+              <button type="button" class="ghost customer-clear-button" [disabled]="loading()" (click)="resetRentPaymentFilters()">清除</button>
+            </div>
           </div>
-          <input
-            type="search"
-            placeholder="搜尋客戶或收據"
-            [(ngModel)]="rentSearch"
-            (ngModelChange)="loadRentPayments()"
-          />
-        </div>
+        </form>
+
         <div class="rent-edit-panel" *ngIf="editingRentPayment() as editing">
           <div class="panel-header">
             <div>
-              <h3>修改租金</h3>
+              <h3>修改對帳</h3>
               <p>{{ value(editing, 'company_name') }} / {{ formatPaymentMonth(editing['payment_month']) }}</p>
             </div>
           </div>
@@ -979,20 +1162,43 @@
           </form>
         </div>
 
-        <div class="simple-table rent-table">
-          <div class="simple-row header rent-row" [class.can-edit]="canEditRent()">
-            <span>公司</span>
+        <div class="customer-results-toolbar reconciliation-results-toolbar">
+          <p>搜尋結果：共 {{ rentPaymentTotal() }} 筆</p>
+          <div class="customer-results-actions" *ngIf="rentPaymentTotal()">
+            <label class="customer-page-size">
+              每頁顯示
+              <select [ngModel]="rentPaymentPageSize()" (ngModelChange)="changeRentPaymentPageSize($event)" aria-label="每頁顯示筆數">
+                <option [ngValue]="10">10 筆</option>
+                <option [ngValue]="20">20 筆</option>
+                <option [ngValue]="50">50 筆</option>
+              </select>
+            </label>
+            <div class="customer-page-summary" aria-label="搜尋結果分頁">
+              <button type="button" class="ghost compact-button pager-icon" aria-label="上一頁" [disabled]="rentPaymentPage() === 0 || loading()" (click)="changeRentPaymentPage(-1)">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"></path></svg>
+              </button>
+              <span>第 {{ rentPaymentPage() + 1 }} 頁，共 {{ rentPaymentTotalPages() }} 頁</span>
+              <button type="button" class="ghost compact-button pager-icon" aria-label="下一頁" [disabled]="rentPaymentPage() + 1 >= rentPaymentTotalPages() || loading()" (click)="changeRentPaymentPage(1)">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"></path></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="simple-table customer-results-table reconciliation-results-table" *ngIf="rentPayments().length; else noRentPayments">
+          <div class="simple-row header customer-row rent-row" [class.can-edit]="canEditRent()">
+            <span>公司名稱</span>
             <span>負責人</span>
             <span>月份</span>
             <span>繳款日期</span>
             <span>費用起日</span>
             <span>費用迄日</span>
-            <span>金額</span>
+            <span>本次繳款金額</span>
             <span>收據號碼</span>
             <span>備註</span>
             <span *ngIf="canEditRent()">操作</span>
           </div>
-          <div class="simple-row rent-row" [class.can-edit]="canEditRent()" *ngFor="let row of rentPayments()">
+          <div class="simple-row customer-row rent-row" [class.can-edit]="canEditRent()" *ngFor="let row of rentPayments()">
             <span>{{ value(row, 'company_name') }}</span>
             <span>{{ value(row, 'owner_name') }}</span>
             <span>{{ formatPaymentMonth(row['payment_month']) }}</span>
@@ -1003,10 +1209,13 @@
             <span>{{ value(row, 'receipt_no') }}</span>
             <span>{{ value(row, 'note') }}</span>
             <span *ngIf="canEditRent()">
-              <button type="button" class="ghost compact-button" (click)="startEditRentPayment(row)">修改</button>
+              <button type="button" class="ghost compact-button table-action-button" (click)="startEditRentPayment(row)">修改</button>
             </span>
           </div>
         </div>
+        <ng-template #noRentPayments>
+          <div class="empty-state customer-results-empty">目前沒有符合條件的對帳資料。</div>
+        </ng-template>
       </section>
     </section>
 
@@ -1014,7 +1223,7 @@
       <section class="panel">
         <div class="panel-header">
           <div>
-            <h2>新增租金</h2>
+            <h2>新增對帳</h2>
             <p>輸入公司名稱後選擇客戶與合約。</p>
           </div>
         </div>
@@ -1078,7 +1287,7 @@
             <textarea name="rentNote" rows="3" [(ngModel)]="rentForm.note"></textarea>
           </label>
           <div class="form-actions wide">
-            <button type="submit">新增租金</button>
+            <button type="submit">新增對帳</button>
           </div>
         </form>
       </section>
@@ -1636,7 +1845,7 @@
             <select name="newChargeListContract" [(ngModel)]="newChargeListForm.contractId" required>
               <option [ngValue]="null">請選擇租約</option>
               <option *ngFor="let contract of chargeListCustomer.contracts" [ngValue]="contract['contract_id']">
-                {{ contract['office_no'] || '登記' }} / {{ contract['lease_status'] }}
+                {{ contract['office_no'] || '登記' }} / {{ displayLeaseStatus(contract['lease_status']) }}
               </option>
             </select>
           </label>

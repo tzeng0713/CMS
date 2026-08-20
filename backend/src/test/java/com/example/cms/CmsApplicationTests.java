@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Map;
 
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
@@ -54,7 +55,10 @@ class CmsApplicationTests {
 
         mvc.perform(get("/api/customers"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].company_name").exists());
+                .andExpect(jsonPath("$.content[0].company_name").exists())
+                .andExpect(jsonPath("$.content").isArray())
+                .andExpect(jsonPath("$.page", is(0)))
+                .andExpect(jsonPath("$.pageSize", is(20)));
     }
 
     @Test
@@ -85,15 +89,15 @@ class CmsApplicationTests {
 
         mvc.perform(get("/api/customers").param("ownerBirthdayMonth", "8"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].customer_id", hasItem((int) augustOwner)))
-                .andExpect(jsonPath("$[*].customer_id", not(hasItem((int) septemberContact))));
+                .andExpect(jsonPath("$.content[*].customer_id", hasItem((int) augustOwner)))
+                .andExpect(jsonPath("$.content[*].customer_id", not(hasItem((int) septemberContact))));
 
         mvc.perform(get("/api/customers")
                         .param("contactBirthdayMonth", "9")
-                        .param("companyName", "Contact Search"))
+                .param("companyName", "Contact Search"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].customer_id", hasItems((int) septemberContact, (int) rocContact)))
-                .andExpect(jsonPath("$[*].customer_id", not(hasItem((int) augustOwner))));
+                .andExpect(jsonPath("$.content[*].customer_id", hasItems((int) septemberContact, (int) rocContact)))
+                .andExpect(jsonPath("$.content[*].customer_id", not(hasItem((int) augustOwner))));
     }
 
     @Test
@@ -103,9 +107,13 @@ class CmsApplicationTests {
             insertDashboardCustomer("Newer January Birthday Co " + index, "1985-01-20");
         }
 
-        mvc.perform(get("/api/customers").param("ownerBirthdayMonth", "11"))
+        mvc.perform(get("/api/customers")
+                        .param("ownerBirthdayMonth", "11")
+                        .param("page", "0")
+                        .param("pageSize", "1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].customer_id", hasItem((int) targetCustomer)));
+                .andExpect(jsonPath("$.content[*].customer_id", hasItem((int) targetCustomer)))
+                .andExpect(jsonPath("$.totalElements", is(1)));
     }
 
     @Test
@@ -370,6 +378,43 @@ class CmsApplicationTests {
     }
 
     @Test
+    void contractRenewalStoresTheCurrentPaymentAmountAndDate() throws Exception {
+        MvcResult created = mvc.perform(post("/api/contracts/with-first-payment")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "contract": {
+                                    "customerId": 1,
+                                    "rentalItem": "登記",
+                                    "rentalStatus": "登記",
+                                    "signerStaffId": 1,
+                                    "partnerStaffId": 2,
+                                    "paymentMonths": 1,
+                                    "startDateText": "2026-08-01",
+                                    "endDateText": "2026-08-31",
+                                    "rent": 3000,
+                                    "leaseStatus": "綁約中",
+                                    "updatedBy": 1
+                                  },
+                                  "firstPaymentAmount": 3000,
+                                  "firstPaymentDateText": "2026-08-02"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.contract_id").exists())
+                .andReturn();
+
+        long contractId = objectMapper.readTree(created.getResponse().getContentAsString())
+                .get("contract_id").asLong();
+        Map<String, Object> payment = jdbc.queryForMap(
+                "SELECT * FROM rent_payments WHERE contract_id = ?", contractId);
+
+        org.junit.jupiter.api.Assertions.assertEquals(3000.0, ((Number) payment.get("AMOUNT")).doubleValue());
+        org.junit.jupiter.api.Assertions.assertEquals("2026-08-02", payment.get("PAYMENT_DATE_TEXT"));
+        org.junit.jupiter.api.Assertions.assertEquals("本次繳款", payment.get("NOTE"));
+    }
+
+    @Test
     void latestContractReturnsNewestContractForRenewal() throws Exception {
         MvcResult created = mvc.perform(post("/api/contracts")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -439,7 +484,7 @@ class CmsApplicationTests {
     void customerSearchIncludesCustomersWithSameOwnerName() throws Exception {
         mvc.perform(get("/api/customers").param("search", "金鋐源"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].customer_id", hasItems(2, 3, 4)));
+                .andExpect(jsonPath("$.content[*].customer_id", hasItems(2, 3, 4)));
     }
 
     @Test
@@ -452,8 +497,54 @@ class CmsApplicationTests {
                         .param("branchId", "1")
                         .param("officeNo", "102"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].customer_id", is(2)))
-                .andExpect(jsonPath("$[0].company_name", is("金鋐源記帳士事務所")));
+                .andExpect(jsonPath("$.content[0].customer_id", is(2)))
+                .andExpect(jsonPath("$.content[0].company_name", is("金鋐源記帳士事務所")));
+    }
+
+    @Test
+    void customerSearchSupportsAccountInfoAndReturnsLatestContractFields() throws Exception {
+        mvc.perform(get("/api/customers")
+                        .param("accountInfo", "第一銀行")
+                        .param("page", "0")
+                        .param("pageSize", "1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()", is(1)))
+                .andExpect(jsonPath("$.totalElements", is(1)))
+                .andExpect(jsonPath("$.page", is(0)))
+                .andExpect(jsonPath("$.pageSize", is(1)))
+                .andExpect(jsonPath("$.content[0].company_name", is("金鋐源記帳士事務所")))
+                .andExpect(jsonPath("$.content[0].phone", is("0907637698 羅r")))
+                .andExpect(jsonPath("$.content[0].tax_id", is("77214901")))
+                .andExpect(jsonPath("$.content[0].rent", is(17000.0)))
+                .andExpect(jsonPath("$.content[0].signed_date_text", is("2026-01-05")))
+                .andExpect(jsonPath("$.content[0].end_date_text", is("2026-12-31")));
+    }
+
+    @Test
+    void customerSearchReturnsOnlyRequestedPage() throws Exception {
+        insertDashboardCustomer("Server Page Customer A", "1980-01-01");
+        insertDashboardCustomer("Server Page Customer B", "1980-01-01");
+        insertDashboardCustomer("Server Page Customer C", "1980-01-01");
+
+        mvc.perform(get("/api/customers")
+                        .param("companyName", "Server Page Customer")
+                        .param("page", "0")
+                        .param("pageSize", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()", is(2)))
+                .andExpect(jsonPath("$.totalElements", is(3)))
+                .andExpect(jsonPath("$.page", is(0)))
+                .andExpect(jsonPath("$.pageSize", is(2)));
+
+        mvc.perform(get("/api/customers")
+                        .param("companyName", "Server Page Customer")
+                        .param("page", "1")
+                        .param("pageSize", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()", is(1)))
+                .andExpect(jsonPath("$.totalElements", is(3)))
+                .andExpect(jsonPath("$.page", is(1)))
+                .andExpect(jsonPath("$.pageSize", is(2)));
     }
 
     @Test
@@ -532,7 +623,75 @@ class CmsApplicationTests {
     void rentPaymentsCanBeFilteredByCustomerKeyword() throws Exception {
         mvc.perform(get("/api/rent-payments").param("search", "77214901"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].tax_id", is("77214901")));
+                .andExpect(jsonPath("$.content[0].tax_id", is("77214901")));
+    }
+
+    @Test
+    void contractSearchReturnsOnlyTheRequestedServerPage() throws Exception {
+        long firstCustomer = insertDashboardCustomer("Contract Server Page A", "1980-01-01");
+        long secondCustomer = insertDashboardCustomer("Contract Server Page B", "1980-01-01");
+        long thirdCustomer = insertDashboardCustomer("Contract Server Page C", "1980-01-01");
+        insertDashboardContractWithTerms(firstCustomer, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), "辦公室", 1, 1000, "綁約中");
+        insertDashboardContractWithTerms(secondCustomer, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), "辦公室", 1, 1000, "綁約中");
+        insertDashboardContractWithTerms(thirdCustomer, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), "辦公室", 1, 1000, "綁約中");
+
+        mvc.perform(get("/api/contracts")
+                        .param("companyName", "Contract Server Page")
+                        .param("page", "1")
+                        .param("pageSize", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()", is(1)))
+                .andExpect(jsonPath("$.content[0].company_name", is("Contract Server Page A")))
+                .andExpect(jsonPath("$.totalElements", is(3)))
+                .andExpect(jsonPath("$.page", is(1)))
+                .andExpect(jsonPath("$.pageSize", is(2)));
+    }
+
+    @Test
+    void reconciliationSearchReturnsOnlyTheRequestedServerPage() throws Exception {
+        long firstCustomer = insertDashboardCustomer("Reconciliation Server Page A", "1980-01-01");
+        long secondCustomer = insertDashboardCustomer("Reconciliation Server Page B", "1980-01-01");
+        long thirdCustomer = insertDashboardCustomer("Reconciliation Server Page C", "1980-01-01");
+        long firstContract = insertDashboardContractWithTerms(firstCustomer, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), "辦公室", 1, 1000, "綁約中");
+        long secondContract = insertDashboardContractWithTerms(secondCustomer, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), "辦公室", 1, 1000, "綁約中");
+        long thirdContract = insertDashboardContractWithTerms(thirdCustomer, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), "辦公室", 1, 1000, "綁約中");
+        insertDashboardRentPayment(firstCustomer, firstContract, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 31));
+        insertDashboardRentPayment(secondCustomer, secondContract, LocalDate.of(2026, 8, 2), LocalDate.of(2026, 8, 31));
+        insertDashboardRentPayment(thirdCustomer, thirdContract, LocalDate.of(2026, 8, 3), LocalDate.of(2026, 8, 31));
+
+        mvc.perform(get("/api/rent-payments")
+                        .param("companyName", "Reconciliation Server Page")
+                        .param("page", "1")
+                        .param("pageSize", "2"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()", is(1)))
+                .andExpect(jsonPath("$.content[0].company_name", is("Reconciliation Server Page A")))
+                .andExpect(jsonPath("$.totalElements", is(3)))
+                .andExpect(jsonPath("$.page", is(1)))
+                .andExpect(jsonPath("$.pageSize", is(2)));
+    }
+
+    @Test
+    void rentPaymentsCanBeFilteredByCompanyTaxIdAndPaymentDateRange() throws Exception {
+        long matchingCustomer = insertDashboardCustomer("Payment Filter Co", "1980-01-01");
+        long outsideRangeCustomer = insertDashboardCustomer("Payment Filter Co Archive", "1980-01-01");
+        jdbc.update("UPDATE customers SET tax_id = ? WHERE customer_id = ?", "PAYMENT-FILTER-TAX", matchingCustomer);
+        jdbc.update("UPDATE customers SET tax_id = ? WHERE customer_id = ?", "PAYMENT-FILTER-TAX", outsideRangeCustomer);
+        long matchingContract = insertDashboardContractWithTerms(
+                matchingCustomer, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), "辦公室", 1, 1000, "綁約中");
+        long outsideRangeContract = insertDashboardContractWithTerms(
+                outsideRangeCustomer, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31), "辦公室", 1, 1000, "綁約中");
+        insertDashboardRentPayment(matchingCustomer, matchingContract, LocalDate.of(2026, 8, 15), LocalDate.of(2026, 8, 31));
+        insertDashboardRentPayment(outsideRangeCustomer, outsideRangeContract, LocalDate.of(2026, 7, 15), LocalDate.of(2026, 7, 31));
+
+        mvc.perform(get("/api/rent-payments")
+                        .param("companyName", "Payment Filter Co")
+                        .param("taxId", "PAYMENT-FILTER-TAX")
+                        .param("paymentDateStartText", "2026-08-01")
+                        .param("paymentDateEndText", "2026-08-31"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].customer_id", hasItem((int) matchingCustomer)))
+                .andExpect(jsonPath("$.content[*].customer_id", not(hasItem((int) outsideRangeCustomer))));
     }
 
     @Test
@@ -646,7 +805,22 @@ class CmsApplicationTests {
                         .param("startDateText", "2026-03-01")
                         .param("endDateText", "2026-03-31"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[*].contract_id", hasItems((int) contractId)));
+                .andExpect(jsonPath("$.content[*].contract_id", hasItems((int) contractId)));
+    }
+
+    @Test
+    void contractsCanBeFilteredByCustomerTaxId() throws Exception {
+        long targetCustomer = insertDashboardCustomer("Contract Tax Target Co", "1980-01-01");
+        long otherCustomer = insertDashboardCustomer("Contract Tax Other Co", "1980-01-01");
+        jdbc.update("UPDATE customers SET tax_id = ? WHERE customer_id = ?", "CONTRACT-TAX-TARGET", targetCustomer);
+        jdbc.update("UPDATE customers SET tax_id = ? WHERE customer_id = ?", "CONTRACT-TAX-OTHER", otherCustomer);
+        insertDashboardContract(targetCustomer, LocalDate.now().plusMonths(6), "綁約中");
+        insertDashboardContract(otherCustomer, LocalDate.now().plusMonths(6), "綁約中");
+
+        mvc.perform(get("/api/contracts").param("taxId", "CONTRACT-TAX-TARGET"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[*].customer_id", hasItem((int) targetCustomer)))
+                .andExpect(jsonPath("$.content[*].customer_id", not(hasItem((int) otherCustomer))));
     }
 
     @Test

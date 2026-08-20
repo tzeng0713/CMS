@@ -6,8 +6,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDate;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -20,66 +20,89 @@ public class CustomerService extends CmsJdbcSupport {
         super(jdbc);
     }
 
-    public List<Map<String, Object>> customers(String search, String ownerName, String companyName, String taxId,
-                                               String phone, Long branchId, String officeNo,
-                                               Integer ownerBirthdayMonth, Integer contactBirthdayMonth) {
+    public Map<String, Object> customers(String search, String ownerName, String companyName, String taxId,
+                                         String phone, String accountInfo, Long branchId, String officeNo,
+                                         Integer ownerBirthdayMonth, Integer contactBirthdayMonth,
+                                         Integer page, Integer pageSize) {
         validateBirthdayMonth(ownerBirthdayMonth);
         validateBirthdayMonth(contactBirthdayMonth);
-        if (hasCustomerFilters(companyName, taxId, phone, ownerName, branchId, officeNo,
-                ownerBirthdayMonth, contactBirthdayMonth)) {
-            String companyLike = "%" + blankToEmpty(companyName) + "%";
-            String taxIdLike = "%" + blankToEmpty(taxId) + "%";
-            String phoneLike = "%" + blankToEmpty(phone) + "%";
-            String ownerLike = "%" + blankToEmpty(ownerName) + "%";
-            String officeLike = "%" + blankToEmpty(officeNo) + "%";
-            List<Map<String, Object>> rows = jdbc.queryForList(customerListSql() + """
-                    WHERE c.customer_id IN (
-                        SELECT DISTINCT filtered.customer_id
-                        FROM customers filtered
-                        LEFT JOIN contracts filtered_contract ON filtered_contract.customer_id = filtered.customer_id
-                        LEFT JOIN offices filtered_office ON filtered_office.office_id = filtered_contract.office_id
-                        WHERE (? = '%%' OR filtered.company_name LIKE ?)
-                          AND (? = '%%' OR filtered.tax_id LIKE ?)
-                          AND (? = '%%' OR filtered.phone LIKE ?)
-                          AND (? = '%%' OR filtered.owner_name LIKE ?)
-                          AND (? IS NULL OR filtered_office.branch_id = ?)
-                          AND (? = '%%' OR filtered_office.office_no LIKE ?)
-                    )
-                    ORDER BY c.customer_id DESC
-                    """, companyLike, companyLike,
-                    taxIdLike, taxIdLike,
-                    phoneLike, phoneLike,
-                    ownerLike, ownerLike,
-                    branchId, branchId,
-                    officeLike, officeLike);
-            return filterBirthdayMonths(rows, ownerBirthdayMonth, contactBirthdayMonth);
-        }
         String searchText = search == null ? "" : search.trim();
-        if (searchText.isBlank()) {
-            return jdbc.queryForList(customerListSql() + """
-                    ORDER BY c.customer_id DESC
-                    LIMIT 200
+
+        boolean hasDetailedFilters = hasCustomerFilters(companyName, taxId, phone, accountInfo, ownerName,
+                branchId, officeNo, ownerBirthdayMonth, contactBirthdayMonth);
+        StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
+        List<Object> args = new ArrayList<>();
+        addLikeFilter(where, args, "c.company_name", companyName);
+        addLikeFilter(where, args, "c.tax_id", taxId);
+        addLikeFilter(where, args, "c.phone", phone);
+        addLikeFilter(where, args, "c.account_info", accountInfo);
+        addLikeFilter(where, args, "c.owner_name", ownerName);
+
+        String officeText = blankToEmpty(officeNo);
+        if (branchId != null || !officeText.isBlank()) {
+            where.append("""
+                    AND EXISTS (
+                        SELECT 1
+                        FROM contracts filtered_contract
+                        LEFT JOIN offices filtered_office ON filtered_office.office_id = filtered_contract.office_id
+                        WHERE filtered_contract.customer_id = c.customer_id
                     """);
+            if (branchId != null) {
+                where.append(" AND filtered_office.branch_id = ?");
+                args.add(branchId);
+            }
+            addLikeFilter(where, args, "filtered_office.office_no", officeNo);
+            where.append(")");
         }
-        String like = "%" + searchText + "%";
-        return jdbc.queryForList(customerListSql() + """
-                WHERE c.company_name LIKE ?
-                   OR c.owner_name LIKE ?
-                   OR c.tax_id LIKE ?
-                   OR c.owner_name IN (
-                       SELECT DISTINCT matched.owner_name
-                       FROM customers matched
-                       WHERE matched.owner_name IS NOT NULL
-                         AND matched.owner_name <> ''
-                         AND (
-                             matched.company_name LIKE ?
-                             OR matched.owner_name LIKE ?
-                             OR matched.tax_id LIKE ?
-                         )
-                   )
-                ORDER BY c.owner_name, c.customer_id DESC
-                LIMIT 200
-                """, like, like, like, like, like, like);
+        addBirthdayMonthFilter(where, args, "c.owner_birthday", ownerBirthdayMonth);
+        addBirthdayMonthFilter(where, args, "c.contact_birthday", contactBirthdayMonth);
+
+        if (!hasDetailedFilters && !searchText.isBlank()) {
+            String like = "%" + searchText + "%";
+            where.append("""
+                    AND (
+                        c.company_name LIKE ?
+                        OR c.owner_name LIKE ?
+                        OR c.tax_id LIKE ?
+                        OR c.owner_name IN (
+                            SELECT DISTINCT matched.owner_name
+                            FROM customers matched
+                            WHERE matched.owner_name IS NOT NULL
+                              AND matched.owner_name <> ''
+                              AND (
+                                  matched.company_name LIKE ?
+                                  OR matched.owner_name LIKE ?
+                                  OR matched.tax_id LIKE ?
+                              )
+                        )
+                    )
+                    """);
+            for (int i = 0; i < 6; i++) {
+                args.add(like);
+            }
+        }
+
+        int size = pageSize == null || pageSize <= 0 ? 20 : Math.min(pageSize, 200);
+        int pageNumber = page == null || page < 0 ? 0 : page;
+        long offset = (long) pageNumber * size;
+        String orderBy = !hasDetailedFilters && !searchText.isBlank()
+                ? " ORDER BY c.owner_name, c.customer_id DESC"
+                : " ORDER BY c.customer_id DESC";
+
+        List<Object> selectArgs = new ArrayList<>(args);
+        selectArgs.add(size);
+        selectArgs.add(offset);
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                customerListSql() + where + orderBy + " LIMIT ? OFFSET ?", selectArgs.toArray());
+        Long total = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM customers c" + where, Long.class, args.toArray());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("content", rows);
+        result.put("totalElements", total);
+        result.put("page", pageNumber);
+        result.put("pageSize", size);
+        return result;
     }
 
     public Map<String, Object> customerDetail(long id) {
@@ -258,6 +281,7 @@ public class CustomerService extends CmsJdbcSupport {
         return """
                 SELECT c.*,
                        co.contract_id, co.lease_status, co.rent, co.deposit,
+                       co.signed_date_text, co.end_date_text,
                        o.office_no, b.branch_name
                 FROM customers c
                 LEFT JOIN contracts co ON co.customer_id = c.customer_id
@@ -267,12 +291,29 @@ public class CustomerService extends CmsJdbcSupport {
                 """;
     }
 
-    private boolean hasCustomerFilters(String companyName, String taxId, String phone, String ownerName,
+    private void addLikeFilter(StringBuilder where, List<Object> args, String column, String value) {
+        String text = blankToEmpty(value);
+        if (!text.isBlank()) {
+            where.append(" AND ").append(column).append(" LIKE ?");
+            args.add("%" + text + "%");
+        }
+    }
+
+    private void addBirthdayMonthFilter(StringBuilder where, List<Object> args, String column, Integer month) {
+        if (month != null) {
+            where.append(" AND ").append(column).append(" REGEXP ?");
+            args.add("(^|[-/.])0?" + month + "([-/.])");
+        }
+    }
+
+    private boolean hasCustomerFilters(String companyName, String taxId, String phone, String accountInfo,
+                                       String ownerName,
                                        Long branchId, String officeNo, Integer ownerBirthdayMonth,
                                        Integer contactBirthdayMonth) {
         return !blankToEmpty(companyName).isBlank()
                 || !blankToEmpty(taxId).isBlank()
                 || !blankToEmpty(phone).isBlank()
+                || !blankToEmpty(accountInfo).isBlank()
                 || !blankToEmpty(ownerName).isBlank()
                 || branchId != null
                 || !blankToEmpty(officeNo).isBlank()
@@ -285,24 +326,6 @@ public class CustomerService extends CmsJdbcSupport {
             throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.BAD_REQUEST, "birthday month must be between 1 and 12");
         }
-    }
-
-    private List<Map<String, Object>> filterBirthdayMonths(List<Map<String, Object>> rows,
-                                                            Integer ownerBirthdayMonth,
-                                                            Integer contactBirthdayMonth) {
-        return rows.stream()
-                .filter(row -> birthdayMatches(row.get("owner_birthday"), ownerBirthdayMonth))
-                .filter(row -> birthdayMatches(row.get("contact_birthday"), contactBirthdayMonth))
-                .limit(200)
-                .toList();
-    }
-
-    private boolean birthdayMatches(Object value, Integer month) {
-        if (month == null) {
-            return true;
-        }
-        LocalDate birthday = localDate(value == null ? null : value.toString());
-        return birthday != null && birthday.getMonthValue() == month;
     }
 
     Integer normalizeStatus(Integer value) {
