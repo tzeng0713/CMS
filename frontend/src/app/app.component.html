@@ -1705,29 +1705,82 @@
           <div class="simple-row header charge-list-row">
             <span class="sortable" (click)="toggleChargeListSort('chargeListId')">編號</span>
             <span>客戶名稱</span>
-            <span>辦公室名稱</span>
             <span class="sortable" (click)="toggleChargeListSort('feeMonth')">費用月份</span>
-            <span>租金</span>
-            <span class="sortable" (click)="toggleChargeListSort('totalAmount')">雜支總金額</span>
             <span class="sortable" (click)="toggleChargeListSort('status')">單據狀態</span>
-            <span>開單人</span>
-            <span class="sortable" (click)="toggleChargeListSort('issuedAt')">開單時間</span>
             <span>操作</span>
           </div>
-          <div class="simple-row charge-list-row" *ngFor="let row of chargeListRows()">
-            <span>{{ row.charge_list_id }}</span>
-            <span>{{ row.company_name }}</span>
-            <span>{{ row.office_no || '-' }}</span>
-            <span>{{ formatFeePeriod(row) }}</span>
-            <span>{{ money(row.contract_rent) }}</span>
-            <span>{{ money(row.total_amount) }}</span>
-            <span>{{ displayChargeListStatus(row.status) }}</span>
-            <span>{{ row.created_by_name || '-' }}</span>
-            <span>{{ formatDateTime(row.issued_at) }}</span>
-            <span>
-              <button type="button" class="ghost compact-button" (click)="startEditChargeList(row)">修改</button>
-              <button type="button" class="ghost compact-button" (click)="exportChargeListImage(row)">匯出圖片</button>
+          <div
+            class="simple-row charge-list-row row-clickable"
+            *ngFor="let row of chargeListRows()"
+            (click)="openChargeListDetail(row)"
+          >
+            <span class="stacked-field">
+              <span class="stacked-field-label">編號</span>
+              {{ row.charge_list_id }}
             </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">客戶名稱</span>
+              {{ row.company_name }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">費用月份</span>
+              {{ formatFeePeriod(row) }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">單據狀態</span>
+              {{ displayChargeListStatus(row.status) }}
+            </span>
+            <span class="charge-list-row-actions">
+              <button type="button" class="ghost compact-button" (click)="$event.stopPropagation(); startEditChargeList(row)">修改</button>
+              <button type="button" class="ghost compact-button" (click)="$event.stopPropagation(); exportChargeListImage(row)">匯出圖片</button>
+            </span>
+          </div>
+        </div>
+
+        <div class="modal-overlay" *ngIf="viewingChargeList() as detail">
+          <div class="modal-dialog wide">
+            <div class="modal-header">
+              <h3>收費清單 #{{ detail.charge_list_id }}</h3>
+              <button type="button" class="ghost compact-button" (click)="closeChargeListDetail()">關閉</button>
+            </div>
+            <div class="modal-body">
+              <div class="refund-detail-content">
+                <dl class="refund-detail-grid">
+                  <div>
+                    <dt>客戶名稱</dt>
+                    <dd>{{ detail.company_name }}</dd>
+                  </div>
+                  <div>
+                    <dt>辦公室名稱</dt>
+                    <dd>{{ detail.office_no || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>費用月份</dt>
+                    <dd>{{ formatFeePeriod(detail) }}</dd>
+                  </div>
+                  <div>
+                    <dt>單據狀態</dt>
+                    <dd>{{ displayChargeListStatus(detail.status) }}</dd>
+                  </div>
+                  <div>
+                    <dt>租金</dt>
+                    <dd>{{ money(detail.contract_rent) }}</dd>
+                  </div>
+                  <div>
+                    <dt>雜支總金額</dt>
+                    <dd>{{ money(detail.total_amount) }}</dd>
+                  </div>
+                  <div>
+                    <dt>開單人</dt>
+                    <dd>{{ detail.created_by_name || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>開單時間</dt>
+                    <dd>{{ formatDateTime(detail.issued_at) }}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
           </div>
         </div>
 

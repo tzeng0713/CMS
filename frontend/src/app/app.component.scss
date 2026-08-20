@@ -1527,18 +1527,14 @@ textarea.field-invalid:focus {
 }
 
 .charge-list-row {
-  min-width: 1180px;
-  grid-template-columns:
-    minmax(70px, 0.45fr)
-    minmax(180px, 1.1fr)
-    minmax(110px, 0.65fr)
-    minmax(95px, 0.55fr)
-    minmax(100px, 0.6fr)
-    minmax(130px, 0.75fr)
-    minmax(90px, 0.55fr)
-    minmax(110px, 0.65fr)
-    minmax(150px, 0.85fr)
-    minmax(140px, 0.8fr);
+  grid-template-columns: minmax(60px, 0.5fr) minmax(160px, 1.4fr) minmax(100px, 0.7fr) minmax(90px, 0.6fr) minmax(170px, 0.9fr);
+}
+
+.charge-list-row-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .refund-row {
@@ -2668,6 +2664,20 @@ $charge-list-slate: #6b6f76;
   }
 
   .branch-row-actions {
+    justify-content: flex-start;
+    padding-top: 12px;
+  }
+
+  .charge-list-row.header {
+    display: none;
+  }
+
+  .charge-list-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .charge-list-row-actions {
     justify-content: flex-start;
     padding-top: 12px;
   }

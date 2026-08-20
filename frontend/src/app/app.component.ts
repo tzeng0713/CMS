@@ -398,6 +398,7 @@ export class AppComponent implements OnInit {
   chargeListPage = signal(0);
   readonly chargeListPageSize = 20;
   editingChargeList = signal<ChargeListSummary | null>(null);
+  viewingChargeList = signal<ChargeListSummary | null>(null);
   exportingChargeList = signal<ChargeListSummary | null>(null);
   chargeListPreviewImage = signal<string | null>(null);
   chargeListPreviewRow = signal<ChargeListSummary | null>(null);
@@ -1995,6 +1996,14 @@ export class AppComponent implements OnInit {
   cancelEditChargeList(): void {
     this.editingChargeList.set(null);
     this.chargeListEditForm = emptyChargeListForm();
+  }
+
+  openChargeListDetail(row: ChargeListSummary): void {
+    this.viewingChargeList.set(row);
+  }
+
+  closeChargeListDetail(): void {
+    this.viewingChargeList.set(null);
   }
 
   saveChargeListEdit(): void {
