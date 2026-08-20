@@ -1846,8 +1846,12 @@ $charge-list-slate: #6b6f76;
 }
 
 .branch-row {
-  min-width: 1200px;
-  grid-template-columns: 60px 1fr 1fr 100px 1.4fr 120px 140px 120px 1fr 80px;
+  grid-template-columns: minmax(160px, 1.2fr) minmax(100px, 0.6fr) minmax(200px, 1.6fr) 90px;
+}
+
+.branch-row-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .tax-notice-filters {
@@ -1941,7 +1945,7 @@ $charge-list-slate: #6b6f76;
   padding: 0;
 }
 
-.tax-notice-field-label {
+.stacked-field-label {
   display: none;
 }
 
@@ -2638,20 +2642,34 @@ $charge-list-slate: #6b6f76;
     right: 14px;
   }
 
-  .tax-notice-field {
+  .stacked-field {
     padding-top: 10px;
   }
 
-  .tax-notice-field:first-of-type {
+  .stacked-field:first-of-type {
     padding-top: 0;
   }
 
-  .tax-notice-field-label {
+  .stacked-field-label {
     display: block;
     margin-bottom: 2px;
     color: #64748b;
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .branch-row.header {
+    display: none;
+  }
+
+  .branch-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .branch-row-actions {
+    justify-content: flex-start;
+    padding-top: 12px;
   }
 }
 
@@ -2848,5 +2866,9 @@ $charge-list-slate: #6b6f76;
   .home-summary dl {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     row-gap: 18px;
+  }
+
+  .refund-detail-grid {
+    grid-template-columns: 1fr;
   }
 }

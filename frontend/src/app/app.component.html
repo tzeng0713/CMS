@@ -1495,32 +1495,87 @@
 
         <div class="simple-table">
           <div class="simple-row header branch-row">
-            <span>編號</span>
             <span>分館名稱</span>
-            <span>公司名稱</span>
             <span>分館編號</span>
             <span>分館地址</span>
-            <span>統一編號</span>
-            <span>銀行帳號</span>
-            <span>銀行分行</span>
-            <span>戶名</span>
-            <span *ngIf="canManageBranch()">操作</span>
+            <span>操作</span>
           </div>
-          <div class="simple-row branch-row" *ngFor="let row of branchRows()">
-            <span>{{ row.branch_id }}</span>
-            <span>{{ row.branch_name }}</span>
-            <span>{{ row.company_name }}</span>
-            <span>{{ row.branch_code }}</span>
-            <span>{{ row.branch_address }}</span>
-            <span>{{ row.tax_id }}</span>
-            <span>{{ row.bank_account }}</span>
-            <span>{{ row.bank_branch }}</span>
-            <span>{{ row.bank_account_name }}</span>
-            <span *ngIf="canManageBranch()">
-              <button type="button" class="ghost compact-button" (click)="startEditBranch(row)">修改</button>
+          <div class="simple-row branch-row row-clickable" *ngFor="let row of branchRows()" (click)="openBranchDetail(row)">
+            <span class="stacked-field">
+              <span class="stacked-field-label">分館名稱</span>
+              {{ row.branch_name }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">分館編號</span>
+              {{ row.branch_code || '-' }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">分館地址</span>
+              {{ row.branch_address || '-' }}
+            </span>
+            <span class="branch-row-actions">
+              <button
+                type="button"
+                class="ghost compact-button"
+                *ngIf="canManageBranch()"
+                (click)="$event.stopPropagation(); startEditBranch(row)"
+              >
+                修改
+              </button>
             </span>
           </div>
           <div *ngIf="!branchRows().length" class="empty-hint">目前沒有分館資料。</div>
+        </div>
+
+        <div class="modal-overlay" *ngIf="viewingBranch() as detail">
+          <div class="modal-dialog wide">
+            <div class="modal-header">
+              <h3>{{ detail.branch_name }}</h3>
+              <button type="button" class="ghost compact-button" (click)="closeBranchDetail()">關閉</button>
+            </div>
+            <div class="modal-body">
+              <div class="refund-detail-content">
+                <dl class="refund-detail-grid">
+                  <div>
+                    <dt>編號</dt>
+                    <dd>{{ detail.branch_id }}</dd>
+                  </div>
+                  <div>
+                    <dt>分館名稱</dt>
+                    <dd>{{ detail.branch_name }}</dd>
+                  </div>
+                  <div>
+                    <dt>公司名稱</dt>
+                    <dd>{{ detail.company_name || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>分館編號</dt>
+                    <dd>{{ detail.branch_code || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>分館地址</dt>
+                    <dd>{{ detail.branch_address || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>統一編號</dt>
+                    <dd>{{ detail.tax_id || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>銀行帳號</dt>
+                    <dd>{{ detail.bank_account || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>銀行分行</dt>
+                    <dd>{{ detail.bank_branch || '-' }}</dd>
+                  </div>
+                  <div>
+                    <dt>戶名</dt>
+                    <dd>{{ detail.bank_account_name || '-' }}</dd>
+                  </div>
+                </dl>
+              </div>
+            </div>
+          </div>
         </div>
       </section>
     </section>
@@ -2498,16 +2553,16 @@
               <span class="tax-notice-checkbox">
                 <input type="checkbox" [checked]="isTaxNoticeItemSelected(item)" (change)="toggleTaxNoticeItem(item)" />
               </span>
-              <span class="tax-notice-field">
-                <span class="tax-notice-field-label">公司名稱</span>
+              <span class="stacked-field">
+                <span class="stacked-field-label">公司名稱</span>
                 {{ item.companyName }}
               </span>
-              <span class="tax-notice-field">
-                <span class="tax-notice-field-label">統一編號</span>
+              <span class="stacked-field">
+                <span class="stacked-field-label">統一編號</span>
                 {{ item.taxId }}
               </span>
-              <span class="tax-notice-field">
-                <span class="tax-notice-field-label">通報日期</span>
+              <span class="stacked-field">
+                <span class="stacked-field-label">通報日期</span>
                 {{ item.noticeDateText }}
               </span>
             </div>

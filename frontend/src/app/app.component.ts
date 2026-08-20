@@ -431,6 +431,7 @@ export class AppComponent implements OnInit {
   officeBranchFilter: number | null = null;
   branchRows = signal<BranchSummary[]>([]);
   editingBranch = signal<BranchSummary | null>(null);
+  viewingBranch = signal<BranchSummary | null>(null);
   creatingBranch = signal(false);
   loading = signal(false);
   saving = signal(false);
@@ -876,6 +877,14 @@ export class AppComponent implements OnInit {
     this.branchEditForm = emptyBranchForm();
   }
 
+  openBranchDetail(branch: BranchSummary): void {
+    this.viewingBranch.set(branch);
+  }
+
+  closeBranchDetail(): void {
+    this.viewingBranch.set(null);
+  }
+
   saveBranchEdit(): void {
     const branch = this.editingBranch();
     if (!branch) return;
@@ -893,6 +902,9 @@ export class AppComponent implements OnInit {
         this.showToast('分館已更新。');
         this.branchRows.update((rows) => rows.map((r) => (r.branch_id === updated.branch_id ? updated : r)));
         this.branches.update((rows) => rows.map((r) => (r.branch_id === updated.branch_id ? updated : r)));
+        if (this.viewingBranch()?.branch_id === updated.branch_id) {
+          this.viewingBranch.set(updated);
+        }
         this.cancelEditBranch();
       },
       error: (err: HttpErrorResponse) => {
