@@ -2166,10 +2166,22 @@
             <span>狀態</span>
           </div>
           <div class="simple-row refund-row row-clickable" *ngFor="let row of refundRows()" (click)="openRefundDetail(row)">
-            <span>{{ row.company_name || row.matched_company_name || '-' }}<br />{{ row.tax_id || '-' }}</span>
-            <span>{{ row.refund_reason || '-' }}</span>
-            <span>{{ money(row.refund_amount) }}</span>
-            <span>{{ row.refund_status }}</span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">客戶 / 統編</span>
+              {{ row.company_name || row.matched_company_name || '-' }}<br />{{ row.tax_id || '-' }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">退款原因</span>
+              {{ row.refund_reason || '-' }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">退款金額</span>
+              {{ money(row.refund_amount) }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">狀態</span>
+              {{ row.refund_status }}
+            </span>
           </div>
         </div>
 

@@ -2681,6 +2681,15 @@ $charge-list-slate: #6b6f76;
     justify-content: flex-start;
     padding-top: 12px;
   }
+
+  .refund-row.header {
+    display: none;
+  }
+
+  .refund-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
 }
 
 @media (max-width: 720px) {
