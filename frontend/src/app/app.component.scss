@@ -1941,6 +1941,10 @@ $charge-list-slate: #6b6f76;
   padding: 0;
 }
 
+.tax-notice-field-label {
+  display: none;
+}
+
 .contact-row {
   display: flex;
   gap: 8px;
@@ -2611,6 +2615,43 @@ $charge-list-slate: #6b6f76;
   .customer-results-table .customer-row {
     min-width: 810px;
     grid-template-columns: minmax(220px, 1.5fr) minmax(130px, 0.85fr) minmax(135px, 0.9fr) minmax(110px, 0.75fr) minmax(100px, 0.65fr) minmax(70px, 0.4fr);
+  }
+
+  .tax-notice-branch-info {
+    grid-template-columns: 1fr;
+  }
+
+  .tax-notice-row.header {
+    display: none;
+  }
+
+  .tax-notice-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+    position: relative;
+    padding: 14px 48px 14px 14px;
+  }
+
+  .tax-notice-checkbox {
+    position: absolute;
+    top: 14px;
+    right: 14px;
+  }
+
+  .tax-notice-field {
+    padding-top: 10px;
+  }
+
+  .tax-notice-field:first-of-type {
+    padding-top: 0;
+  }
+
+  .tax-notice-field-label {
+    display: block;
+    margin-bottom: 2px;
+    color: #64748b;
+    font-size: 12px;
+    font-weight: 600;
   }
 }
 
