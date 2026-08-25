@@ -194,7 +194,28 @@ CREATE TABLE IF NOT EXISTS sales_targets (
   target_month INT,
   category VARCHAR(50),
   target_count INT,
-  CONSTRAINT fk_sales_targets_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
+  created_by BIGINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_sales_targets_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id),
+  CONSTRAINT fk_sales_targets_created_by FOREIGN KEY (created_by) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE IF NOT EXISTS bonus_rules (
+  bonus_rule_id BIGINT PRIMARY KEY,
+  rule_name VARCHAR(100) NOT NULL,
+  rule_type VARCHAR(50) NOT NULL,
+  unit_amount DECIMAL(12,2),
+  percentage DECIMAL(6,4),
+  tier_config VARCHAR(1000),
+  period_type VARCHAR(20),
+  description VARCHAR(500),
+  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by BIGINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_by BIGINT,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_bonus_rules_created_by FOREIGN KEY (created_by) REFERENCES staff(staff_id),
+  CONSTRAINT fk_bonus_rules_updated_by FOREIGN KEY (updated_by) REFERENCES staff(staff_id)
 );
 
 CREATE TABLE IF NOT EXISTS performance_bonuses (
@@ -203,5 +224,20 @@ CREATE TABLE IF NOT EXISTS performance_bonuses (
   period VARCHAR(50),
   net_count INT,
   bonus_amount DECIMAL(12,2),
-  CONSTRAINT fk_performance_bonuses_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
+  bonus_rule_id BIGINT,
+  rule_type VARCHAR(50),
+  contract_id BIGINT,
+  branch_id BIGINT,
+  rent_payment_id BIGINT,
+  signed_count INT,
+  cancelled_count INT,
+  note VARCHAR(500),
+  created_by BIGINT,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_performance_bonuses_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id),
+  CONSTRAINT fk_performance_bonuses_rule FOREIGN KEY (bonus_rule_id) REFERENCES bonus_rules(bonus_rule_id),
+  CONSTRAINT fk_performance_bonuses_contract FOREIGN KEY (contract_id) REFERENCES contracts(contract_id),
+  CONSTRAINT fk_performance_bonuses_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id),
+  CONSTRAINT fk_performance_bonuses_rent_payment FOREIGN KEY (rent_payment_id) REFERENCES rent_payments(rent_payment_id),
+  CONSTRAINT fk_performance_bonuses_created_by FOREIGN KEY (created_by) REFERENCES staff(staff_id)
 );

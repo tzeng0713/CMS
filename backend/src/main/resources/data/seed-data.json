@@ -392,6 +392,80 @@
       "targetCount": 2
     }
   ],
+  "bonusRules": [
+    {
+      "bonusRuleId": 1,
+      "ruleName": "辦公室出租獎金",
+      "ruleType": "OFFICE_RENTAL",
+      "unitAmount": 2000,
+      "periodType": "PER_TRANSACTION",
+      "description": "客戶簽約租期達半年以上，每成交一間辦公室發放；一人簽約全額，雙祕書合作各半。",
+      "isActive": true
+    },
+    {
+      "bonusRuleId": 2,
+      "ruleName": "公司登記業績獎金",
+      "ruleType": "COMPANY_REGISTRATION",
+      "unitAmount": 800,
+      "periodType": "PER_TRANSACTION",
+      "description": "每成功簽約一間公司登記案件發放，歸屬簽約祕書。",
+      "isActive": true
+    },
+    {
+      "bonusRuleId": 3,
+      "ruleName": "同心獎金",
+      "ruleType": "TEAMWORK",
+      "unitAmount": 500,
+      "periodType": "PER_TRANSACTION",
+      "description": "公司登記案件由不同祕書合作完成時，另發放給協助祕書。",
+      "isActive": true
+    },
+    {
+      "bonusRuleId": 4,
+      "ruleName": "滿租獎金",
+      "ruleType": "FULL_OCCUPANCY",
+      "unitAmount": 3000,
+      "periodType": "MONTHLY",
+      "description": "分館當月辦公室全數出租、無空置時，分館內每位祕書各自領取全額。",
+      "isActive": true
+    },
+    {
+      "bonusRuleId": 5,
+      "ruleName": "工商代辦獎金",
+      "ruleType": "BUSINESS_AGENT",
+      "unitAmount": 800,
+      "periodType": "PER_TRANSACTION",
+      "description": "尚未支援自動結算：系統目前無法區分「公司登記」與「工商代辦」案件，且缺少「案件已完成送件流程」狀態欄位，需後續設計並新增欄位後才能回補自動計算。此規則目前僅供記錄。",
+      "isActive": true
+    },
+    {
+      "bonusRuleId": 6,
+      "ruleName": "公司登記加乘獎金",
+      "ruleType": "REGISTRATION_MULTIPLIER",
+      "tierConfig": "[{\"threshold\":3,\"amount\":2000},{\"threshold\":6,\"amount\":4000},{\"threshold\":8,\"amount\":5000},{\"threshold\":9,\"amount\":7000}]",
+      "periodType": "FOUR_MONTH",
+      "description": "依祕書於結算期間（每 4 個月）內累積完成的公司登記成交數量，套用最高一個級距發放，不重複疊加。",
+      "isActive": true
+    },
+    {
+      "bonusRuleId": 7,
+      "ruleName": "分館績效獎金",
+      "ruleType": "BRANCH_PERFORMANCE",
+      "unitAmount": 800,
+      "periodType": "FOUR_MONTH",
+      "description": "依分館結算期間（每 4 個月）內（新簽約－解約）公司數 × 800 元計算，由分館內所有祕書平分。",
+      "isActive": true
+    },
+    {
+      "bonusRuleId": 8,
+      "ruleName": "公司登記年繳獎金",
+      "ruleType": "ANNUAL_PAYMENT",
+      "percentage": 0.01,
+      "periodType": "PER_TRANSACTION",
+      "description": "公司登記客戶選擇一年繳一次租金（付款週期 12 個月）且已於對帳管理入帳時，依實收租金的 1% 發放給簽約祕書。",
+      "isActive": true
+    }
+  ],
   "performanceBonuses": [
     {
       "bonusId": 1,

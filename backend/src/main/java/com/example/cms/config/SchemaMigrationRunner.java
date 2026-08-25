@@ -33,6 +33,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         migrateRefundsTable();
         migrateChargeListsTable();
         migrateBranchFields();
+        migratePerformanceManagementTables();
     }
 
     private void migrateRoleNames() {
@@ -388,6 +389,48 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         addColumnIfMissing("branches", "bank_account",      "VARCHAR(50)");
         addColumnIfMissing("branches", "bank_branch",       "VARCHAR(100)");
         addColumnIfMissing("branches", "bank_account_name", "VARCHAR(100)");
+    }
+
+    private void migratePerformanceManagementTables() {
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS bonus_rules (
+                  bonus_rule_id BIGINT PRIMARY KEY,
+                  rule_name VARCHAR(100) NOT NULL,
+                  rule_type VARCHAR(50) NOT NULL,
+                  unit_amount DECIMAL(12,2),
+                  percentage DECIMAL(6,4),
+                  tier_config VARCHAR(1000),
+                  period_type VARCHAR(20),
+                  description VARCHAR(500),
+                  is_active BOOLEAN NOT NULL DEFAULT TRUE,
+                  created_by BIGINT,
+                  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                  updated_by BIGINT,
+                  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+                """);
+        addForeignKeyIfMissing("bonus_rules", "fk_bonus_rules_created_by", "created_by", "staff", "staff_id");
+        addForeignKeyIfMissing("bonus_rules", "fk_bonus_rules_updated_by", "updated_by", "staff", "staff_id");
+
+        addColumnIfMissing("sales_targets", "created_by", "BIGINT");
+        addColumnIfMissing("sales_targets", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        addForeignKeyIfMissing("sales_targets", "fk_sales_targets_created_by", "created_by", "staff", "staff_id");
+
+        addColumnIfMissing("performance_bonuses", "bonus_rule_id", "BIGINT");
+        addColumnIfMissing("performance_bonuses", "rule_type", "VARCHAR(50)");
+        addColumnIfMissing("performance_bonuses", "contract_id", "BIGINT");
+        addColumnIfMissing("performance_bonuses", "branch_id", "BIGINT");
+        addColumnIfMissing("performance_bonuses", "rent_payment_id", "BIGINT");
+        addColumnIfMissing("performance_bonuses", "signed_count", "INT");
+        addColumnIfMissing("performance_bonuses", "cancelled_count", "INT");
+        addColumnIfMissing("performance_bonuses", "note", "VARCHAR(500)");
+        addColumnIfMissing("performance_bonuses", "created_by", "BIGINT");
+        addColumnIfMissing("performance_bonuses", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        addForeignKeyIfMissing("performance_bonuses", "fk_performance_bonuses_rule", "bonus_rule_id", "bonus_rules", "bonus_rule_id");
+        addForeignKeyIfMissing("performance_bonuses", "fk_performance_bonuses_contract", "contract_id", "contracts", "contract_id");
+        addForeignKeyIfMissing("performance_bonuses", "fk_performance_bonuses_branch", "branch_id", "branches", "branch_id");
+        addForeignKeyIfMissing("performance_bonuses", "fk_performance_bonuses_rent_payment", "rent_payment_id", "rent_payments", "rent_payment_id");
+        addForeignKeyIfMissing("performance_bonuses", "fk_performance_bonuses_created_by", "created_by", "staff", "staff_id");
     }
 
     private void migrateContractLeaseStatus() {

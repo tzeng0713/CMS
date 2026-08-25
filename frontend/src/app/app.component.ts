@@ -7,6 +7,8 @@ import html2canvas from 'html2canvas';
 import {
   CmsApiService,
   AuthUser,
+  BonusRule,
+  BonusRulePayload,
   BranchPayload,
   BranchSummary,
   ChargeListPayload,
@@ -21,11 +23,16 @@ import {
   Dashboard,
   OfficePayload,
   OfficeSummary,
+  PerformanceBonus,
+  PerformanceBonusSearchFilters,
   RoleSummary,
   RentPaymentPayload,
   RefundPayload,
   RefundSearchFilters,
   RefundSummary,
+  SalesTarget,
+  SalesTargetPayload,
+  SalesTargetSearchFilters,
   TaxBureauNoticeBranchInfo,
   TaxBureauNoticeGroup,
   TaxBureauNoticeItem,
@@ -46,6 +53,8 @@ type ViewKey =
   | 'charges'
   | 'refunds'
   | 'targets'
+  | 'bonus-rules'
+  | 'performance-bonuses'
   | 'office-search'
   | 'office-new'
   | 'branch-management'
@@ -56,6 +65,11 @@ type NotificationKind = 'expiring' | 'unpaid' | 'incomplete';
 type Toast = {
   message: string;
   kind: 'success' | 'error';
+};
+
+type BonusRuleTierRow = {
+  threshold: number | null;
+  amount: number | null;
 };
 
 interface NavItem {
@@ -335,11 +349,18 @@ export class AppComponent implements OnInit {
       children: [{ key: 'staff-overview', label: '職員總覽' }]
     },
     {
+      label: '業績管理',
+      children: [
+        { key: 'targets', label: '業績目標' },
+        { key: 'bonus-rules', label: '業績獎金規則' },
+        { key: 'performance-bonuses', label: '業績結算' }
+      ]
+    },
+    {
       label: '其他查詢',
       children: [
         { key: 'charges', label: '收費清單' },
         { key: 'refunds', label: '退款紀錄' },
-        { key: 'targets', label: '業績目標' },
         { key: 'tax-bureau-notices', label: '國稅局通報' }
       ]
     }
@@ -422,7 +443,69 @@ export class AppComponent implements OnInit {
   taxNoticeBranchInfo = signal<Record<number, TaxBureauNoticeBranchInfo>>({});
   taxNoticeLoading = signal(false);
   taxNoticeGenerating = signal(false);
-  salesTargets = signal<Array<Record<string, unknown>>>([]);
+  salesTargetRows = signal<SalesTarget[]>([]);
+  salesTargetTotal = signal(0);
+  salesTargetPage = signal(0);
+  readonly salesTargetPageSize = 20;
+  salesTargetFilters: SalesTargetSearchFilters = { branchId: null, targetMonth: null, category: '' };
+  newSalesTargetForm: SalesTargetPayload = { branchId: 0, targetMonth: 0, category: '', targetCount: 0, staffId: 0 };
+  creatingSalesTarget = signal(false);
+
+  bonusRuleRows = signal<BonusRule[]>([]);
+  newBonusRuleForm: BonusRulePayload = {
+    ruleName: '', ruleType: 'OFFICE_RENTAL', unitAmount: undefined, percentage: undefined,
+    tierConfig: '', periodType: '', description: '', isActive: true, staffId: 0
+  };
+  creatingBonusRule = signal(false);
+  editingBonusRule = signal<BonusRule | null>(null);
+  bonusRuleEditForm: BonusRulePayload = {
+    ruleName: '', ruleType: 'OFFICE_RENTAL', unitAmount: undefined, percentage: undefined,
+    tierConfig: '', periodType: '', description: '', isActive: true, staffId: 0
+  };
+  readonly bonusRuleTypeOptions: Array<{ value: string; label: string }> = [
+    { value: 'OFFICE_RENTAL', label: '一、辦公室出租獎金' },
+    { value: 'COMPANY_REGISTRATION', label: '二、公司登記業績獎金' },
+    { value: 'TEAMWORK', label: '三、同心獎金' },
+    { value: 'FULL_OCCUPANCY', label: '四、滿租獎金' },
+    { value: 'BUSINESS_AGENT', label: '五、工商代辦獎金（尚未支援自動結算）' },
+    { value: 'REGISTRATION_MULTIPLIER', label: '六、公司登記加乘獎金' },
+    { value: 'BRANCH_PERFORMANCE', label: '七、分館績效獎金' },
+    { value: 'ANNUAL_PAYMENT', label: '八、公司登記年繳獎金' }
+  ];
+  readonly bonusRulePeriodTypeOptions: Array<{ value: string; label: string }> = [
+    { value: 'PER_TRANSACTION', label: '逐筆合約／收款觸發' },
+    { value: 'MONTHLY', label: '按月結算' },
+    { value: 'FOUR_MONTH', label: '每 4 個月期間結算' }
+  ];
+  newBonusRuleTiers: BonusRuleTierRow[] = [{ threshold: null, amount: null }];
+  bonusRuleEditTiers: BonusRuleTierRow[] = [{ threshold: null, amount: null }];
+  // 每種規則類型結算時只會讀取其中一種計算欄位，新增表單依此只顯示對應欄位（與後端 BonusRuleService 驗證一致）。
+  private readonly bonusRuleFieldByType: Record<string, 'unitAmount' | 'percentage' | 'tierConfig'> = {
+    OFFICE_RENTAL: 'unitAmount',
+    COMPANY_REGISTRATION: 'unitAmount',
+    TEAMWORK: 'unitAmount',
+    FULL_OCCUPANCY: 'unitAmount',
+    BRANCH_PERFORMANCE: 'unitAmount',
+    BUSINESS_AGENT: 'unitAmount',
+    ANNUAL_PAYMENT: 'percentage',
+    REGISTRATION_MULTIPLIER: 'tierConfig'
+  };
+
+  performanceBonusRows = signal<PerformanceBonus[]>([]);
+  performanceBonusTotal = signal(0);
+  staffBonusSummaryRows = signal<Array<{ staffName: string; total: number; count: number }>>([]);
+  performanceBonusPage = signal(0);
+  readonly performanceBonusPageSize = 20;
+  performanceBonusFilters: PerformanceBonusSearchFilters = {
+    ruleType: '', period: '', branchId: null, staffId: null
+  };
+  settleMonthlyYearMonth = this.currentMonthValue();
+  settlePeriodYear = new Date().getFullYear();
+  settlePeriodQuarter: 1 | 2 | 3 = 1;
+  settlingTransactions = signal(false);
+  settlingMonthly = signal(false);
+  settlingPeriod = signal(false);
+  settleResultMessage = signal('');
   newCustomerOptions = signal<CustomerSummary[]>([]);
   rentCustomerOptions = signal<CustomerSummary[]>([]);
   contractCustomerOptions = signal<CustomerSummary[]>([]);
@@ -572,6 +655,8 @@ export class AppComponent implements OnInit {
   rentPaymentTotalPages = computed(() => Math.max(1, Math.ceil(this.rentPaymentTotal() / this.rentPaymentPageSize())));
   chargeListTotalPages = computed(() => Math.max(1, Math.ceil(this.chargeListTotal() / this.chargeListPageSize)));
   refundTotalPages = computed(() => Math.max(1, Math.ceil(this.refundTotal() / this.refundPageSize)));
+  salesTargetTotalPages = computed(() => Math.max(1, Math.ceil(this.salesTargetTotal() / this.salesTargetPageSize)));
+  performanceBonusTotalPages = computed(() => Math.max(1, Math.ceil(this.performanceBonusTotal() / this.performanceBonusPageSize)));
 
   constructor(private readonly api: CmsApiService, private readonly router: Router) {}
 
@@ -724,7 +809,16 @@ export class AppComponent implements OnInit {
         this.loadRefunds();
         break;
       case 'targets':
-        this.loadMetadata();
+        this.loadStaffSupportData();
+        this.loadSalesTargets();
+        break;
+      case 'bonus-rules':
+        this.loadStaffSupportData();
+        this.loadBonusRules();
+        break;
+      case 'performance-bonuses':
+        this.loadStaffSupportData();
+        this.loadPerformanceBonuses();
         break;
       case 'tax-bureau-notices':
         this.loadTaxBureauNoticePreview();
@@ -1432,6 +1526,384 @@ export class AppComponent implements OnInit {
         this.loadStaffOverview();
       },
       error: () => this.error.set('職員角色權限更新失敗。')
+    });
+  }
+
+  canManageBonusRules(): boolean {
+    return this.currentUser()?.canManageBonusRules === true;
+  }
+
+  // ---------- 業績目標 ----------
+
+  loadSalesTargets(): void {
+    const filters: SalesTargetSearchFilters = {
+      ...this.salesTargetFilters,
+      page: this.salesTargetPage(),
+      pageSize: this.salesTargetPageSize
+    };
+    this.api.salesTargets(filters).subscribe({
+      next: (result) => {
+        this.salesTargetRows.set(result.content);
+        this.salesTargetTotal.set(result.totalElements);
+      },
+      error: () => this.error.set('無法載入業績目標資料。')
+    });
+  }
+
+  searchSalesTargets(): void {
+    this.salesTargetPage.set(0);
+    this.loadSalesTargets();
+  }
+
+  startCreateSalesTarget(): void {
+    this.newSalesTargetForm = {
+      branchId: this.currentUser()?.branch_id ?? 0,
+      targetMonth: 0,
+      category: '',
+      targetCount: 0,
+      staffId: this.currentStaffId()
+    };
+    this.creatingSalesTarget.set(true);
+  }
+
+  cancelCreateSalesTarget(): void {
+    this.creatingSalesTarget.set(false);
+  }
+
+  createSalesTarget(): void {
+    if (!this.newSalesTargetForm.branchId || !this.newSalesTargetForm.targetMonth || !this.newSalesTargetForm.category) {
+      this.error.set('分館、月份、類別為必填欄位。');
+      return;
+    }
+    this.saving.set(true);
+    const payload: SalesTargetPayload = { ...this.newSalesTargetForm, staffId: this.currentStaffId() };
+    this.api.createSalesTarget(payload).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.error.set('');
+        this.showToast('業績目標已新增。');
+        this.creatingSalesTarget.set(false);
+        this.loadSalesTargets();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '業績目標新增失敗。'));
+      }
+    });
+  }
+
+  // ---------- 業績獎金規則 ----------
+
+  loadBonusRules(): void {
+    this.api.bonusRules().subscribe({
+      next: (rows) => this.bonusRuleRows.set(rows),
+      error: () => this.error.set('無法載入業績獎金規則。')
+    });
+  }
+
+  startCreateBonusRule(): void {
+    this.editingBonusRule.set(null);
+    this.newBonusRuleForm = {
+      ruleName: '', ruleType: 'OFFICE_RENTAL', unitAmount: undefined, percentage: undefined,
+      tierConfig: '', periodType: '', description: '', isActive: true, staffId: this.currentStaffId()
+    };
+    this.newBonusRuleTiers = [{ threshold: null, amount: null }];
+    this.creatingBonusRule.set(true);
+  }
+
+  cancelCreateBonusRule(): void {
+    this.creatingBonusRule.set(false);
+  }
+
+  bonusRuleFieldMode(ruleType: string): 'unitAmount' | 'percentage' | 'tierConfig' {
+    return this.bonusRuleFieldByType[ruleType] ?? 'unitAmount';
+  }
+
+  bonusRulePeriodTypeLabel(periodType: string | null): string {
+    if (!periodType) {
+      return '-';
+    }
+    return this.bonusRulePeriodTypeOptions.find((option) => option.value === periodType)?.label ?? periodType;
+  }
+
+  addNewBonusRuleTier(): void {
+    this.newBonusRuleTiers.push({ threshold: null, amount: null });
+  }
+
+  removeNewBonusRuleTier(index: number): void {
+    this.newBonusRuleTiers.splice(index, 1);
+    if (!this.newBonusRuleTiers.length) {
+      this.newBonusRuleTiers.push({ threshold: null, amount: null });
+    }
+  }
+
+  addEditBonusRuleTier(): void {
+    this.bonusRuleEditTiers.push({ threshold: null, amount: null });
+  }
+
+  removeEditBonusRuleTier(index: number): void {
+    this.bonusRuleEditTiers.splice(index, 1);
+    if (!this.bonusRuleEditTiers.length) {
+      this.bonusRuleEditTiers.push({ threshold: null, amount: null });
+    }
+  }
+
+  private serializeBonusRuleTiers(tiers: BonusRuleTierRow[]): string {
+    const valid = tiers
+      .filter((tier) => tier.threshold != null && tier.amount != null)
+      .map((tier) => ({ threshold: tier.threshold, amount: tier.amount }))
+      .sort((a, b) => (a.threshold ?? 0) - (b.threshold ?? 0));
+    return JSON.stringify(valid);
+  }
+
+  private parseBonusRuleTiers(tierConfig: string | null): BonusRuleTierRow[] {
+    if (tierConfig) {
+      try {
+        const parsed = JSON.parse(tierConfig);
+        if (Array.isArray(parsed) && parsed.length) {
+          return parsed.map((tier) => ({ threshold: tier?.threshold ?? null, amount: tier?.amount ?? null }));
+        }
+      } catch {
+        // 舊資料格式不是合法 JSON 時，改用空白列讓使用者重新填寫
+      }
+    }
+    return [{ threshold: null, amount: null }];
+  }
+
+  onNewBonusRuleTypeChange(): void {
+    const mode = this.bonusRuleFieldMode(this.newBonusRuleForm.ruleType);
+    if (mode !== 'unitAmount') {
+      this.newBonusRuleForm.unitAmount = undefined;
+    }
+    if (mode !== 'percentage') {
+      this.newBonusRuleForm.percentage = undefined;
+    }
+    if (mode !== 'tierConfig') {
+      this.newBonusRuleForm.tierConfig = '';
+    } else {
+      this.newBonusRuleTiers = [{ threshold: null, amount: null }];
+    }
+  }
+
+  createBonusRule(): void {
+    if (!this.newBonusRuleForm.ruleName || !this.newBonusRuleForm.ruleType) {
+      this.error.set('規則名稱、規則類型為必填欄位。');
+      return;
+    }
+    const mode = this.bonusRuleFieldMode(this.newBonusRuleForm.ruleType);
+    if (mode === 'tierConfig' && !this.newBonusRuleTiers.some((tier) => tier.threshold != null && tier.amount != null)) {
+      this.error.set('請至少填寫一個完整的級距（門檻數量與獎金金額）。');
+      return;
+    }
+    this.saving.set(true);
+    const payload: BonusRulePayload = {
+      ...this.newBonusRuleForm,
+      unitAmount: mode === 'unitAmount' ? this.newBonusRuleForm.unitAmount : undefined,
+      percentage: mode === 'percentage' ? this.newBonusRuleForm.percentage : undefined,
+      tierConfig: mode === 'tierConfig' ? this.serializeBonusRuleTiers(this.newBonusRuleTiers) : '',
+      staffId: this.currentStaffId()
+    };
+    this.api.createBonusRule(payload).subscribe({
+      next: () => {
+        this.saving.set(false);
+        this.error.set('');
+        this.showToast('業績獎金規則已新增。');
+        this.creatingBonusRule.set(false);
+        this.loadBonusRules();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '業績獎金規則新增失敗。'));
+      }
+    });
+  }
+
+  bonusRuleTypeLabel(ruleType: string): string {
+    return this.bonusRuleTypeOptions.find((option) => option.value === ruleType)?.label ?? ruleType;
+  }
+
+  startEditBonusRule(rule: BonusRule): void {
+    this.creatingBonusRule.set(false);
+    this.editingBonusRule.set(rule);
+    this.bonusRuleEditForm = {
+      ruleName: rule.rule_name,
+      ruleType: rule.rule_type,
+      unitAmount: rule.unit_amount ?? undefined,
+      percentage: rule.percentage ?? undefined,
+      tierConfig: rule.tier_config ?? '',
+      periodType: rule.period_type ?? '',
+      description: rule.description ?? '',
+      isActive: rule.is_active,
+      staffId: this.currentStaffId()
+    };
+    this.bonusRuleEditTiers = this.parseBonusRuleTiers(rule.tier_config);
+  }
+
+  cancelEditBonusRule(): void {
+    this.editingBonusRule.set(null);
+  }
+
+  onEditBonusRuleTypeChange(): void {
+    const mode = this.bonusRuleFieldMode(this.bonusRuleEditForm.ruleType);
+    if (mode !== 'unitAmount') {
+      this.bonusRuleEditForm.unitAmount = undefined;
+    }
+    if (mode !== 'percentage') {
+      this.bonusRuleEditForm.percentage = undefined;
+    }
+    if (mode !== 'tierConfig') {
+      this.bonusRuleEditForm.tierConfig = '';
+    } else if (!this.bonusRuleEditTiers.length) {
+      this.bonusRuleEditTiers = [{ threshold: null, amount: null }];
+    }
+  }
+
+  saveBonusRuleEdit(): void {
+    const rule = this.editingBonusRule();
+    if (!rule) {
+      return;
+    }
+    if (!this.bonusRuleEditForm.ruleName || !this.bonusRuleEditForm.ruleType) {
+      this.error.set('規則名稱、規則類型為必填欄位。');
+      return;
+    }
+    const mode = this.bonusRuleFieldMode(this.bonusRuleEditForm.ruleType);
+    if (mode === 'tierConfig' && !this.bonusRuleEditTiers.some((tier) => tier.threshold != null && tier.amount != null)) {
+      this.error.set('請至少填寫一個完整的級距（門檻數量與獎金金額）。');
+      return;
+    }
+    this.saving.set(true);
+    const payload: BonusRulePayload = {
+      ...this.bonusRuleEditForm,
+      unitAmount: mode === 'unitAmount' ? this.bonusRuleEditForm.unitAmount : undefined,
+      percentage: mode === 'percentage' ? this.bonusRuleEditForm.percentage : undefined,
+      tierConfig: mode === 'tierConfig' ? this.serializeBonusRuleTiers(this.bonusRuleEditTiers) : '',
+      staffId: this.currentStaffId()
+    };
+    this.api.updateBonusRule(rule.bonus_rule_id, payload).subscribe({
+      next: (updated) => {
+        this.saving.set(false);
+        this.error.set('');
+        this.showToast('業績獎金規則已更新。');
+        this.bonusRuleRows.update((rows) => rows.map((r) => (r.bonus_rule_id === updated.bonus_rule_id ? updated : r)));
+        this.cancelEditBonusRule();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '業績獎金規則更新失敗。'));
+      }
+    });
+  }
+
+  // ---------- 業績結算查詢／觸發 ----------
+
+  loadPerformanceBonuses(): void {
+    const filters: PerformanceBonusSearchFilters = {
+      ...this.performanceBonusFilters,
+      page: this.performanceBonusPage(),
+      pageSize: this.performanceBonusPageSize
+    };
+    this.api.performanceBonuses(filters).subscribe({
+      next: (result) => {
+        this.performanceBonusRows.set(result.content);
+        this.performanceBonusTotal.set(result.totalElements);
+      },
+      error: () => this.error.set('無法載入業績結算資料。')
+    });
+    this.loadStaffBonusSummary();
+  }
+
+  private loadStaffBonusSummary(): void {
+    const filters: PerformanceBonusSearchFilters = {
+      ruleType: this.performanceBonusFilters.ruleType,
+      period: this.performanceBonusFilters.period,
+      branchId: this.performanceBonusFilters.branchId,
+      page: 0,
+      pageSize: 200
+    };
+    this.api.performanceBonuses(filters).subscribe({
+      next: (result) => {
+        const totals = new Map<string, { staffName: string; total: number; count: number }>();
+        for (const row of result.content) {
+          const staffName = row.staff_name || '未指定祕書';
+          const entry = totals.get(staffName) ?? { staffName, total: 0, count: 0 };
+          entry.total += Number(row.bonus_amount || 0);
+          entry.count += 1;
+          totals.set(staffName, entry);
+        }
+        this.staffBonusSummaryRows.set(Array.from(totals.values()).sort((a, b) => b.total - a.total));
+      }
+    });
+  }
+
+  searchPerformanceBonuses(): void {
+    this.performanceBonusPage.set(0);
+    this.loadPerformanceBonuses();
+  }
+
+  syncTransactionBonuses(): void {
+    this.settlingTransactions.set(true);
+    this.settleResultMessage.set('');
+    this.api.syncTransactionBonuses(this.currentStaffId()).subscribe({
+      next: (result) => {
+        this.settlingTransactions.set(false);
+        this.showToast('逐筆獎金同步完成。');
+        this.settleResultMessage.set(
+          `新增 ${result.createdCount} 筆；已記錄跳過 ${result.skippedAlreadyRecorded} 筆；缺少結束日期跳過 ${result.skippedMissingEndDate} 筆；` +
+          (result.skippedNoActiveRule.length ? `尚未設定規則：${result.skippedNoActiveRule.join('、')}` : '規則皆已設定')
+        );
+        this.loadPerformanceBonuses();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.settlingTransactions.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '逐筆獎金同步失敗。'));
+      }
+    });
+  }
+
+  settleMonthlyBonuses(): void {
+    if (!this.settleMonthlyYearMonth) {
+      this.error.set('請選擇月份。');
+      return;
+    }
+    this.settlingMonthly.set(true);
+    this.settleResultMessage.set('');
+    this.api.settleMonthlyBonuses(this.settleMonthlyYearMonth, this.currentStaffId()).subscribe({
+      next: (result) => {
+        this.settlingMonthly.set(false);
+        this.showToast('滿租獎金月結完成。');
+        this.settleResultMessage.set(
+          `${result.period}：新增 ${result.createdCount} 筆` +
+          (result.skippedBranches.length ? `；無祕書可入帳分館：${result.skippedBranches.join('、')}` : '')
+        );
+        this.loadPerformanceBonuses();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.settlingMonthly.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '滿租獎金月結失敗。'));
+      }
+    });
+  }
+
+  settlePeriodBonuses(): void {
+    const period = `${this.settlePeriodYear}-P${this.settlePeriodQuarter}`;
+    this.settlingPeriod.set(true);
+    this.settleResultMessage.set('');
+    this.api.settlePeriodBonuses(period, this.currentStaffId()).subscribe({
+      next: (result) => {
+        this.settlingPeriod.set(false);
+        this.showToast('期間結算完成。');
+        this.settleResultMessage.set(
+          `${result.period}：新增 ${result.createdCount} 筆` +
+          (result.skippedBranches.length ? `；無祕書可入帳分館：${result.skippedBranches.join('、')}` : '') +
+          (result.unassignedContractCount ? `；無法判斷分館的合約：${result.unassignedContractCount} 筆` : '')
+        );
+        this.loadPerformanceBonuses();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.settlingPeriod.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '期間結算失敗。'));
+      }
     });
   }
 
@@ -2318,6 +2790,24 @@ export class AppComponent implements OnInit {
     this.loadRefunds();
   }
 
+  changeSalesTargetPage(delta: number): void {
+    const next = this.salesTargetPage() + delta;
+    if (next < 0 || next >= this.salesTargetTotalPages()) {
+      return;
+    }
+    this.salesTargetPage.set(next);
+    this.loadSalesTargets();
+  }
+
+  changePerformanceBonusPage(delta: number): void {
+    const next = this.performanceBonusPage() + delta;
+    if (next < 0 || next >= this.performanceBonusTotalPages()) {
+      return;
+    }
+    this.performanceBonusPage.set(next);
+    this.loadPerformanceBonuses();
+  }
+
   canReviewRefund(): boolean {
     return this.currentUser()?.canReviewRefund === true;
   }
@@ -2557,7 +3047,6 @@ export class AppComponent implements OnInit {
         this.branches.set((data['branches'] as BranchSummary[]) ?? []);
         this.roles.set((data['roles'] as RoleSummary[]) ?? []);
         this.staffOptions.set((data['staff'] as Array<Record<string, unknown>>) ?? []);
-        this.salesTargets.set((data['salesTargets'] as Array<Record<string, unknown>>) ?? []);
       },
       error: () => this.error.set('無法載入系統參考資料。')
     });
@@ -2904,6 +3393,18 @@ export class AppComponent implements OnInit {
     this.customerNewStep.set(1);
   }
 
+  monthNumberToInputValue(value: number | null | undefined): string {
+    if (!value) {
+      return '';
+    }
+    const text = String(value);
+    return /^\d{6}$/.test(text) ? `${text.slice(0, 4)}-${text.slice(4, 6)}` : '';
+  }
+
+  monthInputValueToNumber(value: string): number {
+    return value ? Number(value.replace('-', '')) : 0;
+  }
+
   private currentMonthValue(): string {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -2956,6 +3457,8 @@ export class AppComponent implements OnInit {
       '/charges': 'charges',
       '/refunds': 'refunds',
       '/targets': 'targets',
+      '/bonus-rules': 'bonus-rules',
+      '/performance-bonuses': 'performance-bonuses',
       '/tax-bureau-notices': 'tax-bureau-notices'
     };
     this.activateView(routeMap[path] ?? 'home');
@@ -2979,6 +3482,8 @@ export class AppComponent implements OnInit {
       charges: '/charges',
       refunds: '/refunds',
       targets: '/targets',
+      'bonus-rules': '/bonus-rules',
+      'performance-bonuses': '/performance-bonuses',
       'tax-bureau-notices': '/tax-bureau-notices'
     };
     return routeMap[view];

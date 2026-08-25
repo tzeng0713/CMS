@@ -58,6 +58,7 @@ export interface AuthUser {
   canViewAllOffices: boolean;
   canManageBranch: boolean;
   canReviewRefund: boolean;
+  canManageBonusRules: boolean;
 }
 
 export interface CustomerSummary {
@@ -389,6 +390,116 @@ export interface ImportChargeListResult {
   deductionTotal: number;
 }
 
+export interface BonusRule {
+  bonus_rule_id: number;
+  rule_name: string;
+  rule_type: string;
+  unit_amount: number | null;
+  percentage: number | null;
+  tier_config: string | null;
+  period_type: string | null;
+  description: string | null;
+  is_active: boolean;
+  created_by: number | null;
+  created_by_name: string | null;
+  created_at: string;
+  updated_by: number | null;
+  updated_at: string;
+}
+
+export interface BonusRulePayload {
+  ruleName: string;
+  ruleType: string;
+  unitAmount?: number;
+  percentage?: number;
+  tierConfig?: string;
+  periodType?: string;
+  description?: string;
+  isActive?: boolean;
+  staffId: number;
+}
+
+export interface SalesTarget {
+  sales_target_id: number;
+  branch_id: number;
+  branch_name: string;
+  target_month: number;
+  category: string;
+  target_count: number;
+  created_by: number | null;
+  created_by_name: string | null;
+  created_at: string | null;
+}
+
+export interface SalesTargetPayload {
+  branchId: number;
+  targetMonth: number;
+  category: string;
+  targetCount: number;
+  staffId: number;
+}
+
+export interface SalesTargetSearchFilters {
+  branchId?: number | null;
+  targetMonth?: number | null;
+  category?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface PerformanceBonus {
+  bonus_id: number;
+  staff_id: number;
+  staff_name: string | null;
+  period: string | null;
+  net_count: number | null;
+  bonus_amount: number;
+  bonus_rule_id: number | null;
+  rule_type: string | null;
+  rule_name: string | null;
+  contract_id: number | null;
+  customer_id: number | null;
+  company_name: string | null;
+  branch_id: number | null;
+  branch_name: string | null;
+  rent_payment_id: number | null;
+  signed_count: number | null;
+  cancelled_count: number | null;
+  note: string | null;
+  created_by: number | null;
+  created_at: string | null;
+}
+
+export interface PerformanceBonusSearchFilters {
+  ruleType?: string;
+  period?: string;
+  branchId?: number | null;
+  staffId?: number | null;
+  contractId?: number;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface SyncTransactionBonusResult {
+  createdCount: number;
+  skippedAlreadyRecorded: number;
+  skippedMissingEndDate: number;
+  skippedNoActiveRule: string[];
+}
+
+export interface SettleMonthlyBonusResult {
+  period: string;
+  createdCount: number;
+  skippedBranches: number[];
+}
+
+export interface SettlePeriodBonusResult {
+  period: string;
+  createdCount: number;
+  skippedBranches: number[];
+  unassignedContractCount: number;
+}
+
 export type TaxBureauNoticeType = 'MOVE_OUT' | 'MOVE_IN' | 'BOTH';
 
 export interface TaxBureauNoticeItem {
@@ -646,6 +757,48 @@ export class CmsApiService {
 
   importChargeListForRefund(chargeListId: number): Observable<ImportChargeListResult> {
     return this.http.post<ImportChargeListResult>(`${this.baseUrl}/refunds/import-charge-list`, { chargeListId });
+  }
+
+  bonusRules(): Observable<BonusRule[]> {
+    return this.http.get<BonusRule[]>(`${this.baseUrl}/bonus-rules`);
+  }
+
+  createBonusRule(payload: BonusRulePayload): Observable<BonusRule> {
+    return this.http.post<BonusRule>(`${this.baseUrl}/bonus-rules`, payload);
+  }
+
+  updateBonusRule(id: number, payload: BonusRulePayload): Observable<BonusRule> {
+    return this.http.put<BonusRule>(`${this.baseUrl}/bonus-rules/${id}`, payload);
+  }
+
+  salesTargets(filters: SalesTargetSearchFilters = {}): Observable<PagedResult<SalesTarget>> {
+    const params = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    );
+    return this.http.get<PagedResult<SalesTarget>>(`${this.baseUrl}/sales-targets`, { params });
+  }
+
+  createSalesTarget(payload: SalesTargetPayload): Observable<SalesTarget> {
+    return this.http.post<SalesTarget>(`${this.baseUrl}/sales-targets`, payload);
+  }
+
+  performanceBonuses(filters: PerformanceBonusSearchFilters = {}): Observable<PagedResult<PerformanceBonus>> {
+    const params = Object.fromEntries(
+      Object.entries(filters).filter(([, value]) => value !== undefined && value !== null && value !== '')
+    );
+    return this.http.get<PagedResult<PerformanceBonus>>(`${this.baseUrl}/performance-bonuses`, { params });
+  }
+
+  syncTransactionBonuses(staffId: number): Observable<SyncTransactionBonusResult> {
+    return this.http.post<SyncTransactionBonusResult>(`${this.baseUrl}/performance-bonuses/sync-transactions`, { staffId });
+  }
+
+  settleMonthlyBonuses(yearMonth: string, staffId: number): Observable<SettleMonthlyBonusResult> {
+    return this.http.post<SettleMonthlyBonusResult>(`${this.baseUrl}/performance-bonuses/settle-monthly`, { yearMonth, staffId });
+  }
+
+  settlePeriodBonuses(period: string, staffId: number): Observable<SettlePeriodBonusResult> {
+    return this.http.post<SettlePeriodBonusResult>(`${this.baseUrl}/performance-bonuses/settle-period`, { period, staffId });
   }
 
   createRentPayment(payload: RentPaymentPayload): Observable<Record<string, unknown>> {

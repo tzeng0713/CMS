@@ -2502,22 +2502,411 @@
         <div class="panel-header">
           <div>
             <h2>業績目標</h2>
-            <p>各分館與類別目標。</p>
+            <p>各分館與類別的當月業績目標。</p>
           </div>
+          <button type="button" *ngIf="canManageBonusRules() && !creatingSalesTarget()" (click)="startCreateSalesTarget()">新增業績目標</button>
         </div>
-        <div class="simple-table">
-          <div class="simple-row header four">
+
+        <div class="rent-edit-panel" *ngIf="creatingSalesTarget()">
+          <div class="panel-header">
+            <div><h3>新增業績目標</h3></div>
+          </div>
+          <form class="customer-form" (ngSubmit)="createSalesTarget()">
+            <label>
+              分館
+              <select name="newSalesTargetBranchId" [(ngModel)]="newSalesTargetForm.branchId" required>
+                <option [ngValue]="0" disabled>請選擇分館</option>
+                <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+              </select>
+            </label>
+            <label>
+              月份
+              <input type="month" name="newSalesTargetMonth" [ngModel]="monthNumberToInputValue(newSalesTargetForm.targetMonth)"
+                     (ngModelChange)="newSalesTargetForm.targetMonth = monthInputValueToNumber($event)" required />
+            </label>
+            <label>
+              類別
+              <input name="newSalesTargetCategory" [(ngModel)]="newSalesTargetForm.category" required maxlength="50" placeholder="例如：辦公室、登記" />
+            </label>
+            <label>
+              目標數
+              <input type="number" name="newSalesTargetCount" [(ngModel)]="newSalesTargetForm.targetCount" required min="0" />
+            </label>
+            <div class="form-actions wide">
+              <button type="submit" [disabled]="saving()">新增</button>
+              <button type="button" class="ghost" (click)="cancelCreateSalesTarget()">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <section class="filter-bar">
+          <label>
+            分館
+            <select name="salesTargetFilterBranchId" [(ngModel)]="salesTargetFilters.branchId">
+              <option [ngValue]="null">全部</option>
+              <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+            </select>
+          </label>
+          <label>
+            月份
+            <input type="month" name="salesTargetFilterMonth" [ngModel]="monthNumberToInputValue(salesTargetFilters.targetMonth)"
+                   (ngModelChange)="salesTargetFilters.targetMonth = monthInputValueToNumber($event)" />
+          </label>
+          <label>
+            類別
+            <input name="salesTargetFilterCategory" [(ngModel)]="salesTargetFilters.category" />
+          </label>
+          <div class="filter-actions">
+            <button type="button" (click)="searchSalesTargets()">搜尋</button>
+          </div>
+        </section>
+
+        <div class="empty-state" *ngIf="!salesTargetRows().length">目前沒有業績目標資料。</div>
+        <div class="simple-table" *ngIf="salesTargetRows().length">
+          <div class="simple-row header five">
             <span>分館</span>
             <span>月份</span>
             <span>類別</span>
             <span>目標數</span>
+            <span>建立人</span>
           </div>
-          <div class="simple-row four" *ngFor="let row of salesTargets()">
-            <span>{{ value(row, 'branch_name') }}</span>
-            <span>{{ value(row, 'month') }}</span>
-            <span>{{ value(row, 'category') }}</span>
-            <span>{{ value(row, 'target_count') }}</span>
+          <div class="simple-row five" *ngFor="let row of salesTargetRows()">
+            <span>{{ row.branch_name }}</span>
+            <span>{{ row.target_month }}</span>
+            <span>{{ row.category }}</span>
+            <span>{{ row.target_count }}</span>
+            <span>{{ row.created_by_name || '-' }}</span>
           </div>
+        </div>
+
+        <div class="pagination-bar" *ngIf="salesTargetRows().length">
+          <button type="button" class="ghost compact-button" [disabled]="salesTargetPage() === 0" (click)="changeSalesTargetPage(-1)">
+            上一頁
+          </button>
+          <span>第 {{ salesTargetPage() + 1 }} / {{ salesTargetTotalPages() }} 頁（共 {{ salesTargetTotal() }} 筆）</span>
+          <button
+            type="button"
+            class="ghost compact-button"
+            [disabled]="salesTargetPage() + 1 >= salesTargetTotalPages()"
+            (click)="changeSalesTargetPage(1)"
+          >
+            下一頁
+          </button>
+        </div>
+      </section>
+    </section>
+
+    <section class="single-view" *ngIf="activeView() === 'bonus-rules'">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>業績獎金規則</h2>
+            <p>主管可新增業績獎金規則，做為業績結算的計算依據。</p>
+          </div>
+          <button type="button" *ngIf="canManageBonusRules() && !creatingBonusRule()" (click)="startCreateBonusRule()">新增業績獎金規則</button>
+        </div>
+
+        <div class="rent-edit-panel" *ngIf="creatingBonusRule()">
+          <div class="panel-header">
+            <div><h3>新增業績獎金規則</h3></div>
+          </div>
+          <form class="customer-form" (ngSubmit)="createBonusRule()">
+            <label>
+              規則名稱
+              <input name="newBonusRuleName" [(ngModel)]="newBonusRuleForm.ruleName" required maxlength="100" />
+            </label>
+            <label>
+              規則類型
+              <select name="newBonusRuleType" [(ngModel)]="newBonusRuleForm.ruleType" (ngModelChange)="onNewBonusRuleTypeChange()" required>
+                <option *ngFor="let option of bonusRuleTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label *ngIf="bonusRuleFieldMode(newBonusRuleForm.ruleType) === 'unitAmount'">
+              單位金額
+              <input type="number" name="newBonusRuleUnitAmount" [(ngModel)]="newBonusRuleForm.unitAmount" min="0" step="0.01" required />
+            </label>
+            <label *ngIf="bonusRuleFieldMode(newBonusRuleForm.ruleType) === 'percentage'">
+              比例（如 0.01 = 1%）
+              <input type="number" name="newBonusRulePercentage" [(ngModel)]="newBonusRuleForm.percentage" min="0" step="0.0001" required />
+            </label>
+            <div class="wide tier-config-editor" *ngIf="bonusRuleFieldMode(newBonusRuleForm.ruleType) === 'tierConfig'">
+              <span class="tier-config-title">級距設定</span>
+              <p class="tier-config-hint">依成交數量門檻設定對應獎金，系統會套用符合的最高門檻，不會重複疊加。</p>
+              <div class="tier-config-row" *ngFor="let tier of newBonusRuleTiers; let i = index">
+                <label>
+                  達成數量門檻
+                  <input type="number" name="newBonusRuleTierThreshold{{ i }}" [(ngModel)]="tier.threshold" min="0" step="1" />
+                </label>
+                <label>
+                  獎金金額
+                  <input type="number" name="newBonusRuleTierAmount{{ i }}" [(ngModel)]="tier.amount" min="0" step="0.01" />
+                </label>
+                <button type="button" class="ghost compact-button" (click)="removeNewBonusRuleTier(i)">刪除</button>
+              </div>
+              <button type="button" class="ghost compact-button" (click)="addNewBonusRuleTier()">新增級距</button>
+            </div>
+            <label>
+              結算週期
+              <select name="newBonusRulePeriodType" [(ngModel)]="newBonusRuleForm.periodType">
+                <option value="">請選擇</option>
+                <option *ngFor="let option of bonusRulePeriodTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label class="wide">
+              說明
+              <textarea name="newBonusRuleDescription" [(ngModel)]="newBonusRuleForm.description" rows="2"></textarea>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" name="newBonusRuleIsActive" [(ngModel)]="newBonusRuleForm.isActive" />
+              啟用中
+            </label>
+            <div class="form-actions wide">
+              <button type="submit" [disabled]="saving()">新增</button>
+              <button type="button" class="ghost" (click)="cancelCreateBonusRule()">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="rent-edit-panel" *ngIf="editingBonusRule() as editing">
+          <div class="panel-header">
+            <div>
+              <h3>修改業績獎金規則</h3>
+              <p>{{ editing.rule_name }}</p>
+            </div>
+          </div>
+          <form class="customer-form" (ngSubmit)="saveBonusRuleEdit()">
+            <label>
+              規則名稱
+              <input name="editBonusRuleName" [(ngModel)]="bonusRuleEditForm.ruleName" required maxlength="100" />
+            </label>
+            <label>
+              規則類型
+              <select name="editBonusRuleType" [(ngModel)]="bonusRuleEditForm.ruleType" (ngModelChange)="onEditBonusRuleTypeChange()" required>
+                <option *ngFor="let option of bonusRuleTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label *ngIf="bonusRuleFieldMode(bonusRuleEditForm.ruleType) === 'unitAmount'">
+              單位金額
+              <input type="number" name="editBonusRuleUnitAmount" [(ngModel)]="bonusRuleEditForm.unitAmount" min="0" step="0.01" required />
+            </label>
+            <label *ngIf="bonusRuleFieldMode(bonusRuleEditForm.ruleType) === 'percentage'">
+              比例（如 0.01 = 1%）
+              <input type="number" name="editBonusRulePercentage" [(ngModel)]="bonusRuleEditForm.percentage" min="0" step="0.0001" required />
+            </label>
+            <div class="wide tier-config-editor" *ngIf="bonusRuleFieldMode(bonusRuleEditForm.ruleType) === 'tierConfig'">
+              <span class="tier-config-title">級距設定</span>
+              <p class="tier-config-hint">依成交數量門檻設定對應獎金，系統會套用符合的最高門檻，不會重複疊加。</p>
+              <div class="tier-config-row" *ngFor="let tier of bonusRuleEditTiers; let i = index">
+                <label>
+                  達成數量門檻
+                  <input type="number" name="editBonusRuleTierThreshold{{ i }}" [(ngModel)]="tier.threshold" min="0" step="1" />
+                </label>
+                <label>
+                  獎金金額
+                  <input type="number" name="editBonusRuleTierAmount{{ i }}" [(ngModel)]="tier.amount" min="0" step="0.01" />
+                </label>
+                <button type="button" class="ghost compact-button" (click)="removeEditBonusRuleTier(i)">刪除</button>
+              </div>
+              <button type="button" class="ghost compact-button" (click)="addEditBonusRuleTier()">新增級距</button>
+            </div>
+            <label>
+              結算週期
+              <select name="editBonusRulePeriodType" [(ngModel)]="bonusRuleEditForm.periodType">
+                <option value="">請選擇</option>
+                <option *ngFor="let option of bonusRulePeriodTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label class="wide">
+              說明
+              <textarea name="editBonusRuleDescription" [(ngModel)]="bonusRuleEditForm.description" rows="2"></textarea>
+            </label>
+            <label class="checkbox-label">
+              <input type="checkbox" name="editBonusRuleIsActive" [(ngModel)]="bonusRuleEditForm.isActive" />
+              啟用中
+            </label>
+            <div class="form-actions wide">
+              <button type="submit" [disabled]="saving()">儲存</button>
+              <button type="button" class="ghost" (click)="cancelEditBonusRule()">取消</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="empty-state" *ngIf="!bonusRuleRows().length">目前沒有業績獎金規則。</div>
+        <div class="simple-table no-scroll" *ngIf="bonusRuleRows().length">
+          <div class="simple-row header bonus-rule-row">
+            <span>規則名稱</span>
+            <span>類型</span>
+            <span>單位金額 / 比例</span>
+            <span>結算週期</span>
+            <span>狀態</span>
+            <span>說明</span>
+            <span>操作</span>
+          </div>
+          <div class="simple-row bonus-rule-row" *ngFor="let row of bonusRuleRows()">
+            <span class="stacked-field">
+              <span class="stacked-field-label">規則名稱</span>
+              {{ row.rule_name }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">類型</span>
+              {{ bonusRuleTypeLabel(row.rule_type) }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">單位金額 / 比例</span>
+              {{ row.unit_amount != null ? money(row.unit_amount) : (row.percentage != null ? (row.percentage * 100) + '%' : '-') }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">結算週期</span>
+              {{ bonusRulePeriodTypeLabel(row.period_type) }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">狀態</span>
+              {{ row.is_active ? '啟用中' : '停用' }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">說明</span>
+              {{ row.description || '-' }}
+            </span>
+            <span class="bonus-rule-row-actions">
+              <button type="button" class="ghost compact-button" *ngIf="canManageBonusRules()" (click)="startEditBonusRule(row)">修改</button>
+            </span>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="single-view" *ngIf="activeView() === 'performance-bonuses'">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>業績結算</h2>
+            <p>查詢已結算的業績獎金明細；主管可觸發結算計算。</p>
+          </div>
+        </div>
+
+        <section class="staff-bonus-summary">
+          <div class="staff-bonus-summary-header">
+            <h3>各祕書可獲得獎金一覽</h3>
+            <p>依目前的規則類型／期間／分館篩選條件加總（不受祕書篩選與分頁影響）。</p>
+          </div>
+          <div class="empty-state" *ngIf="!staffBonusSummaryRows().length">目前沒有可統計的業績結算資料。</div>
+          <div class="kpis staff-bonus-kpis" *ngIf="staffBonusSummaryRows().length">
+            <article *ngFor="let item of staffBonusSummaryRows()">
+              <span>{{ item.staffName }}</span>
+              <strong>{{ money(item.total) }}</strong>
+              <small>{{ item.count }} 筆</small>
+            </article>
+          </div>
+        </section>
+
+        <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
+          <div class="panel-header">
+            <div>
+              <h3>結算觸發</h3>
+              <p>依規則類型分成三種觸發方式，皆可重複執行，已入帳的資料不會重複計算。</p>
+            </div>
+          </div>
+          <div class="settle-actions">
+            <div class="settle-action-item">
+              <p>規則一／二／三／八：辦公室出租、公司登記業績、同心、公司登記年繳（逐筆合約／收款觸發）</p>
+              <button type="button" [disabled]="settlingTransactions()" (click)="syncTransactionBonuses()">同步逐筆獎金</button>
+            </div>
+            <div class="settle-action-item">
+              <p>規則四：滿租獎金（按月結算）</p>
+              <label>
+                月份
+                <input type="month" name="settleMonthlyYearMonth" [(ngModel)]="settleMonthlyYearMonth" />
+              </label>
+              <button type="button" [disabled]="settlingMonthly()" (click)="settleMonthlyBonuses()">月結滿租獎金</button>
+            </div>
+            <div class="settle-action-item">
+              <p>規則六／七：公司登記加乘、分館績效（每 4 個月結算一次）</p>
+              <label>
+                年度
+                <input type="number" name="settlePeriodYear" [(ngModel)]="settlePeriodYear" />
+              </label>
+              <label>
+                期別
+                <select name="settlePeriodQuarter" [(ngModel)]="settlePeriodQuarter">
+                  <option [ngValue]="1">第一期（1～4月）</option>
+                  <option [ngValue]="2">第二期（5～8月）</option>
+                  <option [ngValue]="3">第三期（9～12月）</option>
+                </select>
+              </label>
+              <button type="button" [disabled]="settlingPeriod()" (click)="settlePeriodBonuses()">期間結算</button>
+            </div>
+          </div>
+          <p class="settle-result" *ngIf="settleResultMessage()">{{ settleResultMessage() }}</p>
+        </div>
+
+        <section class="filter-bar">
+          <label>
+            規則類型
+            <select name="performanceBonusFilterRuleType" [(ngModel)]="performanceBonusFilters.ruleType">
+              <option value="">全部</option>
+              <option *ngFor="let option of bonusRuleTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
+            </select>
+          </label>
+          <label>
+            期間
+            <input name="performanceBonusFilterPeriod" [(ngModel)]="performanceBonusFilters.period" placeholder="YYYY-MM 或 YYYY-P1～P3" />
+          </label>
+          <label>
+            分館
+            <select name="performanceBonusFilterBranchId" [(ngModel)]="performanceBonusFilters.branchId">
+              <option [ngValue]="null">全部</option>
+              <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+            </select>
+          </label>
+          <label>
+            祕書
+            <select name="performanceBonusFilterStaffId" [(ngModel)]="performanceBonusFilters.staffId">
+              <option [ngValue]="null">全部</option>
+              <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">{{ staff['staff_name'] }}</option>
+            </select>
+          </label>
+          <div class="filter-actions">
+            <button type="button" (click)="searchPerformanceBonuses()">搜尋</button>
+          </div>
+        </section>
+
+        <div class="empty-state" *ngIf="!performanceBonusRows().length">目前沒有業績結算資料。</div>
+        <div class="simple-table" *ngIf="performanceBonusRows().length">
+          <div class="simple-row header eight">
+            <span>規則</span>
+            <span>祕書</span>
+            <span>分館 / 客戶</span>
+            <span>期間</span>
+            <span>簽約數</span>
+            <span>解約數</span>
+            <span>金額</span>
+            <span>備註</span>
+          </div>
+          <div class="simple-row eight" *ngFor="let row of performanceBonusRows()">
+            <span>{{ row.rule_name || bonusRuleTypeLabel(row.rule_type || '') }}</span>
+            <span>{{ row.staff_name || '-' }}</span>
+            <span>{{ row.branch_name || row.company_name || '-' }}</span>
+            <span>{{ row.period || '-' }}</span>
+            <span>{{ row.signed_count ?? '-' }}</span>
+            <span>{{ row.cancelled_count ?? '-' }}</span>
+            <span>{{ money(row.bonus_amount) }}</span>
+            <span class="stacked-field">{{ row.note || '-' }}</span>
+          </div>
+        </div>
+
+        <div class="pagination-bar" *ngIf="performanceBonusRows().length">
+          <button type="button" class="ghost compact-button" [disabled]="performanceBonusPage() === 0" (click)="changePerformanceBonusPage(-1)">
+            上一頁
+          </button>
+          <span>第 {{ performanceBonusPage() + 1 }} / {{ performanceBonusTotalPages() }} 頁（共 {{ performanceBonusTotal() }} 筆）</span>
+          <button
+            type="button"
+            class="ghost compact-button"
+            [disabled]="performanceBonusPage() + 1 >= performanceBonusTotalPages()"
+            (click)="changePerformanceBonusPage(1)"
+          >
+            下一頁
+          </button>
         </div>
       </section>
     </section>

@@ -50,6 +50,7 @@ public class SeedDataLoader implements CommandLineRunner {
             insertChargeLists(list(seed, "chargeLists"));
             insertRefunds(list(seed, "refunds"));
             insertSalesTargets(list(seed, "salesTargets"));
+            insertBonusRules(list(seed, "bonusRules"));
             insertPerformanceBonuses(list(seed, "performanceBonuses"));
         }
     }
@@ -181,6 +182,17 @@ public class SeedDataLoader implements CommandLineRunner {
         rows.forEach(r -> jdbc.update(
                 "INSERT INTO sales_targets (sales_target_id, branch_id, target_month, category, target_count) VALUES (?, ?, ?, ?, ?)",
                 n(r, "salesTargetId"), n(r, "branchId"), n(r, "month"), s(r, "category"), n(r, "targetCount")));
+    }
+
+    private void insertBonusRules(List<Map<String, Object>> rows) {
+        rows.forEach(r -> jdbc.update("""
+                INSERT INTO bonus_rules (
+                    bonus_rule_id, rule_name, rule_type, unit_amount, percentage, tier_config,
+                    period_type, description, is_active
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, n(r, "bonusRuleId"), s(r, "ruleName"), s(r, "ruleType"), bd(r, "unitAmount"),
+                bd(r, "percentage"), s(r, "tierConfig"), s(r, "periodType"), s(r, "description"),
+                r.containsKey("isActive") ? b(r, "isActive") : Boolean.TRUE));
     }
 
     private void insertPerformanceBonuses(List<Map<String, Object>> rows) {
