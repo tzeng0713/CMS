@@ -1,5 +1,6 @@
 package com.example.cms.controller;
 
+import com.example.cms.dto.ManualPerformanceBonusRequest;
 import com.example.cms.dto.SettleMonthlyBonusRequest;
 import com.example.cms.dto.SettlePeriodBonusRequest;
 import com.example.cms.dto.SyncTransactionBonusRequest;
@@ -46,5 +47,10 @@ public class PerformanceBonusController {
     @PostMapping("/settle-period")
     public Map<String, Object> settlePeriod(@RequestBody SettlePeriodBonusRequest request) {
         return service.settlePeriod(request);
+    }
+
+    @PostMapping("/manual")
+    public Map<String, Object> manualCreate(@RequestBody ManualPerformanceBonusRequest request) {
+        return service.manualCreate(request);
     }
 }

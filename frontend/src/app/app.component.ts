@@ -21,6 +21,7 @@ import {
   CustomerSearchFilters,
   CustomerSummary,
   Dashboard,
+  ManualPerformanceBonusPayload,
   OfficePayload,
   OfficeSummary,
   PerformanceBonus,
@@ -71,6 +72,10 @@ type BonusRuleTierRow = {
   threshold: number | null;
   amount: number | null;
 };
+
+// 沒有自動結算引擎的規則類型：手動新增業績獎金表單的規則下拉選單只列出這些，
+// 避免跟既有的自動結算（sync-transactions／settle-monthly／settle-period）重複入帳。
+const MANUAL_ONLY_RULE_TYPES = new Set(['BUSINESS_AGENT']);
 
 interface NavItem {
   key: ViewKey;
@@ -467,7 +472,7 @@ export class AppComponent implements OnInit {
     { value: 'COMPANY_REGISTRATION', label: '二、公司登記業績獎金' },
     { value: 'TEAMWORK', label: '三、同心獎金' },
     { value: 'FULL_OCCUPANCY', label: '四、滿租獎金' },
-    { value: 'BUSINESS_AGENT', label: '五、工商代辦獎金（尚未支援自動結算）' },
+    { value: 'BUSINESS_AGENT', label: '五、工商代辦獎金（採手動新增）' },
     { value: 'REGISTRATION_MULTIPLIER', label: '六、公司登記加乘獎金' },
     { value: 'BRANCH_PERFORMANCE', label: '七、分館績效獎金' },
     { value: 'ANNUAL_PAYMENT', label: '八、公司登記年繳獎金' }
@@ -506,6 +511,13 @@ export class AppComponent implements OnInit {
   settlingMonthly = signal(false);
   settlingPeriod = signal(false);
   settleResultMessage = signal('');
+  newManualBonusForm: { beneficiaryStaffId: number | null; bonusRuleId: number | null; amount: number | null; period: string; note: string } = {
+    beneficiaryStaffId: null, bonusRuleId: null, amount: null, period: '', note: ''
+  };
+  savingManualBonus = signal(false);
+  manualEligibleBonusRules = computed(() =>
+    this.bonusRuleRows().filter((rule) => rule.is_active && MANUAL_ONLY_RULE_TYPES.has(rule.rule_type))
+  );
   newCustomerOptions = signal<CustomerSummary[]>([]);
   rentCustomerOptions = signal<CustomerSummary[]>([]);
   contractCustomerOptions = signal<CustomerSummary[]>([]);
@@ -818,6 +830,7 @@ export class AppComponent implements OnInit {
         break;
       case 'performance-bonuses':
         this.loadStaffSupportData();
+        this.loadBonusRules();
         this.loadPerformanceBonuses();
         break;
       case 'tax-bureau-notices':
@@ -1903,6 +1916,36 @@ export class AppComponent implements OnInit {
       error: (err: HttpErrorResponse) => {
         this.settlingPeriod.set(false);
         this.error.set(this.branchApiErrorMessage(err, '期間結算失敗。'));
+      }
+    });
+  }
+
+  createManualPerformanceBonus(): void {
+    const form = this.newManualBonusForm;
+    if (!form.beneficiaryStaffId || !form.bonusRuleId || !form.amount || form.amount <= 0) {
+      this.error.set('祕書、業績獎金規則、金額為必填欄位。');
+      return;
+    }
+    const payload: ManualPerformanceBonusPayload = {
+      staffId: this.currentStaffId(),
+      beneficiaryStaffId: form.beneficiaryStaffId,
+      bonusRuleId: form.bonusRuleId,
+      amount: form.amount,
+      period: form.period || undefined,
+      note: form.note || undefined
+    };
+    this.savingManualBonus.set(true);
+    this.api.createManualPerformanceBonus(payload).subscribe({
+      next: () => {
+        this.savingManualBonus.set(false);
+        this.error.set('');
+        this.showToast('已手動新增業績獎金。');
+        this.newManualBonusForm = { beneficiaryStaffId: null, bonusRuleId: null, amount: null, period: '', note: '' };
+        this.loadPerformanceBonuses();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.savingManualBonus.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '手動新增業績獎金失敗。'));
       }
     });
   }

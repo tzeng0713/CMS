@@ -2835,6 +2835,37 @@
               </label>
               <button type="button" [disabled]="settlingPeriod()" (click)="settlePeriodBonuses()">期間結算</button>
             </div>
+            <div class="settle-action-item">
+              <p>規則五：工商代辦獎金（尚無自動結算，核對「新簽約檔案」後手動新增）</p>
+              <label>
+                祕書
+                <select name="manualBonusStaffId" [(ngModel)]="newManualBonusForm.beneficiaryStaffId">
+                  <option [ngValue]="null">請選擇</option>
+                  <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">{{ staff['staff_name'] }}</option>
+                </select>
+              </label>
+              <label>
+                業績獎金規則
+                <select name="manualBonusRuleId" [(ngModel)]="newManualBonusForm.bonusRuleId">
+                  <option [ngValue]="null">請選擇</option>
+                  <option *ngFor="let rule of manualEligibleBonusRules()" [ngValue]="rule.bonus_rule_id">{{ rule.rule_name }}</option>
+                </select>
+              </label>
+              <label>
+                金額
+                <input type="number" name="manualBonusAmount" [(ngModel)]="newManualBonusForm.amount" min="0" step="0.01" />
+              </label>
+              <label>
+                期間（選填）
+                <input name="manualBonusPeriod" [(ngModel)]="newManualBonusForm.period" placeholder="例：2026-08" />
+              </label>
+              <label>
+                備註（案件說明）
+                <input name="manualBonusNote" [(ngModel)]="newManualBonusForm.note" placeholder="例：客戶名稱／案件內容" />
+              </label>
+              <button type="button" [disabled]="savingManualBonus() || !manualEligibleBonusRules().length" (click)="createManualPerformanceBonus()">新增業績獎金</button>
+              <p class="settle-result" *ngIf="!manualEligibleBonusRules().length">目前沒有可手動新增的業績獎金規則，請先至「業績獎金規則」新增並啟用工商代辦獎金規則。</p>
+            </div>
           </div>
           <p class="settle-result" *ngIf="settleResultMessage()">{{ settleResultMessage() }}</p>
         </div>

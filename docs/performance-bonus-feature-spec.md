@@ -18,7 +18,7 @@
 | 新增當月業績目標（主管權限） | 依分館、月份、類別設定業績目標數量 |
 | 查詢業績目標資料 | 依分館／月份／類別篩選查詢已設定的業績目標 |
 | 查詢業績結算資料 | 依規則類型／期間／分館／祕書篩選查詢已結算的業績獎金明細 |
-| 業績獎金結算（主管權限，三種觸發方式） | 依規則類型分為「逐筆合約／收款觸發」「按月觸發」「每 4 個月期間觸發」三種，皆可重複執行且不會對同一筆事件重複入帳 |
+| 業績獎金結算（主管權限，三種自動觸發＋一種手動新增） | 依規則類型分為「逐筆合約／收款觸發」「按月觸發」「每 4 個月期間觸發」三種自動結算，皆可重複執行且不會對同一筆事件重複入帳；另有「手動新增」供沒有自動結算引擎的規則（目前僅規則五）登打單筆獎金 |
 
 ### 8 種業績獎金規則對照表
 
@@ -28,12 +28,14 @@
 | 二 | 公司登記業績獎金 | `COMPANY_REGISTRATION` | ✅ | 逐筆合約（`sync-transactions`） |
 | 三 | 同心獎金 | `TEAMWORK` | ✅ | 逐筆合約（`sync-transactions`） |
 | 四 | 滿租獎金 | `FULL_OCCUPANCY` | ✅ | 按月（`settle-monthly`） |
-| 五 | 工商代辦獎金 | `BUSINESS_AGENT` | ❌ 尚未支援 | 僅能透過「新增業績獎金規則」存成資料 |
+| 五 | 工商代辦獎金 | `BUSINESS_AGENT` | ❌ 無自動結算引擎 | 手動新增（`POST /api/performance-bonuses/manual`，主管限定） |
 | 六 | 公司登記加乘獎金 | `REGISTRATION_MULTIPLIER` | ✅ | 4 個月期間（`settle-period`） |
 | 七 | 分館績效獎金 | `BRANCH_PERFORMANCE` | ✅ | 4 個月期間（`settle-period`） |
 | 八 | 公司登記年繳獎金 | `ANNUAL_PAYMENT` | ✅ | 逐筆收款（`sync-transactions`） |
 
-**規則五（工商代辦獎金）沒有自動結算引擎**：探索確認系統裡完全沒有區分「公司登記」（登記地址服務）與「工商代辦」（設立登記送件）的資料欄位——兩者在 `contracts` 表裡都只是 `rental_item = '登記'` 的同一筆合約，且系統沒有「案件已完成送件流程」狀態欄位。若強行自動計算會與規則二（公司登記業績獎金）對同一張合約重複發放。這次僅能透過「新增業績獎金規則」把規則五存成資料（供主管參考／未來擴充），實際結算需要主管或祕書自行認定並記錄，不會出現在 `performance-bonuses` 的自動結算結果中。
+**規則五（工商代辦獎金）沒有自動結算引擎**：探索確認系統裡完全沒有區分「公司登記」（登記地址服務）與「工商代辦」（設立登記送件）的資料欄位——兩者在 `contracts` 表裡都只是 `rental_item = '登記'` 的同一筆合約，且系統沒有「案件已完成送件流程」狀態欄位。若強行自動計算會與規則二（公司登記業績獎金）對同一張合約重複發放。
+
+已向廠商確認實際運作方式，印證上述判斷：公司登記是持續性服務、有簽約；工商代辦是單次代辦服務，**沒有另外簽訂服務合約**，因此系統確實無法從 `contracts` 表區分兩者。目前實際流程是：案件完成、業績確認後，歸屬的祕書會把資料填寫在「新簽約檔案」（公司內部維護的紀錄，非本系統的表，CMS 完全沒有對應的資料結構）；每月計算薪資時，由主管／薪資處理人員依「新簽約檔案」核對後計算該筆獎金。對應本系統的功能是：主管在核對後，透過 `POST /api/performance-bonuses/manual` 手動登打單筆獎金（見第 5 節「規則五」）；「新簽約檔案」本身不在 CMS 範圍內，這次不建表。
 
 ---
 
@@ -143,8 +145,12 @@ COALESCE(o.branch_id, st.branch_id)
 - 歸屬：該合約的 `signer_staff_id`。
 - 冪等性：`rent_payment_id` 已有 `ANNUAL_PAYMENT` 紀錄則跳過（同一筆收款只計算一次；同一合約日後再繳一次年租金，是新的 `rent_payment_id`，會再算一次）。
 
-### 規則五：工商代辦獎金（`BUSINESS_AGENT`）
-- 不自動計算。可透過「新增業績獎金規則」建立設定，`description` 會標註「尚未支援自動結算」，前端規則列表會顯示提示 badge。
+### 規則五：工商代辦獎金（`BUSINESS_AGENT`，手動新增）
+- 沒有自動結算引擎（原因見第 1 節）。規則本身仍可透過「新增業績獎金規則」建立設定（`unitAmount`，供人工參考金額）。
+- 實際入帳走新端點 `POST /api/performance-bonuses/manual`（`PerformanceBonusService.manualCreate()`）：主管在業績結算頁的「結算觸發」面板第四區塊，選祕書、選規則、填金額（可參考規則的 `unit_amount`，但金額本身可自由調整）、選填期間與備註（用來記錄案件／客戶說明，因為系統沒有工商代辦案件的資料表可關聯），送出後直接寫入 `performance_bonuses`。
+- **只能選擇 `MANUALLY_ONLY_RULE_TYPES` 白名單內的規則類型**（目前僅 `BUSINESS_AGENT`）：後端會擋掉對已有自動結算引擎的規則類型（一/二/三/四/六/七/八）手動新增，避免跟 `sync-transactions`／`settle-monthly`／`settle-period` 重複入帳；前端下拉選單也只列出白名單內、啟用中的規則。
+- **沒有冪等性檢查**：跟其他規則不同，這是人工登打的單筆資料，系統不會比對是否重複，需要靠主管自己核對「新簽約檔案」避免同一案件重複輸入。
+- 權限：跟其他結算動作一樣，透過 `requireManager()` 重新驗證請求者（`staffId`）必須是「主管」，跟實際獲得獎金的祕書（`beneficiaryStaffId`）是分開的兩個欄位。
 
 ---
 
@@ -167,8 +173,9 @@ COALESCE(o.branch_id, st.branch_id)
 | POST | `/api/performance-bonuses/sync-transactions` | 結算規則一二三八（逐筆合約／收款觸發，body：`{staffId}`） |
 | POST | `/api/performance-bonuses/settle-monthly` | 結算規則四（body：`{yearMonth, staffId}`，`yearMonth` 格式 `YYYY-MM`） |
 | POST | `/api/performance-bonuses/settle-period` | 結算規則六、七（body：`{period, staffId}`，`period` 格式 `YYYY-P1`/`YYYY-P2`/`YYYY-P3`） |
+| POST | `/api/performance-bonuses/manual` | 手動新增單筆業績獎金（主管限定，僅限規則五等無自動結算引擎的規則；body：`{staffId, beneficiaryStaffId, bonusRuleId, amount, period?, note?}`，`staffId` 為送出者、`beneficiaryStaffId` 為獎金歸屬祕書） |
 
-`sync-transactions` 回傳 `{createdCount, skippedAlreadyRecorded, skippedMissingEndDate, skippedNoActiveRule}`；`settle-monthly` 回傳 `{period, createdCount, skippedBranches}`；`settle-period` 回傳 `{period, createdCount, skippedBranches, unassignedContractCount}`。
+`sync-transactions` 回傳 `{createdCount, skippedAlreadyRecorded, skippedMissingEndDate, skippedNoActiveRule}`；`settle-monthly` 回傳 `{period, createdCount, skippedBranches}`；`settle-period` 回傳 `{period, createdCount, skippedBranches, unassignedContractCount}`；`manual` 回傳新增的 `performance_bonuses` 完整資料（含 join 後的 `staff_name`／`rule_name`）。
 
 ---
 
@@ -180,14 +187,15 @@ COALESCE(o.branch_id, st.branch_id)
   - `periodType`（結算週期）為下拉選單（`bonusRulePeriodTypeOptions`），選項與中文標籤為「逐筆合約／收款觸發」`PER_TRANSACTION`、「按月結算」`MONTHLY`、「每 4 個月期間結算」`FOUR_MONTH`；規則列表的「結算週期」欄位也用同一份對照表（`bonusRulePeriodTypeLabel()`）顯示中文，不顯示原始代碼。
   - `tierConfig`（規則六專用）不再是原始 JSON 輸入框，改為「達成數量門檻／獎金金額」成對輸入列，可用「新增級距」／「刪除」增減列數；既有資料由 `parseBonusRuleTiers()` 解析回填，送出前由 `serializeBonusRuleTiers()` 依門檻由小到大排序、過濾空列後組回 `[{"threshold":n,"amount":n}, ...]` 字串，資料庫欄位格式與後端驗證邏輯不變。
   - 規則列表改為專屬的 `bonus-rule-row` 版面（不再用內部固定高度捲動的通用表格），並補上手機窄螢幕下的單欄卡片樣式，桌面與手機皆不會出現多餘捲軸。
-- **業績結算**頁：篩選＋結果列表＋三個結算觸發區塊（主管限定：「同步逐筆獎金」按鈕、「月結滿租獎金」月份選擇器、「期間結算」年份＋期別選擇器），送出後於畫面顯示 API 回傳的 `skipped*`／`unassigned*` 提示文字。
+- **業績結算**頁：篩選＋結果列表＋四個結算觸發區塊（主管限定：「同步逐筆獎金」按鈕、「月結滿租獎金」月份選擇器、「期間結算」年份＋期別選擇器、「手動新增業績獎金」表單），送出後於畫面顯示 API 回傳的 `skipped*`／`unassigned*` 提示文字或成功訊息。
+  - 「手動新增業績獎金」表單：祕書＋業績獎金規則（下拉只列出 `MANUAL_ONLY_RULE_TYPES` 白名單內、啟用中的規則，目前即工商代辦獎金）＋金額＋期間（選填）＋備註（選填，供填寫案件／客戶說明），對應規則五的實際作業方式（主管核對「新簽約檔案」後登打）。若尚無任何可手動新增的啟用規則，按鈕停用並顯示提示文字。
   - 頁面最上方新增「各祕書可獲得獎金一覽」卡片區：依目前的規則類型／期間／分館篩選條件（不含祕書篩選、不受分頁影響，`pageSize=200` 一次取回加總）在前端依 `staff_name` 分組加總 `bonus_amount`，依金額由高到低排序，讓主管一眼看出每位祕書的獎金總額與筆數；此彙總為前端計算，未新增後端彙總 API。
 
 ---
 
 ## 9. 已知限制／待補事項
 
-- **「工商代辦獎金」僅能新增規則資料，無自動結算**：需要「案件完成流程」狀態欄位（目前系統完全沒有此概念，需先設計並新增欄位或表）才能回補自動計算。
+- **「工商代辦獎金」已支援主管手動新增（`POST /api/performance-bonuses/manual`），但仍無自動結算**：依賴主管人工核對「新簽約檔案」（系統外部檔案）後登打，系統不做重複輸入檢查。若後續要做自動化，仍需要先設計並新增「案件完成流程」狀態欄位（目前系統完全沒有此概念），才能區分「公司登記」與「工商代辦」回補自動計算。
 - **「分館績效獎金」「滿租獎金」的獎金歸屬對象皆以 `staff.branch_id` 找出分館所有祕書，但分配方式不同**：滿租獎金每人全額、分館績效獎金平分。PDF 原文未明確定義「管理祕書」對應哪個資料庫欄位，此為與需求方逐一確認後的設計決策。
 - **「公司登記年繳獎金」用 `contracts.payment_months = 12` 判斷年繳**：`payment_months` 沒有資料庫層級的允許值限制，不保證所有「年繳」合約都確實填 12；若日後付款週期欄位改版或另建結構化的「付款頻率」欄位，需要回頭調整此判斷邏輯。
 - **沒有排程機制**：三個結算動作（`sync-transactions`／`settle-monthly`／`settle-period`）皆須主管手動觸發，系統不會自動、定期執行（沿用國稅局通報功能的既有模式，專案目前無 `@Scheduled`/cron）。

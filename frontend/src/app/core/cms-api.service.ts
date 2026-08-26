@@ -480,6 +480,15 @@ export interface PerformanceBonusSearchFilters {
   pageSize?: number;
 }
 
+export interface ManualPerformanceBonusPayload {
+  staffId: number;
+  beneficiaryStaffId: number;
+  bonusRuleId: number;
+  amount: number;
+  period?: string;
+  note?: string;
+}
+
 export interface SyncTransactionBonusResult {
   createdCount: number;
   skippedAlreadyRecorded: number;
@@ -799,6 +808,10 @@ export class CmsApiService {
 
   settlePeriodBonuses(period: string, staffId: number): Observable<SettlePeriodBonusResult> {
     return this.http.post<SettlePeriodBonusResult>(`${this.baseUrl}/performance-bonuses/settle-period`, { period, staffId });
+  }
+
+  createManualPerformanceBonus(payload: ManualPerformanceBonusPayload): Observable<PerformanceBonus> {
+    return this.http.post<PerformanceBonus>(`${this.baseUrl}/performance-bonuses/manual`, payload);
   }
 
   createRentPayment(payload: RentPaymentPayload): Observable<Record<string, unknown>> {

@@ -1,5 +1,6 @@
 package com.example.cms.service;
 
+import com.example.cms.dto.ManualPerformanceBonusRequest;
 import com.example.cms.dto.SettleMonthlyBonusRequest;
 import com.example.cms.dto.SettlePeriodBonusRequest;
 import com.example.cms.dto.SyncTransactionBonusRequest;
@@ -31,6 +32,10 @@ public class PerformanceBonusService extends CmsJdbcSupport {
 
     private static final Pattern PERIOD_PATTERN = Pattern.compile("^(\\d{4})-P([123])$");
     private static final Pattern YEAR_MONTH_PATTERN = Pattern.compile("^(\\d{4})-(\\d{2})$");
+
+    // 沒有自動結算引擎的規則類型：只有這些規則能透過 manualCreate() 手動登打，
+    // 避免主管誤對已有自動結算流程（sync-transactions／settle-monthly／settle-period）的規則手動入帳造成重複發放。
+    private static final Set<String> MANUALLY_ONLY_RULE_TYPES = Set.of("BUSINESS_AGENT");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -447,9 +452,40 @@ public class PerformanceBonusService extends CmsJdbcSupport {
         return result;
     }
 
+    // ---------- 規則五等無自動結算引擎的規則：手動登打單筆獎金 ----------
+
+    public Map<String, Object> manualCreate(ManualPerformanceBonusRequest request) {
+        requireManager(request.staffId());
+        requiredId(request.beneficiaryStaffId(), "beneficiaryStaffId");
+        requiredId(request.bonusRuleId(), "bonusRuleId");
+
+        Map<String, Object> rule;
+        try {
+            rule = jdbc.queryForMap(
+                    "SELECT * FROM bonus_rules WHERE bonus_rule_id = ? AND is_active = TRUE", request.bonusRuleId());
+        } catch (EmptyResultDataAccessException e) {
+            throw new IllegalArgumentException("bonusRuleId 不存在或未啟用");
+        }
+        String ruleType = (String) rule.get("rule_type");
+        if (!MANUALLY_ONLY_RULE_TYPES.contains(ruleType)) {
+            throw new IllegalArgumentException(
+                    "ruleType=" + ruleType + " 已有自動結算引擎，請使用結算觸發，不支援手動新增");
+        }
+
+        BigDecimal amount = request.amount();
+        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("amount must be positive");
+        }
+
+        Long id = insertBonusRow(request.beneficiaryStaffId(), request.bonusRuleId(), ruleType, null, null, null,
+                blankToNull(request.period()), null, null, amount, blankToNull(request.note()), request.staffId());
+
+        return jdbc.queryForMap(listSql() + " WHERE pb.bonus_id = ?", id);
+    }
+
     // ---------- helpers ----------
 
-    private void insertBonusRow(Long staffId, Long bonusRuleId, String ruleType, Long contractId, Long branchId,
+    private Long insertBonusRow(Long staffId, Long bonusRuleId, String ruleType, Long contractId, Long branchId,
                                  Long rentPaymentId, String period, Integer signedCount, Integer cancelledCount,
                                  BigDecimal bonusAmount, String note, Long createdBy) {
         Integer netCount = (signedCount != null && cancelledCount != null) ? signedCount - cancelledCount : null;
@@ -462,6 +498,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                 """,
                 id, staffId, period, netCount, bonusAmount, bonusRuleId, ruleType, contractId, branchId,
                 rentPaymentId, signedCount, cancelledCount, note, createdBy);
+        return id;
     }
 
     private List<Long> queryStaffIdsByBranch(Long branchId) {
