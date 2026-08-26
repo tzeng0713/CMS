@@ -2835,42 +2835,50 @@
               </label>
               <button type="button" [disabled]="settlingPeriod()" (click)="settlePeriodBonuses()">期間結算</button>
             </div>
-            <div class="settle-action-item">
-              <p>規則五：工商代辦獎金（尚無自動結算，核對「新簽約檔案」後手動新增）</p>
-              <label>
-                祕書
-                <select name="manualBonusStaffId" [(ngModel)]="newManualBonusForm.beneficiaryStaffId">
-                  <option [ngValue]="null">請選擇</option>
-                  <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">{{ staff['staff_name'] }}</option>
-                </select>
-              </label>
-              <label>
-                業績獎金規則
-                <select name="manualBonusRuleId" [(ngModel)]="newManualBonusForm.bonusRuleId">
-                  <option [ngValue]="null">請選擇</option>
-                  <option *ngFor="let rule of manualEligibleBonusRules()" [ngValue]="rule.bonus_rule_id">{{ rule.rule_name }}</option>
-                </select>
-              </label>
-              <label>
-                金額
-                <input type="number" name="manualBonusAmount" [(ngModel)]="newManualBonusForm.amount" min="0" step="0.01" />
-              </label>
-              <label>
-                期間（選填）
-                <input name="manualBonusPeriod" [(ngModel)]="newManualBonusForm.period" placeholder="例：2026-08" />
-              </label>
-              <label>
-                備註（案件說明）
-                <input name="manualBonusNote" [(ngModel)]="newManualBonusForm.note" placeholder="例：客戶名稱／案件內容" />
-              </label>
-              <button type="button" [disabled]="savingManualBonus() || !manualEligibleBonusRules().length" (click)="createManualPerformanceBonus()">新增業績獎金</button>
-              <p class="settle-result" *ngIf="!manualEligibleBonusRules().length">目前沒有可手動新增的業績獎金規則，請先至「業績獎金規則」新增並啟用工商代辦獎金規則。</p>
-            </div>
           </div>
           <p class="settle-result" *ngIf="settleResultMessage()">{{ settleResultMessage() }}</p>
         </div>
 
-        <section class="filter-bar">
+        <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
+          <div class="panel-header">
+            <div>
+              <h3>手動新增業績獎金</h3>
+              <p>規則五：工商代辦獎金尚無自動結算引擎，主管核對「新簽約檔案」後在此登打單筆獎金。</p>
+            </div>
+          </div>
+          <div class="manual-bonus-fields">
+            <label>
+              祕書
+              <select name="manualBonusStaffId" [(ngModel)]="newManualBonusForm.beneficiaryStaffId">
+                <option [ngValue]="null">請選擇</option>
+                <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">{{ staff['staff_name'] }}</option>
+              </select>
+            </label>
+            <label>
+              業績獎金規則
+              <select name="manualBonusRuleId" [(ngModel)]="newManualBonusForm.bonusRuleId">
+                <option [ngValue]="null">請選擇</option>
+                <option *ngFor="let rule of manualEligibleBonusRules()" [ngValue]="rule.bonus_rule_id">{{ rule.rule_name }}</option>
+              </select>
+            </label>
+            <label>
+              金額
+              <input type="number" name="manualBonusAmount" [(ngModel)]="newManualBonusForm.amount" min="0" step="0.01" />
+            </label>
+            <label>
+              期間（選填）
+              <input name="manualBonusPeriod" [(ngModel)]="newManualBonusForm.period" placeholder="例：2026-08" />
+            </label>
+            <label class="wide">
+              備註（案件說明）
+              <input name="manualBonusNote" [(ngModel)]="newManualBonusForm.note" placeholder="例：客戶名稱／案件內容" />
+            </label>
+          </div>
+          <button type="button" class="manual-bonus-submit" [disabled]="savingManualBonus() || !manualEligibleBonusRules().length" (click)="createManualPerformanceBonus()">新增業績獎金</button>
+          <p class="settle-result" *ngIf="!manualEligibleBonusRules().length">目前沒有可手動新增的業績獎金規則，請先至「業績獎金規則」新增並啟用工商代辦獎金規則。</p>
+        </div>
+
+        <section class="filter-bar performance-bonus-filter-bar">
           <label>
             規則類型
             <select name="performanceBonusFilterRuleType" [(ngModel)]="performanceBonusFilters.ruleType">
@@ -2880,7 +2888,20 @@
           </label>
           <label>
             期間
-            <input name="performanceBonusFilterPeriod" [(ngModel)]="performanceBonusFilters.period" placeholder="YYYY-MM 或 YYYY-P1～P3" />
+            <div class="period-filter-group">
+              <select name="performanceBonusFilterYear" [(ngModel)]="performanceBonusFilterYear" [disabled]="!performanceBonusFilterUnit">
+                <option *ngFor="let year of performanceBonusYearOptions" [ngValue]="year">{{ year }}年</option>
+              </select>
+              <select name="performanceBonusFilterUnit" [(ngModel)]="performanceBonusFilterUnit">
+                <option value="">全部</option>
+                <optgroup label="月份（規則四：滿租獎金）">
+                  <option *ngFor="let option of performanceBonusMonthOptions" [value]="option.value">{{ option.label }}</option>
+                </optgroup>
+                <optgroup label="4 個月期間（規則六／七）">
+                  <option *ngFor="let option of performanceBonusQuarterOptions" [value]="option.value">{{ option.label }}</option>
+                </optgroup>
+              </select>
+            </div>
           </label>
           <label>
             分館

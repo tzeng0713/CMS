@@ -504,6 +504,18 @@ export class AppComponent implements OnInit {
   performanceBonusFilters: PerformanceBonusSearchFilters = {
     ruleType: '', period: '', branchId: null, staffId: null
   };
+  performanceBonusFilterYear = new Date().getFullYear();
+  performanceBonusFilterUnit = '';
+  readonly performanceBonusYearOptions = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 3 + i);
+  readonly performanceBonusMonthOptions = Array.from({ length: 12 }, (_, i) => ({
+    value: String(i + 1).padStart(2, '0'),
+    label: `${i + 1}月`
+  }));
+  readonly performanceBonusQuarterOptions: Array<{ value: string; label: string }> = [
+    { value: 'P1', label: '第一期（1～4月）' },
+    { value: 'P2', label: '第二期（5～8月）' },
+    { value: 'P3', label: '第三期（9～12月）' }
+  ];
   settleMonthlyYearMonth = this.currentMonthValue();
   settlePeriodYear = new Date().getFullYear();
   settlePeriodQuarter: 1 | 2 | 3 = 1;
@@ -1850,6 +1862,9 @@ export class AppComponent implements OnInit {
   }
 
   searchPerformanceBonuses(): void {
+    this.performanceBonusFilters.period = this.performanceBonusFilterUnit
+      ? `${this.performanceBonusFilterYear}-${this.performanceBonusFilterUnit}`
+      : '';
     this.performanceBonusPage.set(0);
     this.loadPerformanceBonuses();
   }
