@@ -71,7 +71,7 @@
     aria-label="關閉選單"
     (click)="closeSidebarAfterNavigation()"
   ></button>
-  <aside id="primary-sidebar" class="sidebar">
+  <aside id="primary-sidebar" class="sidebar" #sidebarEl (scroll)="onSidebarScroll()">
     <button type="button" class="brand" (click)="goHome()" aria-label="回首頁">
       <span class="brand-logo-frame">
         <img src="assets/afw-logo.jpg" alt="AFW 全方位商務中心" />
@@ -79,11 +79,11 @@
     </button>
 
     <nav aria-label="主選單">
-      <section class="nav-group" *ngFor="let group of navGroups">
+      <section class="nav-group" *ngFor="let group of navGroups(); trackBy: trackByNavGroupLabel">
         <h2>{{ group.label }}</h2>
         <button
           type="button"
-          *ngFor="let item of group.children"
+          *ngFor="let item of group.children; trackBy: trackByNavItemKey"
           [class.active]="isNavActive(item.key)"
           (click)="setView(item.key)"
         >

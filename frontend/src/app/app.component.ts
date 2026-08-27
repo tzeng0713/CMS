@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { Component, ElementRef, HostListener, OnInit, ViewChild, computed, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import html2canvas from 'html2canvas';
@@ -285,7 +285,7 @@ const emptyContractForm = (): ContractForm => ({
   templateUrl: './app.component.html',
   styleUrl: './app.component.scss'
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, AfterViewInit {
   readonly chargeListLogoPath = CHARGE_LIST_LOGO_PATH;
   readonly todayLabel = this.formatTodayLabel();
   readonly chargeListIssuerName = CHARGE_LIST_ISSUER_NAME;
@@ -371,7 +371,15 @@ export class AppComponent implements OnInit {
     }
   ];
 
-  get navGroups(): NavGroup[] {
+  trackByNavGroupLabel(_index: number, group: NavGroup): string {
+    return group.label;
+  }
+
+  trackByNavItemKey(_index: number, item: NavItem): string {
+    return item.key;
+  }
+
+  navGroups = computed<NavGroup[]>(() => {
     const user = this.currentUser();
     if (!user) {
       return [];
@@ -385,13 +393,13 @@ export class AppComponent implements OnInit {
         })
       }))
       .filter((group) => group.children.length);
-  }
+  });
 
   currentUser = signal<AuthUser | null>(this.loadStoredUser());
   authMode = signal<'login' | 'register'>('login');
   activeView = signal<ViewKey>('home');
   isNarrowViewport = signal(this.isNarrowWindow());
-  desktopSidebarCollapsed = signal(false);
+  desktopSidebarCollapsed = signal(this.loadStoredSidebarCollapsed());
   mobileSidebarOpen = signal(false);
   sidebarOpen = computed(() =>
     this.isNarrowViewport() ? this.mobileSidebarOpen() : !this.desktopSidebarCollapsed()
@@ -649,6 +657,7 @@ export class AppComponent implements OnInit {
   newRefundForm: RefundForm = emptyRefundForm();
   refundEditForm: RefundForm = emptyRefundForm();
 
+  @ViewChild('sidebarEl') sidebarEl?: ElementRef<HTMLElement>;
   @ViewChild('chargeListPrintArea') chargeListPrintArea?: ElementRef<HTMLDivElement>;
   @ViewChild('newCompanyNameInput') newCompanyNameInput?: ElementRef<HTMLInputElement>;
   @ViewChild('editCompanyNameInput') editCompanyNameInput?: ElementRef<HTMLInputElement>;
@@ -718,14 +727,26 @@ export class AppComponent implements OnInit {
         this.applyRoute(event.urlAfterRedirects);
       }
     });
-    if (this.router.url === '/') {
-      this.router.navigateByUrl('/home');
-    } else {
-      this.applyRoute(this.router.url);
-    }
     if (this.currentUser()) {
       this.refresh();
     }
+  }
+
+  ngAfterViewInit(): void {
+    if (!this.sidebarEl) {
+      return;
+    }
+    const saved = sessionStorage.getItem('cmsSidebarScroll');
+    if (saved) {
+      this.sidebarEl.nativeElement.scrollTop = Number(saved);
+    }
+  }
+
+  onSidebarScroll(): void {
+    if (!this.sidebarEl) {
+      return;
+    }
+    sessionStorage.setItem('cmsSidebarScroll', String(this.sidebarEl.nativeElement.scrollTop));
   }
 
   refresh(): void {
@@ -752,7 +773,11 @@ export class AppComponent implements OnInit {
       this.mobileSidebarOpen.update((isOpen) => !isOpen);
       return;
     }
-    this.desktopSidebarCollapsed.update((isCollapsed) => !isCollapsed);
+    this.desktopSidebarCollapsed.update((isCollapsed) => {
+      const next = !isCollapsed;
+      localStorage.setItem('cmsSidebarCollapsed', String(next));
+      return next;
+    });
   }
 
   closeSidebarAfterNavigation(): void {
@@ -3282,6 +3307,10 @@ export class AppComponent implements OnInit {
       sessionStorage.removeItem('cmsUser');
       return null;
     }
+  }
+
+  private loadStoredSidebarCollapsed(): boolean {
+    return localStorage.getItem('cmsSidebarCollapsed') === 'true';
   }
 
   private isNarrowWindow(): boolean {
