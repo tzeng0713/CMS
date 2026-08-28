@@ -2242,6 +2242,10 @@
                   <dd>{{ money(detail.deduction_total) }}</dd>
                 </div>
                 <div>
+                  <dt>解約類型</dt>
+                  <dd>{{ detail.mid_term_termination ? '中途解約' : '合約到期解約' }}</dd>
+                </div>
+                <div>
                   <dt>建立人 / 時間</dt>
                   <dd>{{ detail.created_by_name || '-' }} / {{ formatDateTime(detail.created_at) }}</dd>
                 </div>
@@ -2364,6 +2368,15 @@
                 [readonly]="editing.refund_status === '審核通過'"
               />
             </label>
+            <label class="checkbox-label">
+              <input
+                type="checkbox"
+                name="editRefundMidTermTermination"
+                [(ngModel)]="refundEditForm.midTermTermination"
+                [disabled]="editing.refund_status === '審核通過'"
+              />
+              中途解約（可退押金上限為一個月租金；未勾選視為合約到期解約）
+            </label>
             <label>
               退款方式
               <input type="text" name="editRefundPaymentMethod" [(ngModel)]="refundEditForm.paymentMethod" />
@@ -2465,6 +2478,10 @@
           <label>
             扣款總額
             <input type="number" min="0" step="0.01" name="newRefundDeductionTotal" [(ngModel)]="newRefundForm.deductionTotal" />
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" name="newRefundMidTermTermination" [(ngModel)]="newRefundForm.midTermTermination" />
+            中途解約（可退押金上限為一個月租金；未勾選視為合約到期解約）
           </label>
           <label>
             退款方式

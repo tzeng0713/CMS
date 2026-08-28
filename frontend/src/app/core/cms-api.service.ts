@@ -334,6 +334,7 @@ export interface RefundSummary {
   adjustment_note: string | null;
   deduction_total: number;
   refund_amount: number;
+  mid_term_termination: boolean;
   refund_status: string;
   payment_method: string | null;
   bank_code: string | null;
@@ -361,6 +362,7 @@ export interface RefundPayload {
   adjustmentAmount?: number;
   adjustmentNote?: string;
   deductionTotal?: number;
+  midTermTermination?: boolean;
   paymentMethod?: string;
   bankCode?: string;
   bankAccount?: string;

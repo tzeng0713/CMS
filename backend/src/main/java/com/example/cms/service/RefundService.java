@@ -94,8 +94,9 @@ public class RefundService extends CmsJdbcSupport {
         requireNonNegative(deductionTotal, "deductionTotal");
         BigDecimal adjustmentAmount = zeroIfNull(request.adjustmentAmount());
 
-        BigDecimal baseAmount = contractDeposit(request.contractId());
-        BigDecimal computed = baseAmount.add(adjustmentAmount).subtract(deductionTotal);
+        boolean midTermTermination = Boolean.TRUE.equals(request.midTermTermination());
+        RefundBase refundBase = refundBaseAmount(request.contractId(), midTermTermination);
+        BigDecimal computed = refundBase.amount().add(adjustmentAmount).subtract(deductionTotal);
         boolean overDeducted = computed.compareTo(BigDecimal.ZERO) < 0;
         BigDecimal refundAmount = overDeducted ? BigDecimal.ZERO : computed;
 
@@ -113,22 +114,22 @@ public class RefundService extends CmsJdbcSupport {
         jdbc.update("""
                 INSERT INTO refunds (
                     refund_id, customer_id, contract_id, charge_list_id, company_name, refund_reason,
-                    adjustment_amount, adjustment_note, deduction_total, refund_amount, refund_status,
+                    adjustment_amount, adjustment_note, deduction_total, refund_amount, mid_term_termination, refund_status,
                     payment_method, bank_code, bank_account, bank_account_name,
                     created_by, created_at, updated_by, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
                 """,
                 id, request.customerId(), request.contractId(), chargeListId, companyName,
                 blankToNull(request.refundReason()), adjustmentAmount, blankToNull(request.adjustmentNote()),
-                deductionTotal, refundAmount, status,
+                deductionTotal, refundAmount, midTermTermination, status,
                 blankToNull(request.paymentMethod()), blankToNull(request.bankCode()),
                 blankToNull(request.bankAccount()), blankToNull(request.bankAccountName()),
                 staffId, staffId);
 
         Map<String, Object> result = refundDetail(id);
-        if (overDeducted) {
-            result.put("message", "扣款總額大於應退金額，差額 " + computed.abs()
-                    + " 已自動建立收費清單（未結清，編號 #" + chargeListId + "），請至收費清單管理確認金額並收款。");
+        String message = refundMessage(refundBase, overDeducted, computed, chargeListId);
+        if (message != null) {
+            result.put("message", message);
         }
         return result;
     }
@@ -159,6 +160,7 @@ public class RefundService extends CmsJdbcSupport {
             if (current.get("charge_list_id") != null) {
                 markChargeListSettled(((Number) current.get("charge_list_id")).longValue(), staffId);
             }
+            markContractTerminated(((Number) current.get("contract_id")).longValue(), staffId);
             return refundDetail(id);
         }
 
@@ -169,8 +171,9 @@ public class RefundService extends CmsJdbcSupport {
         requireNonNegative(deductionTotal, "deductionTotal");
         BigDecimal adjustmentAmount = zeroIfNull(request.adjustmentAmount());
 
-        BigDecimal baseAmount = contractDeposit(request.contractId());
-        BigDecimal computed = baseAmount.add(adjustmentAmount).subtract(deductionTotal);
+        boolean midTermTermination = Boolean.TRUE.equals(request.midTermTermination());
+        RefundBase refundBase = refundBaseAmount(request.contractId(), midTermTermination);
+        BigDecimal computed = refundBase.amount().add(adjustmentAmount).subtract(deductionTotal);
         boolean overDeducted = computed.compareTo(BigDecimal.ZERO) < 0;
         BigDecimal refundAmount = overDeducted ? BigDecimal.ZERO : computed;
 
@@ -188,20 +191,20 @@ public class RefundService extends CmsJdbcSupport {
                 UPDATE refunds
                 SET customer_id = ?, contract_id = ?, charge_list_id = ?, refund_reason = ?,
                     adjustment_amount = ?, adjustment_note = ?, deduction_total = ?, refund_amount = ?,
-                    refund_status = ?, payment_method = ?, bank_code = ?, bank_account = ?, bank_account_name = ?,
-                    updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                    mid_term_termination = ?, refund_status = ?, payment_method = ?, bank_code = ?,
+                    bank_account = ?, bank_account_name = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE refund_id = ?
                 """,
                 request.customerId(), request.contractId(), chargeListId, blankToNull(request.refundReason()),
                 adjustmentAmount, blankToNull(request.adjustmentNote()), deductionTotal, refundAmount,
-                nextStatus, blankToNull(request.paymentMethod()), blankToNull(request.bankCode()),
+                midTermTermination, nextStatus, blankToNull(request.paymentMethod()), blankToNull(request.bankCode()),
                 blankToNull(request.bankAccount()), blankToNull(request.bankAccountName()),
                 staffId, id);
 
         Map<String, Object> result = refundDetail(id);
-        if (overDeducted) {
-            result.put("message", "扣款總額大於應退金額，差額 " + computed.abs()
-                    + " 已自動建立收費清單（未結清，編號 #" + chargeListId + "），請至收費清單管理確認金額並收款。");
+        String message = refundMessage(refundBase, overDeducted, computed, chargeListId);
+        if (message != null) {
+            result.put("message", message);
         }
         return result;
     }
@@ -311,10 +314,51 @@ public class RefundService extends CmsJdbcSupport {
                 """;
     }
 
+    private record RefundBase(BigDecimal amount, boolean midTermCapped) {
+    }
+
+    /**
+     * 秘書於退款申請勾選「中途解約」時，可退押金上限為一個月租金；
+     * 未勾選（合約到期解約）維持全額押金。
+     */
+    private RefundBase refundBaseAmount(Long contractId, boolean midTermTermination) {
+        Map<String, Object> contract = jdbc.queryForMap(
+                "SELECT deposit, rent FROM contracts WHERE contract_id = ?", contractId);
+        BigDecimal deposit = zeroIfNull((BigDecimal) contract.get("deposit"));
+        BigDecimal rent = zeroIfNull((BigDecimal) contract.get("rent"));
+        if (midTermTermination && rent.compareTo(deposit) < 0) {
+            return new RefundBase(rent, true);
+        }
+        return new RefundBase(deposit, false);
+    }
+
     private BigDecimal contractDeposit(Long contractId) {
         BigDecimal deposit = jdbc.queryForObject("SELECT deposit FROM contracts WHERE contract_id = ?",
                 BigDecimal.class, contractId);
         return zeroIfNull(deposit);
+    }
+
+    private void markContractTerminated(Long contractId, Long staffId) {
+        jdbc.update("""
+                UPDATE contracts SET lease_status = '已解約', updated_by = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE contract_id = ?
+                """, staffId, contractId);
+    }
+
+    private String refundMessage(RefundBase refundBase, boolean overDeducted, BigDecimal computed, Long chargeListId) {
+        StringBuilder message = new StringBuilder();
+        if (refundBase.midTermCapped()) {
+            message.append("中途解約，退款金額已依規定以一個月租金（NT$").append(refundBase.amount())
+                    .append("）為押金退還上限。");
+        }
+        if (overDeducted) {
+            if (message.length() > 0) {
+                message.append(' ');
+            }
+            message.append("扣款總額大於應退金額，差額 ").append(computed.abs())
+                    .append(" 已自動建立收費清單（未結清，編號 #").append(chargeListId).append("），請至收費清單管理確認金額並收款。");
+        }
+        return message.length() == 0 ? null : message.toString();
     }
 
     private void requireExistingCustomer(Long customerId) {

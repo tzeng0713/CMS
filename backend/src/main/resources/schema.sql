@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS refunds (
   adjustment_note VARCHAR(1000),
   deduction_total DECIMAL(12,2),
   refund_amount DECIMAL(12,2),
+  mid_term_termination BOOLEAN NOT NULL DEFAULT FALSE,
   refund_status VARCHAR(20),
   payment_method VARCHAR(20),
   bank_code VARCHAR(20),

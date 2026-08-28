@@ -150,6 +150,7 @@ type RefundForm = {
   adjustmentAmount: number;
   adjustmentNote: string;
   deductionTotal: number;
+  midTermTermination: boolean;
   paymentMethod: string;
   bankCode: string;
   bankAccount: string;
@@ -167,6 +168,7 @@ const emptyRefundForm = (): RefundForm => ({
   adjustmentAmount: 0,
   adjustmentNote: '',
   deductionTotal: 0,
+  midTermTermination: false,
   paymentMethod: '',
   bankCode: '',
   bankAccount: '',
@@ -2985,6 +2987,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       adjustmentAmount: Number(row.adjustment_amount ?? 0),
       adjustmentNote: row.adjustment_note ?? '',
       deductionTotal: Number(row.deduction_total ?? 0),
+      midTermTermination: Boolean(row.mid_term_termination),
       paymentMethod: row.payment_method ?? '',
       bankCode: row.bank_code ?? '',
       bankAccount: row.bank_account ?? '',
@@ -3012,6 +3015,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       adjustmentAmount: Number(row.adjustment_amount ?? 0),
       adjustmentNote: row.adjustment_note ?? '',
       deductionTotal: Number(row.deduction_total ?? 0),
+      midTermTermination: Boolean(row.mid_term_termination),
       paymentMethod: row.payment_method ?? '',
       bankCode: row.bank_code ?? '',
       bankAccount: row.bank_account ?? '',
@@ -3114,6 +3118,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       adjustmentAmount: form.adjustmentAmount,
       adjustmentNote: form.adjustmentNote,
       deductionTotal: form.deductionTotal,
+      midTermTermination: form.midTermTermination,
       paymentMethod: form.paymentMethod,
       bankCode: form.bankCode,
       bankAccount: form.bankAccount,

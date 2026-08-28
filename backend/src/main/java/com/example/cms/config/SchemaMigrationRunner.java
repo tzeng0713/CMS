@@ -244,6 +244,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         addColumnIfMissing("refunds", "adjustment_amount",     "DECIMAL(12,2) DEFAULT 0");
         addColumnIfMissing("refunds", "adjustment_note",       "VARCHAR(1000)");
         addColumnIfMissing("refunds", "deduction_total",       "DECIMAL(12,2)");
+        addColumnIfMissing("refunds", "mid_term_termination",  "BOOLEAN NOT NULL DEFAULT FALSE");
         addColumnIfMissing("refunds", "refund_status",         "VARCHAR(20)");
         addColumnIfMissing("refunds", "payment_method",        "VARCHAR(20)");
         addColumnIfMissing("refunds", "bank_code",             "VARCHAR(20)");

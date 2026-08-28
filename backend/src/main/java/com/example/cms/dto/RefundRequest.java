@@ -10,6 +10,7 @@ public record RefundRequest(
         BigDecimal adjustmentAmount,
         String adjustmentNote,
         BigDecimal deductionTotal,
+        Boolean midTermTermination,
         String paymentMethod,
         String bankCode,
         String bankAccount,
