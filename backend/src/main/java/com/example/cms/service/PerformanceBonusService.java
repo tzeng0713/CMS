@@ -103,7 +103,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
 
         int createdCount = 0;
         int skippedAlreadyRecorded = 0;
-        int skippedMissingEndDate = 0;
+        int skippedMissingDate = 0;
         List<String> skippedNoActiveRule = new ArrayList<>();
 
         Set<String> existingContractRule = new HashSet<>();
@@ -141,7 +141,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                 LocalDate start = localDate((String) row.get("start_date_text"));
                 LocalDate end = localDate((String) row.get("end_date_text"));
                 if (start == null || end == null) {
-                    skippedMissingEndDate++;
+                    skippedMissingDate++;
                     continue;
                 }
                 long months = Period.between(start, end.plusDays(1)).toTotalMonths();
@@ -153,16 +153,17 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                 if (signerId == null) {
                     continue;
                 }
+                String period = YearMonth.from(start).toString();
                 if (partnerId != null && !partnerId.equals(signerId)) {
                     BigDecimal half = unitAmount.divide(BigDecimal.valueOf(2), 2, RoundingMode.HALF_UP);
                     insertBonusRow(signerId, officeRuleId, "OFFICE_RENTAL", contractId, null, null,
-                            null, null, null, half, "辦公室出租獎金（雙祕書合作）", request.staffId());
+                            period, null, null, half, "辦公室出租獎金（雙祕書合作）", request.staffId());
                     insertBonusRow(partnerId, officeRuleId, "OFFICE_RENTAL", contractId, null, null,
-                            null, null, null, half, "辦公室出租獎金（雙祕書合作）", request.staffId());
+                            period, null, null, half, "辦公室出租獎金（雙祕書合作）", request.staffId());
                     createdCount += 2;
                 } else {
                     insertBonusRow(signerId, officeRuleId, "OFFICE_RENTAL", contractId, null, null,
-                            null, null, null, unitAmount, "辦公室出租獎金", request.staffId());
+                            period, null, null, unitAmount, "辦公室出租獎金", request.staffId());
                     createdCount += 1;
                 }
             }
@@ -179,12 +180,17 @@ public class PerformanceBonusService extends CmsJdbcSupport {
         }
         if (registrationRule != null || teamworkRule != null) {
             for (Map<String, Object> row : jdbc.queryForList("""
-                    SELECT contract_id, signer_staff_id, partner_staff_id
+                    SELECT contract_id, start_date_text, signer_staff_id, partner_staff_id
                     FROM contracts WHERE rental_item = '登記' AND lease_status = '綁約中'
                     """)) {
                 Long contractId = toLong(row.get("contract_id"));
                 Long signerId = toLong(row.get("signer_staff_id"));
                 Long partnerId = toLong(row.get("partner_staff_id"));
+                String period = yearMonthOf((String) row.get("start_date_text"));
+                if (period == null) {
+                    skippedMissingDate++;
+                    continue;
+                }
 
                 if (registrationRule != null && signerId != null) {
                     if (existingContractRule.contains(contractId + ":COMPANY_REGISTRATION")) {
@@ -193,7 +199,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                         BigDecimal amount = (BigDecimal) registrationRule.get("unit_amount");
                         if (amount != null) {
                             insertBonusRow(signerId, toLong(registrationRule.get("bonus_rule_id")), "COMPANY_REGISTRATION",
-                                    contractId, null, null, null, null, null, amount, "公司登記業績獎金", request.staffId());
+                                    contractId, null, null, period, null, null, amount, "公司登記業績獎金", request.staffId());
                             createdCount++;
                         }
                     }
@@ -206,7 +212,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                         BigDecimal amount = (BigDecimal) teamworkRule.get("unit_amount");
                         if (amount != null) {
                             insertBonusRow(partnerId, toLong(teamworkRule.get("bonus_rule_id")), "TEAMWORK",
-                                    contractId, null, null, null, null, null, amount, "同心獎金", request.staffId());
+                                    contractId, null, null, period, null, null, amount, "同心獎金", request.staffId());
                             createdCount++;
                         }
                     }
@@ -222,7 +228,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
             BigDecimal percentage = (BigDecimal) annualRule.get("percentage");
             Long annualRuleId = toLong(annualRule.get("bonus_rule_id"));
             for (Map<String, Object> row : jdbc.queryForList("""
-                    SELECT rp.rent_payment_id, rp.contract_id, rp.amount, c.signer_staff_id
+                    SELECT rp.rent_payment_id, rp.contract_id, rp.amount, rp.payment_date_text, c.signer_staff_id
                     FROM rent_payments rp
                     JOIN contracts c ON c.contract_id = rp.contract_id
                     WHERE c.rental_item = '登記' AND c.payment_months = 12
@@ -233,6 +239,11 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                     skippedAlreadyRecorded++;
                     continue;
                 }
+                String period = yearMonthOf((String) row.get("payment_date_text"));
+                if (period == null) {
+                    skippedMissingDate++;
+                    continue;
+                }
                 BigDecimal amount = (BigDecimal) row.get("amount");
                 Long signerId = toLong(row.get("signer_staff_id"));
                 if (amount == null || percentage == null || signerId == null) {
@@ -240,7 +251,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                 }
                 BigDecimal bonusAmount = amount.multiply(percentage).setScale(2, RoundingMode.HALF_UP);
                 insertBonusRow(signerId, annualRuleId, "ANNUAL_PAYMENT", toLong(row.get("contract_id")), null,
-                        rentPaymentId, null, null, null, bonusAmount, "公司登記年繳獎金", request.staffId());
+                        rentPaymentId, period, null, null, bonusAmount, "公司登記年繳獎金", request.staffId());
                 createdCount++;
             }
         }
@@ -248,7 +259,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("createdCount", createdCount);
         result.put("skippedAlreadyRecorded", skippedAlreadyRecorded);
-        result.put("skippedMissingEndDate", skippedMissingEndDate);
+        result.put("skippedMissingDate", skippedMissingDate);
         result.put("skippedNoActiveRule", skippedNoActiveRule);
         return result;
     }
@@ -266,6 +277,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
         int year = Integer.parseInt(matcher.group(1));
         int month = Integer.parseInt(matcher.group(2));
         YearMonth ym = YearMonth.of(year, month);
+        int monthStartNum = year * 10000 + month * 100 + 1;
         int monthEndNum = year * 10000 + month * 100 + ym.lengthOfMonth();
 
         Map<String, Object> rule = requireSingleActiveRule("FULL_OCCUPANCY");
@@ -275,7 +287,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
         }
         Long ruleId = toLong(rule.get("bonus_rule_id"));
 
-        int createdCount = 0;
+        int fullOccupancyCreatedCount = 0;
         List<Long> skippedBranches = new ArrayList<>();
 
         for (Map<String, Object> branchRow : jdbc.queryForList("SELECT branch_id FROM branches")) {
@@ -323,40 +335,23 @@ public class PerformanceBonusService extends CmsJdbcSupport {
             for (Long staffId : staffIds) {
                 insertBonusRow(staffId, ruleId, "FULL_OCCUPANCY", null, branchId, null,
                         yearMonth, null, null, unitAmount, "滿租獎金", request.staffId());
-                createdCount++;
+                fullOccupancyCreatedCount++;
             }
         }
 
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("period", yearMonth);
-        result.put("createdCount", createdCount);
-        result.put("skippedBranches", skippedBranches);
-        return result;
-    }
-
-    // ---------- 規則六、七：4 個月期間結算 ----------
-
-    public Map<String, Object> settlePeriod(SettlePeriodBonusRequest request) {
-        requireManager(request.staffId());
-
-        String period = blankToNull(request.period());
-        int[] range = parsePeriod(period);
-
-        int createdCount = 0;
-        List<Long> skippedBranches = new ArrayList<>();
-
-        // 規則六：公司登記加乘獎金
+        // 規則六：公司登記加乘獎金（按月結算，累計範圍是當月）
         Map<String, Object> multiplierRule = requireSingleActiveRule("REGISTRATION_MULTIPLIER");
         Long multiplierRuleId = toLong(multiplierRule.get("bonus_rule_id"));
         List<Tier> tiers = parseTierConfig((String) multiplierRule.get("tier_config"));
 
+        int registrationMultiplierCreatedCount = 0;
         Map<Long, Integer> registrationCountByStaff = new HashMap<>();
         for (Map<String, Object> row : jdbc.queryForList("""
                 SELECT signer_staff_id, start_date_text FROM contracts
                 WHERE rental_item = '登記' AND signer_staff_id IS NOT NULL
                 """)) {
             Integer startNum = dateNumber((String) row.get("start_date_text"));
-            if (startNum == null || startNum < range[0] || startNum > range[1]) {
+            if (startNum == null || startNum < monthStartNum || startNum > monthEndNum) {
                 continue;
             }
             Long staffId = toLong(row.get("signer_staff_id"));
@@ -372,14 +367,33 @@ public class PerformanceBonusService extends CmsJdbcSupport {
             Integer already = jdbc.queryForObject("""
                     SELECT COUNT(*) FROM performance_bonuses
                     WHERE staff_id = ? AND period = ? AND rule_type = 'REGISTRATION_MULTIPLIER'
-                    """, Integer.class, staffId, period);
+                    """, Integer.class, staffId, yearMonth);
             if (already != null && already > 0) {
                 continue;
             }
             insertBonusRow(staffId, multiplierRuleId, "REGISTRATION_MULTIPLIER", null, null, null,
-                    period, count, null, tierAmount, "公司登記加乘獎金", request.staffId());
-            createdCount++;
+                    yearMonth, count, null, tierAmount, "公司登記加乘獎金", request.staffId());
+            registrationMultiplierCreatedCount++;
         }
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("period", yearMonth);
+        result.put("fullOccupancyCreatedCount", fullOccupancyCreatedCount);
+        result.put("registrationMultiplierCreatedCount", registrationMultiplierCreatedCount);
+        result.put("skippedBranches", skippedBranches);
+        return result;
+    }
+
+    // ---------- 規則七：4 個月期間結算 ----------
+
+    public Map<String, Object> settlePeriod(SettlePeriodBonusRequest request) {
+        requireManager(request.staffId());
+
+        String period = blankToNull(request.period());
+        int[] range = parsePeriod(period);
+
+        int createdCount = 0;
+        List<Long> skippedBranches = new ArrayList<>();
 
         // 規則七：分館績效獎金
         Map<String, Object> branchRule = requireSingleActiveRule("BRANCH_PERFORMANCE");
@@ -436,10 +450,9 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                 continue;
             }
             BigDecimal totalBonus = unitAmount.multiply(BigDecimal.valueOf(netCount));
-            BigDecimal share = totalBonus.divide(BigDecimal.valueOf(staffIds.size()), 2, RoundingMode.HALF_UP);
             for (Long staffId : staffIds) {
                 insertBonusRow(staffId, branchRuleId, "BRANCH_PERFORMANCE", null, branchId, null,
-                        period, signed, cancelled, share, "分館績效獎金（平分）", request.staffId());
+                        period, signed, cancelled, totalBonus, "分館績效獎金", request.staffId());
                 createdCount++;
             }
         }
@@ -567,6 +580,11 @@ public class PerformanceBonusService extends CmsJdbcSupport {
     }
 
     private record Tier(int threshold, BigDecimal amount) {
+    }
+
+    private String yearMonthOf(String dateText) {
+        LocalDate date = localDate(dateText);
+        return date == null ? null : YearMonth.from(date).toString();
     }
 
     private Long toLong(Object value) {

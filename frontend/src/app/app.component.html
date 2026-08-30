@@ -2796,7 +2796,7 @@
       <section class="panel">
         <div class="panel-header">
           <div>
-            <h2>業績結算</h2>
+            <h2>績效/業績結算</h2>
             <p>查詢已結算的業績獎金明細；主管可觸發結算計算。</p>
           </div>
         </div>
@@ -2816,84 +2816,225 @@
           </div>
         </section>
 
-        <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
-          <div class="panel-header">
-            <div>
-              <h3>結算觸發</h3>
-              <p>依規則類型分成三種觸發方式，皆可重複執行，已入帳的資料不會重複計算。</p>
+        <div class="content-tabs">
+          <button type="button" [class.active]="performanceBonusTab() === 'business'" (click)="performanceBonusTab.set('business')">業績</button>
+          <button type="button" [class.active]="performanceBonusTab() === 'performance'" (click)="performanceBonusTab.set('performance')">績效</button>
+        </div>
+
+        <ng-container *ngIf="performanceBonusTab() === 'business'">
+          <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
+            <div class="panel-header">
+              <div>
+                <h3>結算觸發</h3>
+                <p>規則一／二／三／四／六／八，可重複執行，已入帳的資料不會重複計算。</p>
+              </div>
             </div>
+            <div class="settle-actions">
+              <div class="settle-action-item">
+                <p>規則一／二／三／八：辦公室出租、公司登記業績、同心、公司登記年繳（逐筆合約／收款觸發）</p>
+                <button type="button" [disabled]="settlingTransactions()" (click)="syncTransactionBonuses()">同步逐筆獎金</button>
+              </div>
+              <div class="settle-action-item">
+                <p>規則四／六：滿租獎金、登記加乘獎金（按月結算，同時觸發）</p>
+                <label>
+                  月份
+                  <input type="month" name="settleMonthlyYearMonth" [(ngModel)]="settleMonthlyYearMonth" />
+                </label>
+                <button type="button" [disabled]="settlingMonthly()" (click)="settleMonthlyBonuses()">月結</button>
+              </div>
+            </div>
+            <p class="settle-result" *ngIf="settleResultMessage()">{{ settleResultMessage() }}</p>
           </div>
-          <div class="settle-actions">
-            <div class="settle-action-item">
-              <p>規則一／二／三／八：辦公室出租、公司登記業績、同心、公司登記年繳（逐筆合約／收款觸發）</p>
-              <button type="button" [disabled]="settlingTransactions()" (click)="syncTransactionBonuses()">同步逐筆獎金</button>
+
+          <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
+            <div class="panel-header">
+              <div>
+                <h3>手動新增業績獎金</h3>
+                <p>規則五：工商代辦獎金尚無自動結算引擎，主管核對「新簽約檔案」後在此登打單筆獎金。</p>
+              </div>
             </div>
-            <div class="settle-action-item">
-              <p>規則四：滿租獎金（按月結算）</p>
+            <div class="manual-bonus-fields">
               <label>
-                月份
-                <input type="month" name="settleMonthlyYearMonth" [(ngModel)]="settleMonthlyYearMonth" />
+                祕書
+                <select name="manualBonusStaffId" [(ngModel)]="newManualBonusForm.beneficiaryStaffId">
+                  <option [ngValue]="null">請選擇</option>
+                  <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">{{ staff['staff_name'] }}</option>
+                </select>
               </label>
-              <button type="button" [disabled]="settlingMonthly()" (click)="settleMonthlyBonuses()">月結滿租獎金</button>
+              <label>
+                業績獎金規則
+                <select name="manualBonusRuleId" [(ngModel)]="newManualBonusForm.bonusRuleId">
+                  <option [ngValue]="null">請選擇</option>
+                  <option *ngFor="let rule of manualEligibleBonusRules()" [ngValue]="rule.bonus_rule_id">{{ rule.rule_name }}</option>
+                </select>
+              </label>
+              <label>
+                金額
+                <input type="number" name="manualBonusAmount" [(ngModel)]="newManualBonusForm.amount" min="0" step="0.01" />
+              </label>
+              <label>
+                期間（選填）
+                <input name="manualBonusPeriod" [(ngModel)]="newManualBonusForm.period" placeholder="例：2026-08" />
+              </label>
+              <label class="wide">
+                備註（案件說明）
+                <input name="manualBonusNote" [(ngModel)]="newManualBonusForm.note" placeholder="例：客戶名稱／案件內容" />
+              </label>
             </div>
-            <div class="settle-action-item">
-              <p>規則六／七：公司登記加乘、分館績效（每 4 個月結算一次）</p>
+            <button type="button" class="manual-bonus-submit" [disabled]="savingManualBonus() || !manualEligibleBonusRules().length" (click)="createManualPerformanceBonus()">新增業績獎金</button>
+            <p class="settle-result" *ngIf="!manualEligibleBonusRules().length">目前沒有可手動新增的業績獎金規則，請先至「業績獎金規則」新增並啟用工商代辦獎金規則。</p>
+          </div>
+
+          <section class="bonus-block-section">
+            <div class="bonus-block-filter">
+              <label>
+                查詢月份
+                <input type="month" name="bonusBlockMonth" [(ngModel)]="bonusBlockMonth"
+                       (change)="loadFullOccupancyBlock(); loadRegistrationMultiplierBlock()" />
+              </label>
+            </div>
+
+            <div class="rent-edit-panel">
+              <div class="panel-header">
+                <div>
+                  <h3>滿租獎金（月結）</h3>
+                  <p>{{ monthLabel(bonusBlockMonth) }} 業績</p>
+                </div>
+              </div>
+              <div class="empty-state" *ngIf="!fullOccupancyByBranch().length">此月份尚無滿租獎金結算資料。</div>
+              <div class="bonus-branch-group" *ngFor="let group of fullOccupancyByBranch()">
+                <h4>{{ group.branchName }}</h4>
+                <table class="bonus-detail-table">
+                  <thead><tr><th>祕書</th><th>金額</th><th>備註</th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let row of group.rows">
+                      <td>{{ row.staff_name || '-' }}</td>
+                      <td>{{ money(row.bonus_amount) }}</td>
+                      <td>{{ row.note || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="kpis staff-bonus-kpis" *ngIf="fullOccupancyStaffSummary().length">
+                <article *ngFor="let item of fullOccupancyStaffSummary()">
+                  <span>{{ item.staffName }}</span>
+                  <strong>{{ money(item.total) }}</strong>
+                  <small>{{ item.count }} 筆</small>
+                </article>
+              </div>
+            </div>
+
+            <div class="rent-edit-panel">
+              <div class="panel-header">
+                <div>
+                  <h3>登記加乘獎金（月結）</h3>
+                  <p>{{ monthLabel(bonusBlockMonth) }} 業績</p>
+                </div>
+              </div>
+              <div class="empty-state" *ngIf="!registrationMultiplierByBranch().length">此月份尚無登記加乘獎金結算資料。</div>
+              <div class="bonus-branch-group" *ngFor="let group of registrationMultiplierByBranch()">
+                <h4>{{ group.branchName }}</h4>
+                <table class="bonus-detail-table">
+                  <thead><tr><th>祕書</th><th>登記數</th><th>金額</th><th>備註</th></tr></thead>
+                  <tbody>
+                    <tr *ngFor="let row of group.rows">
+                      <td>{{ row.staff_name || '-' }}</td>
+                      <td>{{ row.net_count ?? '-' }}</td>
+                      <td>{{ money(row.bonus_amount) }}</td>
+                      <td>{{ row.note || '-' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="kpis staff-bonus-kpis" *ngIf="registrationMultiplierStaffSummary().length">
+                <article *ngFor="let item of registrationMultiplierStaffSummary()">
+                  <span>{{ item.staffName }}</span>
+                  <strong>{{ money(item.total) }}</strong>
+                  <small>{{ item.count }} 筆</small>
+                </article>
+              </div>
+            </div>
+          </section>
+        </ng-container>
+
+        <ng-container *ngIf="performanceBonusTab() === 'performance'">
+          <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
+            <div class="panel-header">
+              <div>
+                <h3>結算觸發</h3>
+                <p>規則七：分館績效獎金（每 4 個月結算一次），可重複執行，已入帳的資料不會重複計算。</p>
+              </div>
+            </div>
+            <div class="settle-actions">
+              <div class="settle-action-item">
+                <p>規則七：分館績效獎金（每 4 個月結算一次）</p>
+                <label>
+                  年度
+                  <input type="number" name="settlePeriodYear" [(ngModel)]="settlePeriodYear" />
+                </label>
+                <label>
+                  期別
+                  <select name="settlePeriodQuarter" [(ngModel)]="settlePeriodQuarter">
+                    <option [ngValue]="1">第一期（1～4月）</option>
+                    <option [ngValue]="2">第二期（5～8月）</option>
+                    <option [ngValue]="3">第三期（9～12月）</option>
+                  </select>
+                </label>
+                <button type="button" [disabled]="settlingPeriod()" (click)="settlePeriodBonuses()">期間結算</button>
+              </div>
+            </div>
+            <p class="settle-result" *ngIf="periodSettleResultMessage()">{{ periodSettleResultMessage() }}</p>
+          </div>
+
+          <section class="bonus-block-section">
+            <div class="bonus-block-filter">
               <label>
                 年度
-                <input type="number" name="settlePeriodYear" [(ngModel)]="settlePeriodYear" />
+                <input type="number" name="bonusBlockPeriodYear" [(ngModel)]="bonusBlockPeriodYear" (change)="loadBranchPerformanceBlock()" />
               </label>
               <label>
                 期別
-                <select name="settlePeriodQuarter" [(ngModel)]="settlePeriodQuarter">
+                <select name="bonusBlockPeriodQuarter" [(ngModel)]="bonusBlockPeriodQuarter" (change)="loadBranchPerformanceBlock()">
                   <option [ngValue]="1">第一期（1～4月）</option>
                   <option [ngValue]="2">第二期（5～8月）</option>
                   <option [ngValue]="3">第三期（9～12月）</option>
                 </select>
               </label>
-              <button type="button" [disabled]="settlingPeriod()" (click)="settlePeriodBonuses()">期間結算</button>
             </div>
-          </div>
-          <p class="settle-result" *ngIf="settleResultMessage()">{{ settleResultMessage() }}</p>
-        </div>
 
-        <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
-          <div class="panel-header">
-            <div>
-              <h3>手動新增業績獎金</h3>
-              <p>規則五：工商代辦獎金尚無自動結算引擎，主管核對「新簽約檔案」後在此登打單筆獎金。</p>
+            <div class="rent-edit-panel">
+              <div class="panel-header">
+                <div>
+                  <h3>分館績效獎金（期間結）</h3>
+                  <p>{{ quarterLabel(bonusBlockPeriodYear, bonusBlockPeriodQuarter) }}</p>
+                </div>
+              </div>
+              <div class="empty-state" *ngIf="!branchPerformanceByBranch().length">此期間尚無分館績效獎金結算資料。</div>
+              <div class="bonus-branch-group" *ngFor="let group of branchPerformanceByBranch()">
+                <h4>{{ group.branchName }}</h4>
+                <table class="bonus-detail-table">
+                  <thead><tr><th>簽約數</th><th>解約數</th><th>淨數</th><th>每人獎金金額</th><th>領取祕書</th></tr></thead>
+                  <tbody>
+                    <tr>
+                      <td>{{ group.rows[0].signed_count ?? '-' }}</td>
+                      <td>{{ group.rows[0].cancelled_count ?? '-' }}</td>
+                      <td>{{ group.rows[0].net_count ?? '-' }}</td>
+                      <td>{{ money(group.rows[0].bonus_amount) }}</td>
+                      <td>{{ staffNamesLabel(group.rows) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <div class="kpis staff-bonus-kpis" *ngIf="branchPerformanceStaffSummary().length">
+                <article *ngFor="let item of branchPerformanceStaffSummary()">
+                  <span>{{ item.staffName }}</span>
+                  <strong>{{ money(item.total) }}</strong>
+                  <small>{{ item.count }} 筆</small>
+                </article>
+              </div>
             </div>
-          </div>
-          <div class="manual-bonus-fields">
-            <label>
-              祕書
-              <select name="manualBonusStaffId" [(ngModel)]="newManualBonusForm.beneficiaryStaffId">
-                <option [ngValue]="null">請選擇</option>
-                <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">{{ staff['staff_name'] }}</option>
-              </select>
-            </label>
-            <label>
-              業績獎金規則
-              <select name="manualBonusRuleId" [(ngModel)]="newManualBonusForm.bonusRuleId">
-                <option [ngValue]="null">請選擇</option>
-                <option *ngFor="let rule of manualEligibleBonusRules()" [ngValue]="rule.bonus_rule_id">{{ rule.rule_name }}</option>
-              </select>
-            </label>
-            <label>
-              金額
-              <input type="number" name="manualBonusAmount" [(ngModel)]="newManualBonusForm.amount" min="0" step="0.01" />
-            </label>
-            <label>
-              期間（選填）
-              <input name="manualBonusPeriod" [(ngModel)]="newManualBonusForm.period" placeholder="例：2026-08" />
-            </label>
-            <label class="wide">
-              備註（案件說明）
-              <input name="manualBonusNote" [(ngModel)]="newManualBonusForm.note" placeholder="例：客戶名稱／案件內容" />
-            </label>
-          </div>
-          <button type="button" class="manual-bonus-submit" [disabled]="savingManualBonus() || !manualEligibleBonusRules().length" (click)="createManualPerformanceBonus()">新增業績獎金</button>
-          <p class="settle-result" *ngIf="!manualEligibleBonusRules().length">目前沒有可手動新增的業績獎金規則，請先至「業績獎金規則」新增並啟用工商代辦獎金規則。</p>
-        </div>
+          </section>
+        </ng-container>
 
         <section class="filter-bar performance-bonus-filter-bar">
           <label>
@@ -2911,10 +3052,10 @@
               </select>
               <select name="performanceBonusFilterUnit" [(ngModel)]="performanceBonusFilterUnit">
                 <option value="">全部</option>
-                <optgroup label="月份（規則四：滿租獎金）">
+                <optgroup label="月份（規則四／六：滿租、登記加乘獎金）">
                   <option *ngFor="let option of performanceBonusMonthOptions" [value]="option.value">{{ option.label }}</option>
                 </optgroup>
-                <optgroup label="4 個月期間（規則六／七）">
+                <optgroup label="4 個月期間（規則七：分館績效獎金）">
                   <option *ngFor="let option of performanceBonusQuarterOptions" [value]="option.value">{{ option.label }}</option>
                 </optgroup>
               </select>

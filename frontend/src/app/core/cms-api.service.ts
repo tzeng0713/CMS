@@ -494,13 +494,14 @@ export interface ManualPerformanceBonusPayload {
 export interface SyncTransactionBonusResult {
   createdCount: number;
   skippedAlreadyRecorded: number;
-  skippedMissingEndDate: number;
+  skippedMissingDate: number;
   skippedNoActiveRule: string[];
 }
 
 export interface SettleMonthlyBonusResult {
   period: string;
-  createdCount: number;
+  fullOccupancyCreatedCount: number;
+  registrationMultiplierCreatedCount: number;
   skippedBranches: number[];
 }
 

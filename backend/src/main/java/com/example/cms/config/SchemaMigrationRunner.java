@@ -34,6 +34,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         migrateChargeListsTable();
         migrateBranchFields();
         migratePerformanceManagementTables();
+        migrateRegistrationMultiplierToMonthly();
     }
 
     private void migrateRoleNames() {
@@ -432,6 +433,17 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         addForeignKeyIfMissing("performance_bonuses", "fk_performance_bonuses_branch", "branch_id", "branches", "branch_id");
         addForeignKeyIfMissing("performance_bonuses", "fk_performance_bonuses_rent_payment", "rent_payment_id", "rent_payments", "rent_payment_id");
         addForeignKeyIfMissing("performance_bonuses", "fk_performance_bonuses_created_by", "created_by", "staff", "staff_id");
+    }
+
+    // 規則六（公司登記加乘獎金）從「每 4 個月結算一次」改成「按月結算」：period 格式從 YYYY-P{1-3}
+    // 改成 YYYY-MM。兩種格式代表的統計範圍不同（4 個月累積 vs 當月），沒辦法還原轉換，
+    // 已與業主確認直接清掉舊格式紀錄，之後一律用月結重新產生。WHERE 條件保證重複執行安全：
+    // 清過一次之後不會再有符合 period LIKE '%-P%' 的規則六資料。
+    private void migrateRegistrationMultiplierToMonthly() {
+        jdbc.update("""
+                DELETE FROM performance_bonuses
+                WHERE rule_type = 'REGISTRATION_MULTIPLIER' AND period LIKE '%-P%'
+                """);
     }
 
     private void migrateContractLeaseStatus() {

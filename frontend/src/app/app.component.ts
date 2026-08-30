@@ -77,6 +77,42 @@ type BonusRuleTierRow = {
 // 避免跟既有的自動結算（sync-transactions／settle-monthly／settle-period）重複入帳。
 const MANUAL_ONLY_RULE_TYPES = new Set(['BUSINESS_AGENT']);
 
+type BonusBranchGroup = {
+  branchId: number | null;
+  branchName: string;
+  rows: PerformanceBonus[];
+};
+
+type StaffBonusSummaryRow = {
+  staffName: string;
+  total: number;
+  count: number;
+};
+
+function groupPerformanceBonusesByBranch(rows: PerformanceBonus[]): BonusBranchGroup[] {
+  const groups = new Map<string, BonusBranchGroup>();
+  for (const row of rows) {
+    const key = row.branch_id != null ? String(row.branch_id) : '未指定分館';
+    const branchName = row.branch_name || '未指定分館';
+    const group = groups.get(key) ?? { branchId: row.branch_id, branchName, rows: [] };
+    group.rows.push(row);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values()).sort((a, b) => a.branchName.localeCompare(b.branchName, 'zh-Hant'));
+}
+
+function summarizeByStaff(rows: PerformanceBonus[]): StaffBonusSummaryRow[] {
+  const totals = new Map<string, StaffBonusSummaryRow>();
+  for (const row of rows) {
+    const staffName = row.staff_name || '未指定祕書';
+    const entry = totals.get(staffName) ?? { staffName, total: 0, count: 0 };
+    entry.total += Number(row.bonus_amount || 0);
+    entry.count += 1;
+    totals.set(staffName, entry);
+  }
+  return Array.from(totals.values()).sort((a, b) => b.total - a.total);
+}
+
 interface NavItem {
   key: ViewKey;
   label: string;
@@ -360,7 +396,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       children: [
         { key: 'targets', label: '業績目標' },
         { key: 'bonus-rules', label: '業績獎金規則' },
-        { key: 'performance-bonuses', label: '業績結算' }
+        { key: 'performance-bonuses', label: '績效/業績結算' }
       ]
     },
     {
@@ -533,6 +569,22 @@ export class AppComponent implements OnInit, AfterViewInit {
   settlingMonthly = signal(false);
   settlingPeriod = signal(false);
   settleResultMessage = signal('');
+  periodSettleResultMessage = signal('');
+  performanceBonusTab = signal<'business' | 'performance'>('business');
+
+  // ---------- 業績結算：滿租／登記加乘／分館績效 三固定區塊 ----------
+  bonusBlockMonth = this.currentMonthValue();
+  bonusBlockPeriodYear = new Date().getFullYear();
+  bonusBlockPeriodQuarter: 1 | 2 | 3 = 1;
+  fullOccupancyRows = signal<PerformanceBonus[]>([]);
+  registrationMultiplierRows = signal<PerformanceBonus[]>([]);
+  branchPerformanceRows = signal<PerformanceBonus[]>([]);
+  fullOccupancyByBranch = computed(() => groupPerformanceBonusesByBranch(this.fullOccupancyRows()));
+  registrationMultiplierByBranch = computed(() => groupPerformanceBonusesByBranch(this.registrationMultiplierRows()));
+  branchPerformanceByBranch = computed(() => groupPerformanceBonusesByBranch(this.branchPerformanceRows()));
+  fullOccupancyStaffSummary = computed(() => summarizeByStaff(this.fullOccupancyRows()));
+  registrationMultiplierStaffSummary = computed(() => summarizeByStaff(this.registrationMultiplierRows()));
+  branchPerformanceStaffSummary = computed(() => summarizeByStaff(this.branchPerformanceRows()));
   newManualBonusForm: { beneficiaryStaffId: number | null; bonusRuleId: number | null; amount: number | null; period: string; note: string } = {
     beneficiaryStaffId: null, bonusRuleId: null, amount: null, period: '', note: ''
   };
@@ -871,6 +923,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.loadStaffSupportData();
         this.loadBonusRules();
         this.loadPerformanceBonuses();
+        this.loadBonusRuleBlocks();
         break;
       case 'tax-bureau-notices':
         this.loadTaxBureauNoticePreview();
@@ -1874,17 +1927,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       pageSize: 200
     };
     this.api.performanceBonuses(filters).subscribe({
-      next: (result) => {
-        const totals = new Map<string, { staffName: string; total: number; count: number }>();
-        for (const row of result.content) {
-          const staffName = row.staff_name || '未指定祕書';
-          const entry = totals.get(staffName) ?? { staffName, total: 0, count: 0 };
-          entry.total += Number(row.bonus_amount || 0);
-          entry.count += 1;
-          totals.set(staffName, entry);
-        }
-        this.staffBonusSummaryRows.set(Array.from(totals.values()).sort((a, b) => b.total - a.total));
-      }
+      next: (result) => this.staffBonusSummaryRows.set(summarizeByStaff(result.content))
     });
   }
 
@@ -1896,6 +1939,48 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.loadPerformanceBonuses();
   }
 
+  loadBonusRuleBlocks(): void {
+    this.loadFullOccupancyBlock();
+    this.loadRegistrationMultiplierBlock();
+    this.loadBranchPerformanceBlock();
+  }
+
+  loadFullOccupancyBlock(): void {
+    this.api.performanceBonuses({ ruleType: 'FULL_OCCUPANCY', period: this.bonusBlockMonth, pageSize: 200 }).subscribe({
+      next: (result) => this.fullOccupancyRows.set(result.content),
+      error: () => this.error.set('無法載入滿租獎金資料。')
+    });
+  }
+
+  loadRegistrationMultiplierBlock(): void {
+    this.api.performanceBonuses({ ruleType: 'REGISTRATION_MULTIPLIER', period: this.bonusBlockMonth, pageSize: 200 }).subscribe({
+      next: (result) => this.registrationMultiplierRows.set(result.content),
+      error: () => this.error.set('無法載入登記加乘獎金資料。')
+    });
+  }
+
+  loadBranchPerformanceBlock(): void {
+    const period = `${this.bonusBlockPeriodYear}-P${this.bonusBlockPeriodQuarter}`;
+    this.api.performanceBonuses({ ruleType: 'BRANCH_PERFORMANCE', period, pageSize: 200 }).subscribe({
+      next: (result) => this.branchPerformanceRows.set(result.content),
+      error: () => this.error.set('無法載入分館績效獎金資料。')
+    });
+  }
+
+  monthLabel(yearMonth: string): string {
+    const match = /^(\d{4})-(\d{2})$/.exec(yearMonth);
+    return match ? `${match[1]}年${Number(match[2])}月` : yearMonth;
+  }
+
+  quarterLabel(year: number, quarter: 1 | 2 | 3): string {
+    const ranges: Record<1 | 2 | 3, string> = { 1: '1～4月', 2: '5～8月', 3: '9～12月' };
+    return `${year}年 P${quarter} 期業績（${ranges[quarter]}）`;
+  }
+
+  staffNamesLabel(rows: PerformanceBonus[]): string {
+    return rows.map((row) => row.staff_name || '-').join('、');
+  }
+
   syncTransactionBonuses(): void {
     this.settlingTransactions.set(true);
     this.settleResultMessage.set('');
@@ -1904,7 +1989,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.settlingTransactions.set(false);
         this.showToast('逐筆獎金同步完成。');
         this.settleResultMessage.set(
-          `新增 ${result.createdCount} 筆；已記錄跳過 ${result.skippedAlreadyRecorded} 筆；缺少結束日期跳過 ${result.skippedMissingEndDate} 筆；` +
+          `新增 ${result.createdCount} 筆；已記錄跳過 ${result.skippedAlreadyRecorded} 筆；缺少可用日期跳過 ${result.skippedMissingDate} 筆；` +
           (result.skippedNoActiveRule.length ? `尚未設定規則：${result.skippedNoActiveRule.join('、')}` : '規則皆已設定')
         );
         this.loadPerformanceBonuses();
@@ -1926,16 +2011,18 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.api.settleMonthlyBonuses(this.settleMonthlyYearMonth, this.currentStaffId()).subscribe({
       next: (result) => {
         this.settlingMonthly.set(false);
-        this.showToast('滿租獎金月結完成。');
+        this.showToast('月結完成。');
         this.settleResultMessage.set(
-          `${result.period}：新增 ${result.createdCount} 筆` +
+          `${result.period}：滿租獎金新增 ${result.fullOccupancyCreatedCount} 筆、登記加乘獎金新增 ${result.registrationMultiplierCreatedCount} 筆` +
           (result.skippedBranches.length ? `；無祕書可入帳分館：${result.skippedBranches.join('、')}` : '')
         );
         this.loadPerformanceBonuses();
+        this.loadFullOccupancyBlock();
+        this.loadRegistrationMultiplierBlock();
       },
       error: (err: HttpErrorResponse) => {
         this.settlingMonthly.set(false);
-        this.error.set(this.branchApiErrorMessage(err, '滿租獎金月結失敗。'));
+        this.error.set(this.branchApiErrorMessage(err, '月結失敗。'));
       }
     });
   }
@@ -1943,17 +2030,18 @@ export class AppComponent implements OnInit, AfterViewInit {
   settlePeriodBonuses(): void {
     const period = `${this.settlePeriodYear}-P${this.settlePeriodQuarter}`;
     this.settlingPeriod.set(true);
-    this.settleResultMessage.set('');
+    this.periodSettleResultMessage.set('');
     this.api.settlePeriodBonuses(period, this.currentStaffId()).subscribe({
       next: (result) => {
         this.settlingPeriod.set(false);
         this.showToast('期間結算完成。');
-        this.settleResultMessage.set(
+        this.periodSettleResultMessage.set(
           `${result.period}：新增 ${result.createdCount} 筆` +
           (result.skippedBranches.length ? `；無祕書可入帳分館：${result.skippedBranches.join('、')}` : '') +
           (result.unassignedContractCount ? `；無法判斷分館的合約：${result.unassignedContractCount} 筆` : '')
         );
         this.loadPerformanceBonuses();
+        this.loadBranchPerformanceBlock();
       },
       error: (err: HttpErrorResponse) => {
         this.settlingPeriod.set(false);
