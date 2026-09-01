@@ -474,6 +474,7 @@ export interface PerformanceBonus {
 
 export interface PerformanceBonusSearchFilters {
   ruleType?: string;
+  excludeRuleType?: string;
   period?: string;
   branchId?: number | null;
   staffId?: number | null;

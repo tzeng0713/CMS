@@ -195,15 +195,20 @@ COALESCE(o.branch_id, st.branch_id)
   - `periodType`（結算週期）為下拉選單（`bonusRulePeriodTypeOptions`），選項與中文標籤為「逐筆合約／收款觸發」`PER_TRANSACTION`、「按月結算」`MONTHLY`、「每 4 個月期間結算」`FOUR_MONTH`；規則列表的「結算週期」欄位也用同一份對照表（`bonusRulePeriodTypeLabel()`）顯示中文，不顯示原始代碼。
   - `tierConfig`（規則六專用）不再是原始 JSON 輸入框，改為「達成數量門檻／獎金金額」成對輸入列，可用「新增級距」／「刪除」增減列數；既有資料由 `parseBonusRuleTiers()` 解析回填，送出前由 `serializeBonusRuleTiers()` 依門檻由小到大排序、過濾空列後組回 `[{"threshold":n,"amount":n}, ...]` 字串，資料庫欄位格式與後端驗證邏輯不變。
   - 規則列表改為專屬的 `bonus-rule-row` 版面（不再用內部固定高度捲動的通用表格），並補上手機窄螢幕下的單欄卡片樣式，桌面與手機皆不會出現多餘捲軸。
-- **業績結算**頁：
-  - 頁面最上方「各祕書可獲得獎金一覽」卡片區：依目前的規則類型／期間／分館篩選條件（不含祕書篩選、不受分頁影響，`pageSize=200` 一次取回加總）在前端依 `staff_name` 分組加總 `bonus_amount`，依金額由高到低排序，讓主管一眼看出每位祕書的獎金總額與筆數；此彙總為前端計算，未新增後端彙總 API。涵蓋全部 8 種規則。
-  - **結算觸發**面板（主管限定，三個自動觸發＋一個手動新增）：「同步逐筆獎金」按鈕（規則一二三八）、「月結」按鈕＋月份選擇器（規則四＋規則六同時觸發）、「期間結算」按鈕＋年份／期別選擇器（規則七）、「手動新增業績獎金」表單（規則五等無自動結算引擎的規則；祕書＋業績獎金規則下拉，下拉只列出 `MANUAL_ONLY_RULE_TYPES` 白名單內、啟用中的規則＋金額＋期間（選填）＋備註（選填，供填寫案件／客戶說明））。送出後於畫面顯示 API 回傳的 `skipped*`／`unassigned*` 提示文字或成功訊息；「月結」的訊息會分別列出滿租獎金與登記加乘獎金各自新增的筆數。
-  - **規則四／六／七三個固定區塊**（`bonus-block-section`）：取代原本「靠篩選器切換規則類型查看同一張清單」的做法，改成三個並排的固定面板，各自獨立抓資料（`loadFullOccupancyBlock()`／`loadRegistrationMultiplierBlock()`／`loadBranchPerformanceBlock()`），不用手動切換規則類型篩選器：
-    - 「滿租獎金（月結）」「登記加乘獎金（月結）」共用同一個「查詢月份」`<input type="month">`（`bonusBlockMonth`），標題顯示「YYYY年MM月 業績」（`monthLabel()`）。
-    - 「分館績效獎金（期間結）」有自己的「年度」＋「期別」篩選（`bonusBlockPeriodYear`／`bonusBlockPeriodQuarter`），標題顯示「YYYY年 P{1/2/3} 期業績（對應月份區間）」（`quarterLabel()`）；明細表多兩欄「簽約數」「解約數」「淨數」「每人獎金金額」（直接讀 `signed_count`／`cancelled_count`／`net_count`／`bonus_amount`，同分館內每筆都一樣，取第一筆即可），另一欄列出實際領取的祕書名單。
-    - 每個區塊內都先用 `groupPerformanceBonusesByBranch()`（純函式）依分館分組顯示明細表，再用 `summarizeByStaff()`（純函式，`loadStaffBonusSummary()` 也共用同一份邏輯）算出該區塊自己的祕書彙總卡片（`.kpis.staff-bonus-kpis`），三區塊彙總各自獨立、不合併成跨規則的一份。
-    - 「月結」「期間結算」按鈕觸發成功後，會分別重新載入對應的區塊（月結重載滿租＋登記加乘；期間結算重載分館績效）。
-  - 頁面下半部原本的篩選式清單（規則類型／期間／分館／祕書篩選＋扁平表格＋分頁）**維持不動**，仍涵蓋全部 8 種規則，作為原始明細查詢／稽核用途，跟新的三區塊是疊加關係、不是取代關係。
+- **業績結算**頁（`h2` 顯示「績效/業績結算」，導覽列項目同名）：
+  - 頁面最上方「各祕書可獲得獎金一覽」卡片區：依目前的規則類型／期間／分館篩選條件（不含祕書篩選、不受分頁影響，`pageSize=200` 一次取回加總）在前端依 `staff_name` 分組加總 `bonus_amount`，依金額由高到低排序，讓主管一眼看出每位祕書的獎金總額與筆數；此彙總為前端計算，未新增後端彙總 API，**涵蓋全部 8 種規則、不分頁籤**。
+  - 下方用 `.content-tabs` 拆成「業績」「績效」兩個頁籤（`performanceBonusTab` signal，預設「業績」）：規則一二三四五六八歸業績頁籤、**只有規則七獨立在績效頁籤**（依業主確認：規則七是唯一真正獨立的績效計算）。兩個頁籤內的結算觸發／固定區塊／查詢清單皆完全分開，不互相顯示。
+  - **業績頁籤**：
+    - 結算觸發面板**只有一個按鈕**「業績結算」（`settleBusinessBonuses()`）：用 `forkJoin` 同時呼叫 `sync-transactions`（規則一二三八）與 `settle-monthly`（規則四／六，需先選月份），兩者都完成後才顯示合併後的單一結果訊息（`settleResultMessage`）；任一失敗則整個回報失敗（兩個 API 都是可重複執行、冪等的，失敗後重按一次即可）。原本「同步逐筆獎金」「月結」兩個按鈕已合併，避免使用者不清楚為何要按兩次。
+    - 手動新增業績獎金表單（規則五）：祕書＋業績獎金規則下拉（只列出 `MANUAL_ONLY_RULE_TYPES` 白名單內、啟用中的規則）＋金額＋期間（選填）＋備註（選填）。
+    - 「滿租獎金（月結）」「登記加乘獎金（月結）」兩個固定區塊（`bonus-block-section`），共用同一個「查詢月份」`<input type="month">`（`bonusBlockMonth`），標題顯示「YYYY年MM月 業績」（`monthLabel()`），各自依分館分組（`groupPerformanceBonusesByBranch()`）＋依祕書彙總（`summarizeByStaff()`，跟 `loadStaffBonusSummary()` 共用同一份邏輯）。
+    - 頁籤底部的查詢區（規則類型／期間／分館／祕書篩選＋扁平表格＋分頁）：規則類型下拉排除「分館績效獎金」（`businessBonusRuleTypeOptions`），查詢時固定帶 `excludeRuleType=BRANCH_PERFORMANCE`，期間篩選只留月份選項。
+    - 「業績結算」送出成功後，重新載入業績頁籤查詢清單＋滿租／登記加乘兩個區塊。
+  - **績效頁籤**：
+    - 結算觸發面板只有「期間結算」按鈕＋年份／期別選擇器（規則七，`settlePeriodBonuses()`，走 `settle-period`），結果訊息用獨立的 `periodSettleResultMessage`（避免跟業績頁籤的結算訊息互相殘留）。
+    - 「分館績效獎金（期間結）」固定區塊，有自己的「年度」＋「期別」篩選（`bonusBlockPeriodYear`／`bonusBlockPeriodQuarter`），標題顯示「YYYY年 P{1/2/3} 期業績（對應月份區間）」（`quarterLabel()`）；明細表多欄「簽約數」「解約數」「淨數」「每人獎金金額」（直接讀 `signed_count`／`cancelled_count`／`net_count`／`bonus_amount`，同分館內每筆都一樣，取第一筆即可），另一欄列出實際領取的祕書名單。
+    - 頁籤底部的查詢區：獨立的 `efficiencyBonusRows`／`efficiencyBonusFilters`／分頁狀態，固定查 `ruleType=BRANCH_PERFORMANCE`，**沒有規則類型下拉**（只有一種規則），期間篩選改成年度＋期別。
+    - 「期間結算」送出成功後，重新載入績效頁籤查詢清單＋分館績效區塊。
 
 ---
 

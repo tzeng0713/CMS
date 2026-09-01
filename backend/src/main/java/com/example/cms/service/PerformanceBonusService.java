@@ -45,13 +45,15 @@ public class PerformanceBonusService extends CmsJdbcSupport {
 
     // ---------- 查詢業績結算資料 ----------
 
-    public Map<String, Object> list(String ruleType, String period, Long branchId, Long staffId, Long contractId,
+    public Map<String, Object> list(String ruleType, String excludeRuleType, String period, Long branchId, Long staffId, Long contractId,
                                      Integer page, Integer pageSize) {
         String ruleTypeText = blankToNull(ruleType);
+        String excludeRuleTypeText = blankToNull(excludeRuleType);
         String periodText = blankToNull(period);
 
         String where = """
                  WHERE (? IS NULL OR pb.rule_type = ?)
+                   AND (? IS NULL OR pb.rule_type <> ?)
                    AND (? IS NULL OR pb.period = ?)
                    AND (? IS NULL OR pb.branch_id = ?)
                    AND (? IS NULL OR pb.staff_id = ?)
@@ -59,6 +61,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                 """;
         List<Object> args = new ArrayList<>();
         args.add(ruleTypeText); args.add(ruleTypeText);
+        args.add(excludeRuleTypeText); args.add(excludeRuleTypeText);
         args.add(periodText); args.add(periodText);
         args.add(branchId); args.add(branchId);
         args.add(staffId); args.add(staffId);

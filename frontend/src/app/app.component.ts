@@ -4,6 +4,7 @@ import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild, 
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import html2canvas from 'html2canvas';
+import { forkJoin } from 'rxjs';
 import {
   CmsApiService,
   AuthUser,
@@ -562,11 +563,23 @@ export class AppComponent implements OnInit, AfterViewInit {
     { value: 'P2', label: '第二期（5～8月）' },
     { value: 'P3', label: '第三期（9～12月）' }
   ];
+  // 業績頁籤查詢用：規則類型下拉排除規則七（分館績效獎金已獨立在績效頁籤查詢）
+  readonly businessBonusRuleTypeOptions = this.bonusRuleTypeOptions.filter((option) => option.value !== 'BRANCH_PERFORMANCE');
+
+  // ---------- 績效頁籤查詢（規則七：分館績效獎金） ----------
+  efficiencyBonusRows = signal<PerformanceBonus[]>([]);
+  efficiencyBonusTotal = signal(0);
+  efficiencyBonusPage = signal(0);
+  readonly efficiencyBonusPageSize = 20;
+  efficiencyBonusFilters: { branchId: number | null; staffId: number | null } = { branchId: null, staffId: null };
+  efficiencyBonusFilterYear = new Date().getFullYear();
+  efficiencyBonusFilterQuarter: '' | 'P1' | 'P2' | 'P3' = '';
+  efficiencyBonusTotalPages = computed(() => Math.max(1, Math.ceil(this.efficiencyBonusTotal() / this.efficiencyBonusPageSize)));
+
   settleMonthlyYearMonth = this.currentMonthValue();
   settlePeriodYear = new Date().getFullYear();
   settlePeriodQuarter: 1 | 2 | 3 = 1;
-  settlingTransactions = signal(false);
-  settlingMonthly = signal(false);
+  settlingBusiness = signal(false);
   settlingPeriod = signal(false);
   settleResultMessage = signal('');
   periodSettleResultMessage = signal('');
@@ -924,6 +937,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.loadBonusRules();
         this.loadPerformanceBonuses();
         this.loadBonusRuleBlocks();
+        this.loadEfficiencyBonuses();
         break;
       case 'tax-bureau-notices':
         this.loadTaxBureauNoticePreview();
@@ -1905,6 +1919,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   loadPerformanceBonuses(): void {
     const filters: PerformanceBonusSearchFilters = {
       ...this.performanceBonusFilters,
+      excludeRuleType: 'BRANCH_PERFORMANCE',
       page: this.performanceBonusPage(),
       pageSize: this.performanceBonusPageSize
     };
@@ -1916,6 +1931,38 @@ export class AppComponent implements OnInit, AfterViewInit {
       error: () => this.error.set('無法載入業績結算資料。')
     });
     this.loadStaffBonusSummary();
+  }
+
+  loadEfficiencyBonuses(): void {
+    const filters: PerformanceBonusSearchFilters = {
+      ruleType: 'BRANCH_PERFORMANCE',
+      period: this.efficiencyBonusFilterQuarter ? `${this.efficiencyBonusFilterYear}-${this.efficiencyBonusFilterQuarter}` : '',
+      branchId: this.efficiencyBonusFilters.branchId,
+      staffId: this.efficiencyBonusFilters.staffId,
+      page: this.efficiencyBonusPage(),
+      pageSize: this.efficiencyBonusPageSize
+    };
+    this.api.performanceBonuses(filters).subscribe({
+      next: (result) => {
+        this.efficiencyBonusRows.set(result.content);
+        this.efficiencyBonusTotal.set(result.totalElements);
+      },
+      error: () => this.error.set('無法載入績效結算資料。')
+    });
+  }
+
+  searchEfficiencyBonuses(): void {
+    this.efficiencyBonusPage.set(0);
+    this.loadEfficiencyBonuses();
+  }
+
+  changeEfficiencyBonusPage(delta: number): void {
+    const next = this.efficiencyBonusPage() + delta;
+    if (next < 0 || next >= this.efficiencyBonusTotalPages()) {
+      return;
+    }
+    this.efficiencyBonusPage.set(next);
+    this.loadEfficiencyBonuses();
   }
 
   private loadStaffBonusSummary(): void {
@@ -1981,48 +2028,33 @@ export class AppComponent implements OnInit, AfterViewInit {
     return rows.map((row) => row.staff_name || '-').join('、');
   }
 
-  syncTransactionBonuses(): void {
-    this.settlingTransactions.set(true);
-    this.settleResultMessage.set('');
-    this.api.syncTransactionBonuses(this.currentStaffId()).subscribe({
-      next: (result) => {
-        this.settlingTransactions.set(false);
-        this.showToast('逐筆獎金同步完成。');
-        this.settleResultMessage.set(
-          `新增 ${result.createdCount} 筆；已記錄跳過 ${result.skippedAlreadyRecorded} 筆；缺少可用日期跳過 ${result.skippedMissingDate} 筆；` +
-          (result.skippedNoActiveRule.length ? `尚未設定規則：${result.skippedNoActiveRule.join('、')}` : '規則皆已設定')
-        );
-        this.loadPerformanceBonuses();
-      },
-      error: (err: HttpErrorResponse) => {
-        this.settlingTransactions.set(false);
-        this.error.set(this.branchApiErrorMessage(err, '逐筆獎金同步失敗。'));
-      }
-    });
-  }
-
-  settleMonthlyBonuses(): void {
+  settleBusinessBonuses(): void {
     if (!this.settleMonthlyYearMonth) {
       this.error.set('請選擇月份。');
       return;
     }
-    this.settlingMonthly.set(true);
+    this.settlingBusiness.set(true);
     this.settleResultMessage.set('');
-    this.api.settleMonthlyBonuses(this.settleMonthlyYearMonth, this.currentStaffId()).subscribe({
-      next: (result) => {
-        this.settlingMonthly.set(false);
-        this.showToast('月結完成。');
+    forkJoin({
+      sync: this.api.syncTransactionBonuses(this.currentStaffId()),
+      monthly: this.api.settleMonthlyBonuses(this.settleMonthlyYearMonth, this.currentStaffId())
+    }).subscribe({
+      next: ({ sync, monthly }) => {
+        this.settlingBusiness.set(false);
+        this.showToast('業績結算完成。');
         this.settleResultMessage.set(
-          `${result.period}：滿租獎金新增 ${result.fullOccupancyCreatedCount} 筆、登記加乘獎金新增 ${result.registrationMultiplierCreatedCount} 筆` +
-          (result.skippedBranches.length ? `；無祕書可入帳分館：${result.skippedBranches.join('、')}` : '')
+          `逐筆合約／收款：新增 ${sync.createdCount} 筆；已記錄跳過 ${sync.skippedAlreadyRecorded} 筆；缺少可用日期跳過 ${sync.skippedMissingDate} 筆` +
+          (sync.skippedNoActiveRule.length ? `；尚未設定規則：${sync.skippedNoActiveRule.join('、')}` : '') +
+          ` ｜ ${monthly.period} 月結：滿租獎金新增 ${monthly.fullOccupancyCreatedCount} 筆、登記加乘獎金新增 ${monthly.registrationMultiplierCreatedCount} 筆` +
+          (monthly.skippedBranches.length ? `；無祕書可入帳分館：${monthly.skippedBranches.join('、')}` : '')
         );
         this.loadPerformanceBonuses();
         this.loadFullOccupancyBlock();
         this.loadRegistrationMultiplierBlock();
       },
       error: (err: HttpErrorResponse) => {
-        this.settlingMonthly.set(false);
-        this.error.set(this.branchApiErrorMessage(err, '月結失敗。'));
+        this.settlingBusiness.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '業績結算失敗。'));
       }
     });
   }
@@ -2042,6 +2074,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         );
         this.loadPerformanceBonuses();
         this.loadBranchPerformanceBlock();
+        this.loadEfficiencyBonuses();
       },
       error: (err: HttpErrorResponse) => {
         this.settlingPeriod.set(false);

@@ -2826,21 +2826,17 @@
             <div class="panel-header">
               <div>
                 <h3>結算觸發</h3>
-                <p>規則一／二／三／四／六／八，可重複執行，已入帳的資料不會重複計算。</p>
+                <p>規則一／二／三／四／六／八一次結算，可重複執行，已入帳的資料不會重複計算。</p>
               </div>
             </div>
             <div class="settle-actions">
               <div class="settle-action-item">
-                <p>規則一／二／三／八：辦公室出租、公司登記業績、同心、公司登記年繳（逐筆合約／收款觸發）</p>
-                <button type="button" [disabled]="settlingTransactions()" (click)="syncTransactionBonuses()">同步逐筆獎金</button>
-              </div>
-              <div class="settle-action-item">
-                <p>規則四／六：滿租獎金、登記加乘獎金（按月結算，同時觸發）</p>
+                <p>規則一／二／三／八：辦公室出租、公司登記業績、同心、公司登記年繳（逐筆合約／收款觸發）；規則四／六：滿租獎金、登記加乘獎金（按月結算，套用下方月份）</p>
                 <label>
                   月份
                   <input type="month" name="settleMonthlyYearMonth" [(ngModel)]="settleMonthlyYearMonth" />
                 </label>
-                <button type="button" [disabled]="settlingMonthly()" (click)="settleMonthlyBonuses()">月結</button>
+                <button type="button" [disabled]="settlingBusiness()" (click)="settleBusinessBonuses()">業績結算</button>
               </div>
             </div>
             <p class="settle-result" *ngIf="settleResultMessage()">{{ settleResultMessage() }}</p>
@@ -2955,6 +2951,84 @@
               </div>
             </div>
           </section>
+
+          <section class="filter-bar performance-bonus-filter-bar">
+            <label>
+              規則類型
+              <select name="performanceBonusFilterRuleType" [(ngModel)]="performanceBonusFilters.ruleType">
+                <option value="">全部</option>
+                <option *ngFor="let option of businessBonusRuleTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
+              </select>
+            </label>
+            <label>
+              期間
+              <div class="period-filter-group">
+                <select name="performanceBonusFilterYear" [(ngModel)]="performanceBonusFilterYear" [disabled]="!performanceBonusFilterUnit">
+                  <option *ngFor="let year of performanceBonusYearOptions" [ngValue]="year">{{ year }}年</option>
+                </select>
+                <select name="performanceBonusFilterUnit" [(ngModel)]="performanceBonusFilterUnit">
+                  <option value="">全部</option>
+                  <option *ngFor="let option of performanceBonusMonthOptions" [value]="option.value">{{ option.label }}</option>
+                </select>
+              </div>
+            </label>
+            <label>
+              分館
+              <select name="performanceBonusFilterBranchId" [(ngModel)]="performanceBonusFilters.branchId">
+                <option [ngValue]="null">全部</option>
+                <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+              </select>
+            </label>
+            <label>
+              祕書
+              <select name="performanceBonusFilterStaffId" [(ngModel)]="performanceBonusFilters.staffId">
+                <option [ngValue]="null">全部</option>
+                <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">{{ staff['staff_name'] }}</option>
+              </select>
+            </label>
+            <div class="filter-actions">
+              <button type="button" (click)="searchPerformanceBonuses()">搜尋</button>
+            </div>
+          </section>
+
+          <div class="empty-state" *ngIf="!performanceBonusRows().length">目前沒有業績結算資料。</div>
+          <div class="simple-table" *ngIf="performanceBonusRows().length">
+            <div class="simple-row header eight">
+              <span>規則</span>
+              <span>祕書</span>
+              <span>分館 / 客戶</span>
+              <span>期間</span>
+              <span>簽約數</span>
+              <span>解約數</span>
+              <span>金額</span>
+              <span>備註</span>
+            </div>
+            <div class="simple-row eight" *ngFor="let row of performanceBonusRows()">
+              <span>{{ row.rule_name || bonusRuleTypeLabel(row.rule_type || '') }}</span>
+              <span>{{ row.staff_name || '-' }}</span>
+              <span>{{ row.branch_name || row.company_name || '-' }}</span>
+              <span>{{ row.period || '-' }}</span>
+              <span>{{ row.signed_count ?? '-' }}</span>
+              <span>{{ row.cancelled_count ?? '-' }}</span>
+              <span>{{ money(row.bonus_amount) }}</span>
+              <span class="stacked-field">{{ row.note || '-' }}</span>
+            </div>
+          </div>
+
+          <div class="pagination-bar" *ngIf="performanceBonusRows().length">
+            <button type="button" class="ghost compact-button" [disabled]="performanceBonusPage() === 0" (click)="changePerformanceBonusPage(-1)">
+              上一頁
+            </button>
+            <span>第 {{ performanceBonusPage() + 1 }} / {{ performanceBonusTotalPages() }} 頁（共 {{ performanceBonusTotal() }} 筆）</span>
+            <button
+              type="button"
+              class="ghost compact-button"
+              [disabled]="performanceBonusPage() + 1 >= performanceBonusTotalPages()"
+              (click)="changePerformanceBonusPage(1)"
+            >
+              下一頁
+            </button>
+          </div>
         </ng-container>
 
         <ng-container *ngIf="performanceBonusTab() === 'performance'">
@@ -3034,90 +3108,78 @@
               </div>
             </div>
           </section>
-        </ng-container>
 
-        <section class="filter-bar performance-bonus-filter-bar">
-          <label>
-            規則類型
-            <select name="performanceBonusFilterRuleType" [(ngModel)]="performanceBonusFilters.ruleType">
-              <option value="">全部</option>
-              <option *ngFor="let option of bonusRuleTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
-            </select>
-          </label>
-          <label>
-            期間
-            <div class="period-filter-group">
-              <select name="performanceBonusFilterYear" [(ngModel)]="performanceBonusFilterYear" [disabled]="!performanceBonusFilterUnit">
-                <option *ngFor="let year of performanceBonusYearOptions" [ngValue]="year">{{ year }}年</option>
-              </select>
-              <select name="performanceBonusFilterUnit" [(ngModel)]="performanceBonusFilterUnit">
-                <option value="">全部</option>
-                <optgroup label="月份（規則四／六：滿租、登記加乘獎金）">
-                  <option *ngFor="let option of performanceBonusMonthOptions" [value]="option.value">{{ option.label }}</option>
-                </optgroup>
-                <optgroup label="4 個月期間（規則七：分館績效獎金）">
+          <section class="filter-bar performance-bonus-filter-bar">
+            <label>
+              期間
+              <div class="period-filter-group">
+                <select name="efficiencyBonusFilterYear" [(ngModel)]="efficiencyBonusFilterYear" [disabled]="!efficiencyBonusFilterQuarter">
+                  <option *ngFor="let year of performanceBonusYearOptions" [ngValue]="year">{{ year }}年</option>
+                </select>
+                <select name="efficiencyBonusFilterQuarter" [(ngModel)]="efficiencyBonusFilterQuarter">
+                  <option value="">全部</option>
                   <option *ngFor="let option of performanceBonusQuarterOptions" [value]="option.value">{{ option.label }}</option>
-                </optgroup>
+                </select>
+              </div>
+            </label>
+            <label>
+              分館
+              <select name="efficiencyBonusFilterBranchId" [(ngModel)]="efficiencyBonusFilters.branchId">
+                <option [ngValue]="null">全部</option>
+                <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
               </select>
+            </label>
+            <label>
+              祕書
+              <select name="efficiencyBonusFilterStaffId" [(ngModel)]="efficiencyBonusFilters.staffId">
+                <option [ngValue]="null">全部</option>
+                <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">{{ staff['staff_name'] }}</option>
+              </select>
+            </label>
+            <div class="filter-actions">
+              <button type="button" (click)="searchEfficiencyBonuses()">搜尋</button>
             </div>
-          </label>
-          <label>
-            分館
-            <select name="performanceBonusFilterBranchId" [(ngModel)]="performanceBonusFilters.branchId">
-              <option [ngValue]="null">全部</option>
-              <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
-            </select>
-          </label>
-          <label>
-            祕書
-            <select name="performanceBonusFilterStaffId" [(ngModel)]="performanceBonusFilters.staffId">
-              <option [ngValue]="null">全部</option>
-              <option *ngFor="let staff of staffOptions()" [ngValue]="staff['staff_id']">{{ staff['staff_name'] }}</option>
-            </select>
-          </label>
-          <div class="filter-actions">
-            <button type="button" (click)="searchPerformanceBonuses()">搜尋</button>
-          </div>
-        </section>
+          </section>
 
-        <div class="empty-state" *ngIf="!performanceBonusRows().length">目前沒有業績結算資料。</div>
-        <div class="simple-table" *ngIf="performanceBonusRows().length">
-          <div class="simple-row header eight">
-            <span>規則</span>
-            <span>祕書</span>
-            <span>分館 / 客戶</span>
-            <span>期間</span>
-            <span>簽約數</span>
-            <span>解約數</span>
-            <span>金額</span>
-            <span>備註</span>
+          <div class="empty-state" *ngIf="!efficiencyBonusRows().length">目前沒有績效結算資料。</div>
+          <div class="simple-table" *ngIf="efficiencyBonusRows().length">
+            <div class="simple-row header eight">
+              <span>規則</span>
+              <span>祕書</span>
+              <span>分館 / 客戶</span>
+              <span>期間</span>
+              <span>簽約數</span>
+              <span>解約數</span>
+              <span>金額</span>
+              <span>備註</span>
+            </div>
+            <div class="simple-row eight" *ngFor="let row of efficiencyBonusRows()">
+              <span>{{ row.rule_name || bonusRuleTypeLabel(row.rule_type || '') }}</span>
+              <span>{{ row.staff_name || '-' }}</span>
+              <span>{{ row.branch_name || row.company_name || '-' }}</span>
+              <span>{{ row.period || '-' }}</span>
+              <span>{{ row.signed_count ?? '-' }}</span>
+              <span>{{ row.cancelled_count ?? '-' }}</span>
+              <span>{{ money(row.bonus_amount) }}</span>
+              <span class="stacked-field">{{ row.note || '-' }}</span>
+            </div>
           </div>
-          <div class="simple-row eight" *ngFor="let row of performanceBonusRows()">
-            <span>{{ row.rule_name || bonusRuleTypeLabel(row.rule_type || '') }}</span>
-            <span>{{ row.staff_name || '-' }}</span>
-            <span>{{ row.branch_name || row.company_name || '-' }}</span>
-            <span>{{ row.period || '-' }}</span>
-            <span>{{ row.signed_count ?? '-' }}</span>
-            <span>{{ row.cancelled_count ?? '-' }}</span>
-            <span>{{ money(row.bonus_amount) }}</span>
-            <span class="stacked-field">{{ row.note || '-' }}</span>
-          </div>
-        </div>
 
-        <div class="pagination-bar" *ngIf="performanceBonusRows().length">
-          <button type="button" class="ghost compact-button" [disabled]="performanceBonusPage() === 0" (click)="changePerformanceBonusPage(-1)">
-            上一頁
-          </button>
-          <span>第 {{ performanceBonusPage() + 1 }} / {{ performanceBonusTotalPages() }} 頁（共 {{ performanceBonusTotal() }} 筆）</span>
-          <button
-            type="button"
-            class="ghost compact-button"
-            [disabled]="performanceBonusPage() + 1 >= performanceBonusTotalPages()"
-            (click)="changePerformanceBonusPage(1)"
-          >
-            下一頁
-          </button>
-        </div>
+          <div class="pagination-bar" *ngIf="efficiencyBonusRows().length">
+            <button type="button" class="ghost compact-button" [disabled]="efficiencyBonusPage() === 0" (click)="changeEfficiencyBonusPage(-1)">
+              上一頁
+            </button>
+            <span>第 {{ efficiencyBonusPage() + 1 }} / {{ efficiencyBonusTotalPages() }} 頁（共 {{ efficiencyBonusTotal() }} 筆）</span>
+            <button
+              type="button"
+              class="ghost compact-button"
+              [disabled]="efficiencyBonusPage() + 1 >= efficiencyBonusTotalPages()"
+              (click)="changeEfficiencyBonusPage(1)"
+            >
+              下一頁
+            </button>
+          </div>
+        </ng-container>
       </section>
     </section>
 

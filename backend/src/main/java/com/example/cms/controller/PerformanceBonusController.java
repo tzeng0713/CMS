@@ -25,13 +25,14 @@ public class PerformanceBonusController {
 
     @GetMapping
     public Map<String, Object> performanceBonuses(@RequestParam(required = false) String ruleType,
+                                                    @RequestParam(required = false) String excludeRuleType,
                                                     @RequestParam(required = false) String period,
                                                     @RequestParam(required = false) Long branchId,
                                                     @RequestParam(required = false) Long staffId,
                                                     @RequestParam(required = false) Long contractId,
                                                     @RequestParam(required = false) Integer page,
                                                     @RequestParam(required = false) Integer pageSize) {
-        return service.list(ruleType, period, branchId, staffId, contractId, page, pageSize);
+        return service.list(ruleType, excludeRuleType, period, branchId, staffId, contractId, page, pageSize);
     }
 
     @PostMapping("/sync-transactions")
