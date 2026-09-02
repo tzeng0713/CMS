@@ -1745,6 +1745,26 @@ export class AppComponent implements OnInit, AfterViewInit {
     return this.bonusRulePeriodTypeOptions.find((option) => option.value === periodType)?.label ?? periodType;
   }
 
+  bonusRuleAmountLabel(rule: BonusRule): string {
+    if (rule.unit_amount != null) {
+      return this.money(rule.unit_amount);
+    }
+    if (rule.percentage != null) {
+      return `${rule.percentage * 100}%`;
+    }
+    if (rule.tier_config) {
+      try {
+        const tiers = JSON.parse(rule.tier_config);
+        if (Array.isArray(tiers) && tiers.length) {
+          return `${tiers.length} 級距`;
+        }
+      } catch {
+        return '級距設定';
+      }
+    }
+    return '-';
+  }
+
   addNewBonusRuleTier(): void {
     this.newBonusRuleTiers.push({ threshold: null, amount: null });
   }

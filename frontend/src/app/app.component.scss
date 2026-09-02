@@ -1575,7 +1575,7 @@ textarea.field-invalid:focus {
 }
 
 .bonus-rule-row {
-  grid-template-columns: minmax(180px, 1.2fr) minmax(190px, 1fr) minmax(120px, 0.6fr) minmax(110px, 0.6fr) minmax(70px, 0.4fr) minmax(200px, 1.3fr) minmax(70px, 0.4fr);
+  grid-template-columns: minmax(260px, 1.8fr) minmax(110px, 0.6fr) minmax(140px, 0.7fr) minmax(90px, 0.5fr) minmax(90px, 0.5fr);
 }
 
 .bonus-rule-row-actions {
@@ -2214,6 +2214,277 @@ $charge-list-slate: #6b6f76;
   color: #64748b;
   font-weight: 700;
   font-size: 12px;
+}
+
+/* ---- 業績相關頁面改版（業績獎金規則／績效業績結算，套用「新增客戶」頁的卡片語言）---- */
+
+.bonus-card {
+  padding: 22px 24px;
+  margin-bottom: 16px;
+  border: 1px solid #e7e1d7;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
+.bonus-card.muted {
+  background: #fdfcf9;
+}
+
+.bonus-card .panel-header {
+  margin-bottom: 4px;
+  align-items: flex-start;
+}
+
+.bonus-card .panel-header h3 {
+  margin: 0 0 4px;
+  padding-left: 10px;
+  border-left: 4px solid var(--brand-gold);
+  color: var(--brand-ink);
+  font-size: 16px;
+}
+
+.bonus-card .panel-header p {
+  margin: 8px 0 0;
+  padding-left: 14px;
+  color: var(--brand-charcoal);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+.bonus-card .settle-actions {
+  padding-left: 14px;
+}
+
+.bonus-card .settle-action-item {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+.bonus-card .settle-action-item p {
+  flex: 1 1 100%;
+  margin: 0 0 2px;
+  color: var(--brand-charcoal);
+  font-size: 12.5px;
+}
+
+.bonus-card .settle-action-item label {
+  display: grid;
+  gap: 6px;
+  color: var(--brand-charcoal);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.bonus-card .settle-action-item button {
+  background: var(--brand-charcoal-dark);
+}
+
+.bonus-card .settle-result {
+  margin: 14px 14px 0;
+  padding: 12px 16px;
+  border: 0;
+  border-left: 4px solid var(--brand-gold);
+  border-radius: 8px;
+  background: var(--brand-gold-soft);
+  color: var(--brand-charcoal-dark);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+
+.bonus-card .manual-bonus-fields {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding-left: 14px;
+}
+
+.bonus-card .manual-bonus-fields label {
+  color: var(--brand-charcoal);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.bonus-card .manual-bonus-submit {
+  margin: 16px 0 0 14px;
+  background: var(--brand-gold-strong);
+}
+
+.bonus-card .tier-config-editor {
+  padding-left: 14px;
+  border: 0;
+  background: transparent;
+}
+
+.bonus-card .tier-config-title {
+  color: var(--brand-ink);
+  font-size: 13.5px;
+  font-weight: 700;
+}
+
+.bonus-card .tier-config-row {
+  padding: 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: #fdfcf9;
+}
+
+.bonus-card .tier-config-row .compact-button {
+  height: 38px;
+  border-color: #e2b3ad;
+  background: #ffffff;
+  color: #b3453b;
+}
+
+.bonus-card .tier-config-editor > .compact-button {
+  justify-self: start;
+  border: 1px dashed var(--brand-gold);
+  background: #ffffff;
+  color: var(--brand-gold-strong);
+}
+
+.bonus-card .form-actions {
+  padding-top: 16px;
+  padding-left: 14px;
+  margin-top: 4px;
+  border-top: 1px solid #eee8dc;
+}
+
+.bonus-card .bonus-block-filter {
+  padding-left: 14px;
+}
+
+.bonus-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.bonus-pill.period {
+  background: #eef1fb;
+  color: #445a9c;
+}
+
+.bonus-pill.on {
+  background: #e8f3ea;
+  color: #2f6b46;
+}
+
+.bonus-pill.off {
+  background: #efece5;
+  color: #857f74;
+}
+
+.bonus-rule-name {
+  display: block;
+  color: var(--brand-ink);
+  font-weight: 700;
+}
+
+.bonus-rule-desc {
+  display: block;
+  margin-top: 3px;
+  color: var(--brand-charcoal);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.simple-row.bonus-rule-row:hover {
+  background: #fbf8f1;
+  border-color: var(--brand-border);
+}
+
+.simple-row.header.bonus-rule-row {
+  background: var(--brand-gold-soft);
+  border-color: var(--brand-border);
+}
+
+.simple-row.header.bonus-rule-row > span {
+  color: var(--brand-gold-strong);
+}
+
+.amount-cell {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.bonus-branch-group h4 {
+  padding-left: 14px;
+  color: var(--brand-ink);
+}
+
+.bonus-detail-table {
+  width: calc(100% - 14px);
+  margin-left: 14px;
+}
+
+.bonus-detail-table th {
+  border-bottom: 1px solid var(--brand-border);
+}
+
+.bonus-detail-table tr:hover td {
+  background: #fbf8f1;
+}
+
+
+.bonus-staff-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0 0 14px;
+}
+
+.bonus-staff-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--brand-border);
+  border-radius: 999px;
+  background: #fdfcf9;
+  font-size: 12.5px;
+}
+
+.bonus-staff-chip strong {
+  color: var(--brand-gold-strong);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter-bar.performance-bonus-filter-bar {
+  border-color: var(--brand-border);
+  background: var(--brand-surface);
+}
+
+.filter-bar.performance-bonus-filter-bar .filter-actions button {
+  background: var(--brand-gold-strong);
+}
+
+.simple-row.eight:hover {
+  background: #fbf8f1;
+}
+
+.simple-row.header.eight {
+  background: var(--brand-gold-soft);
+  color: var(--brand-gold-strong);
+}
+
+.filter-bar.sales-target-filter-bar {
+  border-color: var(--brand-border);
+  background: var(--brand-surface);
+}
+
+.simple-row.five:hover {
+  background: #fbf8f1;
+}
+
+.simple-row.header.five {
+  background: var(--brand-gold-soft);
+  color: var(--brand-gold-strong);
 }
 
 .compact-button {
@@ -2955,6 +3226,10 @@ $charge-list-slate: #6b6f76;
 @media (max-width: 720px) {
   main {
     padding: 18px;
+  }
+
+  .stacked-field.amount-cell {
+    text-align: left;
   }
 
   .topbar {

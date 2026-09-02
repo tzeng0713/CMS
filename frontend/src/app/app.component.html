@@ -2524,7 +2524,7 @@
           <button type="button" *ngIf="canManageBonusRules() && !creatingSalesTarget()" (click)="startCreateSalesTarget()">新增業績目標</button>
         </div>
 
-        <div class="rent-edit-panel" *ngIf="creatingSalesTarget()">
+        <div class="bonus-card" *ngIf="creatingSalesTarget()">
           <div class="panel-header">
             <div><h3>新增業績目標</h3></div>
           </div>
@@ -2556,7 +2556,7 @@
           </form>
         </div>
 
-        <section class="filter-bar">
+        <section class="filter-bar sales-target-filter-bar">
           <label>
             分館
             <select name="salesTargetFilterBranchId" [(ngModel)]="salesTargetFilters.branchId">
@@ -2584,14 +2584,14 @@
             <span>分館</span>
             <span>月份</span>
             <span>類別</span>
-            <span>目標數</span>
+            <span class="amount-cell">目標數</span>
             <span>建立人</span>
           </div>
           <div class="simple-row five" *ngFor="let row of salesTargetRows()">
             <span>{{ row.branch_name }}</span>
             <span>{{ row.target_month }}</span>
             <span>{{ row.category }}</span>
-            <span>{{ row.target_count }}</span>
+            <span class="amount-cell">{{ row.target_count }}</span>
             <span>{{ row.created_by_name || '-' }}</span>
           </div>
         </div>
@@ -2623,7 +2623,7 @@
           <button type="button" *ngIf="canManageBonusRules() && !creatingBonusRule()" (click)="startCreateBonusRule()">新增業績獎金規則</button>
         </div>
 
-        <div class="rent-edit-panel" *ngIf="creatingBonusRule()">
+        <div class="bonus-card" *ngIf="creatingBonusRule()">
           <div class="panel-header">
             <div><h3>新增業績獎金規則</h3></div>
           </div>
@@ -2684,7 +2684,7 @@
           </form>
         </div>
 
-        <div class="rent-edit-panel" *ngIf="editingBonusRule() as editing">
+        <div class="bonus-card" *ngIf="editingBonusRule() as editing">
           <div class="panel-header">
             <div>
               <h3>修改業績獎金規則</h3>
@@ -2752,37 +2752,28 @@
         <div class="simple-table no-scroll" *ngIf="bonusRuleRows().length">
           <div class="simple-row header bonus-rule-row">
             <span>規則名稱</span>
-            <span>類型</span>
-            <span>單位金額 / 比例</span>
+            <span class="amount-cell">單位金額 / 比例</span>
             <span>結算週期</span>
             <span>狀態</span>
-            <span>說明</span>
             <span>操作</span>
           </div>
           <div class="simple-row bonus-rule-row" *ngFor="let row of bonusRuleRows()">
             <span class="stacked-field">
               <span class="stacked-field-label">規則名稱</span>
-              {{ row.rule_name }}
+              <span class="bonus-rule-name">{{ row.rule_name }}</span>
+              <span class="bonus-rule-desc" *ngIf="row.description">{{ row.description }}</span>
             </span>
-            <span class="stacked-field">
-              <span class="stacked-field-label">類型</span>
-              {{ bonusRuleTypeLabel(row.rule_type) }}
-            </span>
-            <span class="stacked-field">
+            <span class="stacked-field amount-cell">
               <span class="stacked-field-label">單位金額 / 比例</span>
-              {{ row.unit_amount != null ? money(row.unit_amount) : (row.percentage != null ? (row.percentage * 100) + '%' : '-') }}
+              {{ bonusRuleAmountLabel(row) }}
             </span>
             <span class="stacked-field">
               <span class="stacked-field-label">結算週期</span>
-              {{ bonusRulePeriodTypeLabel(row.period_type) }}
+              <span class="bonus-pill period">{{ bonusRulePeriodTypeLabel(row.period_type) }}</span>
             </span>
             <span class="stacked-field">
               <span class="stacked-field-label">狀態</span>
-              {{ row.is_active ? '啟用中' : '停用' }}
-            </span>
-            <span class="stacked-field">
-              <span class="stacked-field-label">說明</span>
-              {{ row.description || '-' }}
+              <span class="bonus-pill" [class.on]="row.is_active" [class.off]="!row.is_active">{{ row.is_active ? '啟用中' : '停用' }}</span>
             </span>
             <span class="bonus-rule-row-actions">
               <button type="button" class="ghost compact-button" *ngIf="canManageBonusRules()" (click)="startEditBonusRule(row)">修改</button>
@@ -2822,7 +2813,7 @@
         </div>
 
         <ng-container *ngIf="performanceBonusTab() === 'business'">
-          <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
+          <div class="bonus-card" *ngIf="canManageBonusRules()">
             <div class="panel-header">
               <div>
                 <h3>結算觸發</h3>
@@ -2842,7 +2833,7 @@
             <p class="settle-result" *ngIf="settleResultMessage()">{{ settleResultMessage() }}</p>
           </div>
 
-          <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
+          <div class="bonus-card muted" *ngIf="canManageBonusRules()">
             <div class="panel-header">
               <div>
                 <h3>手動新增業績獎金</h3>
@@ -2890,7 +2881,7 @@
               </label>
             </div>
 
-            <div class="rent-edit-panel">
+            <div class="bonus-card">
               <div class="panel-header">
                 <div>
                   <h3>滿租獎金（月結）</h3>
@@ -2901,26 +2892,24 @@
               <div class="bonus-branch-group" *ngFor="let group of fullOccupancyByBranch()">
                 <h4>{{ group.branchName }}</h4>
                 <table class="bonus-detail-table">
-                  <thead><tr><th>祕書</th><th>金額</th><th>備註</th></tr></thead>
+                  <thead><tr><th>祕書</th><th class="amount-cell">金額</th><th>備註</th></tr></thead>
                   <tbody>
                     <tr *ngFor="let row of group.rows">
                       <td>{{ row.staff_name || '-' }}</td>
-                      <td>{{ money(row.bonus_amount) }}</td>
+                      <td class="amount-cell">{{ money(row.bonus_amount) }}</td>
                       <td>{{ row.note || '-' }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <div class="kpis staff-bonus-kpis" *ngIf="fullOccupancyStaffSummary().length">
-                <article *ngFor="let item of fullOccupancyStaffSummary()">
-                  <span>{{ item.staffName }}</span>
-                  <strong>{{ money(item.total) }}</strong>
-                  <small>{{ item.count }} 筆</small>
-                </article>
+              <div class="bonus-staff-chip-row" *ngIf="fullOccupancyStaffSummary().length">
+                <span class="bonus-staff-chip" *ngFor="let item of fullOccupancyStaffSummary()">
+                  {{ item.staffName }} <strong>{{ money(item.total) }}</strong>
+                </span>
               </div>
             </div>
 
-            <div class="rent-edit-panel">
+            <div class="bonus-card">
               <div class="panel-header">
                 <div>
                   <h3>登記加乘獎金（月結）</h3>
@@ -2931,23 +2920,21 @@
               <div class="bonus-branch-group" *ngFor="let group of registrationMultiplierByBranch()">
                 <h4>{{ group.branchName }}</h4>
                 <table class="bonus-detail-table">
-                  <thead><tr><th>祕書</th><th>登記數</th><th>金額</th><th>備註</th></tr></thead>
+                  <thead><tr><th>祕書</th><th>登記數</th><th class="amount-cell">金額</th><th>備註</th></tr></thead>
                   <tbody>
                     <tr *ngFor="let row of group.rows">
                       <td>{{ row.staff_name || '-' }}</td>
                       <td>{{ row.net_count ?? '-' }}</td>
-                      <td>{{ money(row.bonus_amount) }}</td>
+                      <td class="amount-cell">{{ money(row.bonus_amount) }}</td>
                       <td>{{ row.note || '-' }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <div class="kpis staff-bonus-kpis" *ngIf="registrationMultiplierStaffSummary().length">
-                <article *ngFor="let item of registrationMultiplierStaffSummary()">
-                  <span>{{ item.staffName }}</span>
-                  <strong>{{ money(item.total) }}</strong>
-                  <small>{{ item.count }} 筆</small>
-                </article>
+              <div class="bonus-staff-chip-row" *ngIf="registrationMultiplierStaffSummary().length">
+                <span class="bonus-staff-chip" *ngFor="let item of registrationMultiplierStaffSummary()">
+                  {{ item.staffName }} <strong>{{ money(item.total) }}</strong>
+                </span>
               </div>
             </div>
           </section>
@@ -3000,7 +2987,7 @@
               <span>期間</span>
               <span>簽約數</span>
               <span>解約數</span>
-              <span>金額</span>
+              <span class="amount-cell">金額</span>
               <span>備註</span>
             </div>
             <div class="simple-row eight" *ngFor="let row of performanceBonusRows()">
@@ -3010,7 +2997,7 @@
               <span>{{ row.period || '-' }}</span>
               <span>{{ row.signed_count ?? '-' }}</span>
               <span>{{ row.cancelled_count ?? '-' }}</span>
-              <span>{{ money(row.bonus_amount) }}</span>
+              <span class="amount-cell">{{ money(row.bonus_amount) }}</span>
               <span class="stacked-field">{{ row.note || '-' }}</span>
             </div>
           </div>
@@ -3032,7 +3019,7 @@
         </ng-container>
 
         <ng-container *ngIf="performanceBonusTab() === 'performance'">
-          <div class="rent-edit-panel" *ngIf="canManageBonusRules()">
+          <div class="bonus-card" *ngIf="canManageBonusRules()">
             <div class="panel-header">
               <div>
                 <h3>結算觸發</h3>
@@ -3076,7 +3063,7 @@
               </label>
             </div>
 
-            <div class="rent-edit-panel">
+            <div class="bonus-card">
               <div class="panel-header">
                 <div>
                   <h3>分館績效獎金（期間結）</h3>
@@ -3087,24 +3074,22 @@
               <div class="bonus-branch-group" *ngFor="let group of branchPerformanceByBranch()">
                 <h4>{{ group.branchName }}</h4>
                 <table class="bonus-detail-table">
-                  <thead><tr><th>簽約數</th><th>解約數</th><th>淨數</th><th>每人獎金金額</th><th>領取祕書</th></tr></thead>
+                  <thead><tr><th>簽約數</th><th>解約數</th><th>淨數</th><th class="amount-cell">每人獎金金額</th><th>領取祕書</th></tr></thead>
                   <tbody>
                     <tr>
                       <td>{{ group.rows[0].signed_count ?? '-' }}</td>
                       <td>{{ group.rows[0].cancelled_count ?? '-' }}</td>
                       <td>{{ group.rows[0].net_count ?? '-' }}</td>
-                      <td>{{ money(group.rows[0].bonus_amount) }}</td>
+                      <td class="amount-cell">{{ money(group.rows[0].bonus_amount) }}</td>
                       <td>{{ staffNamesLabel(group.rows) }}</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-              <div class="kpis staff-bonus-kpis" *ngIf="branchPerformanceStaffSummary().length">
-                <article *ngFor="let item of branchPerformanceStaffSummary()">
-                  <span>{{ item.staffName }}</span>
-                  <strong>{{ money(item.total) }}</strong>
-                  <small>{{ item.count }} 筆</small>
-                </article>
+              <div class="bonus-staff-chip-row" *ngIf="branchPerformanceStaffSummary().length">
+                <span class="bonus-staff-chip" *ngFor="let item of branchPerformanceStaffSummary()">
+                  {{ item.staffName }} <strong>{{ money(item.total) }}</strong>
+                </span>
               </div>
             </div>
           </section>
@@ -3150,7 +3135,7 @@
               <span>期間</span>
               <span>簽約數</span>
               <span>解約數</span>
-              <span>金額</span>
+              <span class="amount-cell">金額</span>
               <span>備註</span>
             </div>
             <div class="simple-row eight" *ngFor="let row of efficiencyBonusRows()">
@@ -3160,7 +3145,7 @@
               <span>{{ row.period || '-' }}</span>
               <span>{{ row.signed_count ?? '-' }}</span>
               <span>{{ row.cancelled_count ?? '-' }}</span>
-              <span>{{ money(row.bonus_amount) }}</span>
+              <span class="amount-cell">{{ money(row.bonus_amount) }}</span>
               <span class="stacked-field">{{ row.note || '-' }}</span>
             </div>
           </div>
