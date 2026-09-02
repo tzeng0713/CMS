@@ -1968,6 +1968,7 @@ $charge-list-slate: #6b6f76;
   background: #f8fafc;
 
   img {
+    align-self: flex-start;
     max-width: 100%;
     height: auto;
     box-shadow: 0 2px 10px rgba(15, 23, 42, 0.15);
@@ -2218,7 +2219,7 @@ $charge-list-slate: #6b6f76;
 
 /* ---- 業績相關頁面改版（業績獎金規則／績效業績結算，套用「新增客戶」頁的卡片語言）---- */
 
-.bonus-card {
+.gold-card {
   padding: 22px 24px;
   margin-bottom: 16px;
   border: 1px solid #e7e1d7;
@@ -2226,16 +2227,16 @@ $charge-list-slate: #6b6f76;
   background: #ffffff;
 }
 
-.bonus-card.muted {
+.gold-card.muted {
   background: #fdfcf9;
 }
 
-.bonus-card .panel-header {
+.gold-card .panel-header {
   margin-bottom: 4px;
   align-items: flex-start;
 }
 
-.bonus-card .panel-header h3 {
+.gold-card .panel-header h3 {
   margin: 0 0 4px;
   padding-left: 10px;
   border-left: 4px solid var(--brand-gold);
@@ -2243,7 +2244,7 @@ $charge-list-slate: #6b6f76;
   font-size: 16px;
 }
 
-.bonus-card .panel-header p {
+.gold-card .panel-header p {
   margin: 8px 0 0;
   padding-left: 14px;
   color: var(--brand-charcoal);
@@ -2251,11 +2252,11 @@ $charge-list-slate: #6b6f76;
   line-height: 1.6;
 }
 
-.bonus-card .settle-actions {
+.gold-card .settle-actions {
   padding-left: 14px;
 }
 
-.bonus-card .settle-action-item {
+.gold-card .settle-action-item {
   padding: 0;
   border: 0;
   background: transparent;
@@ -2265,14 +2266,14 @@ $charge-list-slate: #6b6f76;
   gap: 16px;
 }
 
-.bonus-card .settle-action-item p {
+.gold-card .settle-action-item p {
   flex: 1 1 100%;
   margin: 0 0 2px;
   color: var(--brand-charcoal);
   font-size: 12.5px;
 }
 
-.bonus-card .settle-action-item label {
+.gold-card .settle-action-item label {
   display: grid;
   gap: 6px;
   color: var(--brand-charcoal);
@@ -2280,11 +2281,11 @@ $charge-list-slate: #6b6f76;
   font-weight: 700;
 }
 
-.bonus-card .settle-action-item button {
+.gold-card .settle-action-item button {
   background: var(--brand-charcoal-dark);
 }
 
-.bonus-card .settle-result {
+.gold-card .settle-result {
   margin: 14px 14px 0;
   padding: 12px 16px;
   border: 0;
@@ -2296,63 +2297,63 @@ $charge-list-slate: #6b6f76;
   line-height: 1.7;
 }
 
-.bonus-card .manual-bonus-fields {
+.gold-card .manual-bonus-fields {
   grid-template-columns: repeat(3, minmax(0, 1fr));
   padding-left: 14px;
 }
 
-.bonus-card .manual-bonus-fields label {
+.gold-card .manual-bonus-fields label {
   color: var(--brand-charcoal);
   font-size: 12.5px;
   font-weight: 700;
 }
 
-.bonus-card .manual-bonus-submit {
+.gold-card .manual-bonus-submit {
   margin: 16px 0 0 14px;
   background: var(--brand-gold-strong);
 }
 
-.bonus-card .tier-config-editor {
+.gold-card .tier-config-editor {
   padding-left: 14px;
   border: 0;
   background: transparent;
 }
 
-.bonus-card .tier-config-title {
+.gold-card .tier-config-title {
   color: var(--brand-ink);
   font-size: 13.5px;
   font-weight: 700;
 }
 
-.bonus-card .tier-config-row {
+.gold-card .tier-config-row {
   padding: 12px;
   border: 1px solid var(--brand-border);
   border-radius: 8px;
   background: #fdfcf9;
 }
 
-.bonus-card .tier-config-row .compact-button {
+.gold-card .tier-config-row .compact-button {
   height: 38px;
   border-color: #e2b3ad;
   background: #ffffff;
   color: #b3453b;
 }
 
-.bonus-card .tier-config-editor > .compact-button {
+.gold-card .tier-config-editor > .compact-button {
   justify-self: start;
   border: 1px dashed var(--brand-gold);
   background: #ffffff;
   color: var(--brand-gold-strong);
 }
 
-.bonus-card .form-actions {
+.gold-card .form-actions {
   padding-top: 16px;
   padding-left: 14px;
   margin-top: 4px;
   border-top: 1px solid #eee8dc;
 }
 
-.bonus-card .bonus-block-filter {
+.gold-card .bonus-block-filter {
   padding-left: 14px;
 }
 
@@ -2485,6 +2486,118 @@ $charge-list-slate: #6b6f76;
 .simple-row.header.five {
   background: var(--brand-gold-soft);
   color: var(--brand-gold-strong);
+}
+
+/* ---- 收費清單／退款紀錄改版 ---- */
+
+.filter-bar.charge-list-filter,
+.filter-bar.refund-filter-bar {
+  border-color: var(--brand-border);
+  background: var(--brand-surface);
+}
+
+.charge-list-row:not(.header):hover,
+.refund-row:not(.header):hover {
+  background: #fbf8f1;
+}
+
+.simple-row.header.charge-list-row,
+.simple-row.header.refund-row {
+  background: var(--brand-gold-soft);
+  color: var(--brand-gold-strong);
+}
+
+.status-pill {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-pill.settled,
+.status-pill.refunded {
+  background: #e8f3ea;
+  color: #2f6b46;
+}
+
+.status-pill.unsettled,
+.status-pill.pending {
+  background: #faf1de;
+  color: #8a6a1f;
+}
+
+.status-pill.draft {
+  background: #efece5;
+  color: #857f74;
+}
+
+.status-pill.approved {
+  background: #eef1fb;
+  color: #445a9c;
+}
+
+.status-pill.cancelled {
+  background: #f7e8e6;
+  color: #a4453b;
+}
+
+.charge-list-view .gold-card,
+.refund-view .gold-card {
+  margin-top: 4px;
+}
+
+.charge-list-view .selected-customer,
+.refund-view .selected-customer {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+  max-width: none;
+  margin: 10px 0 0 14px;
+  padding: 8px 14px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--brand-gold-soft);
+}
+
+.charge-list-view .selected-customer strong,
+.refund-view .selected-customer strong {
+  color: var(--brand-gold-strong);
+}
+
+.charge-list-view .selected-customer span,
+.refund-view .selected-customer span {
+  color: var(--brand-charcoal-dark);
+  font-size: 12.5px;
+}
+
+.charge-list-view .lookup,
+.refund-view .lookup {
+  padding-left: 14px;
+}
+
+.charge-list-view .modal-header,
+.refund-view .modal-header {
+  background: var(--brand-charcoal-dark);
+  border-bottom: 0;
+}
+
+.charge-list-view .modal-header h3,
+.refund-view .modal-header h3 {
+  color: #fff;
+}
+
+.charge-list-view .modal-header .ghost,
+.refund-view .modal-header .ghost {
+  border-color: rgba(255, 255, 255, 0.4);
+  background: transparent;
+  color: #fff;
+}
+
+.charge-list-view .refund-detail-grid dd,
+.refund-view .refund-detail-grid dd {
+  font-variant-numeric: tabular-nums;
 }
 
 .compact-button {

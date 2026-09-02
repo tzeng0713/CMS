@@ -1627,7 +1627,7 @@
       </section>
     </section>
 
-    <section class="single-view" *ngIf="activeView() === 'charges'">
+    <section class="single-view charge-list-view" *ngIf="activeView() === 'charges'">
       <section class="panel">
         <div class="panel-header">
           <div>
@@ -1728,7 +1728,7 @@
             </span>
             <span class="stacked-field">
               <span class="stacked-field-label">單據狀態</span>
-              {{ displayChargeListStatus(row.status) }}
+              <span class="status-pill" [class.settled]="displayChargeListStatus(row.status) === '已結清'" [class.unsettled]="displayChargeListStatus(row.status) === '未結清'">{{ displayChargeListStatus(row.status) }}</span>
             </span>
             <span class="charge-list-row-actions">
               <button type="button" class="ghost compact-button" (click)="$event.stopPropagation(); startEditChargeList(row)">修改</button>
@@ -1760,7 +1760,9 @@
                   </div>
                   <div>
                     <dt>單據狀態</dt>
-                    <dd>{{ displayChargeListStatus(detail.status) }}</dd>
+                    <dd>
+                      <span class="status-pill" [class.settled]="displayChargeListStatus(detail.status) === '已結清'" [class.unsettled]="displayChargeListStatus(detail.status) === '未結清'">{{ displayChargeListStatus(detail.status) }}</span>
+                    </dd>
                   </div>
                   <div>
                     <dt>租金</dt>
@@ -1799,7 +1801,7 @@
           </button>
         </div>
 
-        <div class="rent-edit-panel" *ngIf="editingChargeList() as editing">
+        <div class="gold-card" *ngIf="editingChargeList() as editing">
           <div class="panel-header">
             <div>
               <h3>修改收費清單</h3>
@@ -1911,6 +1913,7 @@
           </form>
         </div>
 
+        <div class="gold-card">
         <div class="panel-header">
           <div>
             <h3>新增收費清單</h3>
@@ -2046,6 +2049,7 @@
             <button type="submit" [disabled]="saving()">新增收費清單</button>
           </div>
         </form>
+        </div>
 
         <div class="charge-list-print-area" #chargeListPrintArea *ngIf="exportingChargeList() as exportRow">
           <div class="print-logo-row">
@@ -2114,7 +2118,7 @@
       </section>
     </section>
 
-    <section class="single-view" *ngIf="activeView() === 'refunds'">
+    <section class="single-view refund-view" *ngIf="activeView() === 'refunds'">
       <section class="panel">
         <div class="panel-header">
           <div>
@@ -2123,7 +2127,7 @@
           </div>
         </div>
 
-        <section class="filter-bar">
+        <section class="filter-bar refund-filter-bar">
           <label>
             公司名稱
             <input type="search" name="refundFilterCompanyName" [(ngModel)]="refundFilters.companyName" />
@@ -2162,7 +2166,7 @@
           <div class="simple-row header refund-row">
             <span>客戶 / 統編</span>
             <span>退款原因</span>
-            <span>退款金額</span>
+            <span class="amount-cell">退款金額</span>
             <span>狀態</span>
           </div>
           <div class="simple-row refund-row row-clickable" *ngFor="let row of refundRows()" (click)="openRefundDetail(row)">
@@ -2174,13 +2178,18 @@
               <span class="stacked-field-label">退款原因</span>
               {{ row.refund_reason || '-' }}
             </span>
-            <span class="stacked-field">
+            <span class="stacked-field amount-cell">
               <span class="stacked-field-label">退款金額</span>
               {{ money(row.refund_amount) }}
             </span>
             <span class="stacked-field">
               <span class="stacked-field-label">狀態</span>
-              {{ row.refund_status }}
+              <span class="status-pill"
+                    [class.draft]="row.refund_status === '草稿'"
+                    [class.pending]="row.refund_status === '待審核'"
+                    [class.approved]="row.refund_status === '審核通過'"
+                    [class.refunded]="row.refund_status === '已退款'"
+                    [class.cancelled]="row.refund_status === '已取消'">{{ row.refund_status }}</span>
             </span>
           </div>
         </div>
@@ -2223,7 +2232,14 @@
                 </div>
                 <div>
                   <dt>狀態</dt>
-                  <dd>{{ detail.refund_status }}</dd>
+                  <dd>
+                    <span class="status-pill"
+                          [class.draft]="detail.refund_status === '草稿'"
+                          [class.pending]="detail.refund_status === '待審核'"
+                          [class.approved]="detail.refund_status === '審核通過'"
+                          [class.refunded]="detail.refund_status === '已退款'"
+                          [class.cancelled]="detail.refund_status === '已取消'">{{ detail.refund_status }}</span>
+                  </dd>
                 </div>
                 <div>
                   <dt>退款原因</dt>
@@ -2313,7 +2329,7 @@
           </div>
         </div>
 
-        <div class="rent-edit-panel" *ngIf="editingRefund() as editing">
+        <div class="gold-card" *ngIf="editingRefund() as editing">
           <div class="panel-header">
             <div>
               <h3>{{ editing.refund_status === '審核通過' ? '辦理退款' : '修改退款資料' }}</h3>
@@ -2410,6 +2426,7 @@
           </form>
         </div>
 
+        <div class="gold-card">
         <div class="panel-header">
           <div>
             <h3>新增退款</h3>
@@ -2510,6 +2527,7 @@
             <button type="submit" [disabled]="saving()">新增退款</button>
           </div>
         </form>
+        </div>
 
       </section>
     </section>
@@ -2524,7 +2542,7 @@
           <button type="button" *ngIf="canManageBonusRules() && !creatingSalesTarget()" (click)="startCreateSalesTarget()">新增業績目標</button>
         </div>
 
-        <div class="bonus-card" *ngIf="creatingSalesTarget()">
+        <div class="gold-card" *ngIf="creatingSalesTarget()">
           <div class="panel-header">
             <div><h3>新增業績目標</h3></div>
           </div>
@@ -2623,7 +2641,7 @@
           <button type="button" *ngIf="canManageBonusRules() && !creatingBonusRule()" (click)="startCreateBonusRule()">新增業績獎金規則</button>
         </div>
 
-        <div class="bonus-card" *ngIf="creatingBonusRule()">
+        <div class="gold-card" *ngIf="creatingBonusRule()">
           <div class="panel-header">
             <div><h3>新增業績獎金規則</h3></div>
           </div>
@@ -2684,7 +2702,7 @@
           </form>
         </div>
 
-        <div class="bonus-card" *ngIf="editingBonusRule() as editing">
+        <div class="gold-card" *ngIf="editingBonusRule() as editing">
           <div class="panel-header">
             <div>
               <h3>修改業績獎金規則</h3>
@@ -2813,7 +2831,7 @@
         </div>
 
         <ng-container *ngIf="performanceBonusTab() === 'business'">
-          <div class="bonus-card" *ngIf="canManageBonusRules()">
+          <div class="gold-card" *ngIf="canManageBonusRules()">
             <div class="panel-header">
               <div>
                 <h3>結算觸發</h3>
@@ -2833,7 +2851,7 @@
             <p class="settle-result" *ngIf="settleResultMessage()">{{ settleResultMessage() }}</p>
           </div>
 
-          <div class="bonus-card muted" *ngIf="canManageBonusRules()">
+          <div class="gold-card muted" *ngIf="canManageBonusRules()">
             <div class="panel-header">
               <div>
                 <h3>手動新增業績獎金</h3>
@@ -2881,7 +2899,7 @@
               </label>
             </div>
 
-            <div class="bonus-card">
+            <div class="gold-card">
               <div class="panel-header">
                 <div>
                   <h3>滿租獎金（月結）</h3>
@@ -2909,7 +2927,7 @@
               </div>
             </div>
 
-            <div class="bonus-card">
+            <div class="gold-card">
               <div class="panel-header">
                 <div>
                   <h3>登記加乘獎金（月結）</h3>
@@ -3019,7 +3037,7 @@
         </ng-container>
 
         <ng-container *ngIf="performanceBonusTab() === 'performance'">
-          <div class="bonus-card" *ngIf="canManageBonusRules()">
+          <div class="gold-card" *ngIf="canManageBonusRules()">
             <div class="panel-header">
               <div>
                 <h3>結算觸發</h3>
@@ -3063,7 +3081,7 @@
               </label>
             </div>
 
-            <div class="bonus-card">
+            <div class="gold-card">
               <div class="panel-header">
                 <div>
                   <h3>分館績效獎金（期間結）</h3>
