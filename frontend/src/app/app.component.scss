@@ -2298,7 +2298,7 @@ $charge-list-slate: #6b6f76;
 }
 
 .gold-card .manual-bonus-fields {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   padding-left: 14px;
 }
 
@@ -3334,15 +3334,24 @@ $charge-list-slate: #6b6f76;
     grid-template-columns: 1fr;
     gap: 0;
   }
+
+  .simple-row.five.header {
+    display: none;
+  }
+
+  .simple-row.five {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .stacked-field.amount-cell {
+    text-align: left;
+  }
 }
 
 @media (max-width: 720px) {
   main {
     padding: 18px;
-  }
-
-  .stacked-field.amount-cell {
-    text-align: left;
   }
 
   .topbar {

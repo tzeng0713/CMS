@@ -2606,11 +2606,26 @@
             <span>建立人</span>
           </div>
           <div class="simple-row five" *ngFor="let row of salesTargetRows()">
-            <span>{{ row.branch_name }}</span>
-            <span>{{ row.target_month }}</span>
-            <span>{{ row.category }}</span>
-            <span class="amount-cell">{{ row.target_count }}</span>
-            <span>{{ row.created_by_name || '-' }}</span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">分館</span>
+              {{ row.branch_name }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">月份</span>
+              {{ row.target_month }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">類別</span>
+              {{ row.category }}
+            </span>
+            <span class="stacked-field amount-cell">
+              <span class="stacked-field-label">目標數</span>
+              {{ row.target_count }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">建立人</span>
+              {{ row.created_by_name || '-' }}
+            </span>
           </div>
         </div>
 
