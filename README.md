@@ -65,6 +65,25 @@ npm start
 
 - `http://localhost:4200`
 
+## 忘記密碼與 Email 設定
+
+登入頁可用帳號或工作 Email 申請重設密碼。系統一律回覆相同結果，避免洩漏帳號是否存在；寄出的連結只能使用一次，預設 30 分鐘後失效。
+
+新申請帳號必填工作 Email。既有職員請由主管至「職員總覽」補上工作 Email，否則該職員無法收到重設連結。
+
+部署時請設定 SMTP 與前端公開網址；未設定 `CMS_SMTP_HOST` 時，系統不會傳送郵件。
+
+```powershell
+$env:CMS_SMTP_HOST="smtp.example.com"
+$env:CMS_SMTP_PORT="587"
+$env:CMS_SMTP_USERNAME="smtp-user"
+$env:CMS_SMTP_PASSWORD="smtp-password"
+$env:CMS_PASSWORD_RESET_FROM="no-reply@example.com"
+$env:CMS_APP_BASE_URL="https://cms.example.com"
+```
+
+可選設定：`CMS_SMTP_AUTH`（預設 `true`）、`CMS_SMTP_STARTTLS`（預設 `true`）、`CMS_PASSWORD_RESET_TOKEN_TTL_MINUTES`（預設 `30`）。
+
 ## Demo 帳號
 
 - 主管：`manager / password`

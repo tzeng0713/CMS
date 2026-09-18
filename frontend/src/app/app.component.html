@@ -1,54 +1,115 @@
 <section class="auth-page" *ngIf="!currentUser(); else appShell">
   <section class="auth-card">
-    <div>
+    <div class="auth-intro">
       <span class="brand-mark">CMS</span>
       <h1>客戶管理資訊系統</h1>
-      <p>請登入後使用客戶與租金作業。</p>
+      <p *ngIf="authMode() === 'login' || authMode() === 'register'">請登入後使用客戶與租金作業。</p>
+      <p *ngIf="authMode() === 'forgot'">輸入帳號或工作 Email，我們會協助你重設密碼。</p>
+      <p *ngIf="authMode() === 'reset'">請設定一組新的安全密碼。</p>
     </div>
 
-    <p class="error" *ngIf="error()">{{ error() }}</p>
+    <p class="auth-notice" *ngIf="authNotice()" role="status">{{ authNotice() }}</p>
+    <p class="error" *ngIf="error()" role="alert">{{ error() }}</p>
 
-    <form class="auth-form" *ngIf="authMode() === 'login'; else registerPanel" (ngSubmit)="login()">
+    <form class="auth-form" *ngIf="authMode() === 'login'" (ngSubmit)="login()">
       <label>
         帳號
         <input name="loginAccount" [(ngModel)]="loginForm.account" autocomplete="username" required />
       </label>
       <label>
         密碼
-        <input type="password" name="loginPassword" [(ngModel)]="loginForm.password" autocomplete="current-password" required />
+        <span class="auth-password-field">
+          <input [type]="showLoginPassword() ? 'text' : 'password'" name="loginPassword" [(ngModel)]="loginForm.password" autocomplete="current-password" required />
+          <button type="button" class="auth-password-toggle" (click)="toggleLoginPassword()">
+            {{ showLoginPassword() ? '隱藏' : '顯示' }}
+          </button>
+        </span>
       </label>
+      <button type="button" class="auth-link" (click)="openForgotPassword()">忘記密碼？</button>
       <div class="form-actions">
-        <button type="submit">登入</button>
-        <button type="button" class="ghost" (click)="authMode.set('register'); error.set('')">申請帳號</button>
+        <button type="submit" [disabled]="authBusy()">{{ authBusy() ? '登入中…' : '登入' }}</button>
+        <button type="button" class="ghost" [disabled]="authBusy()" (click)="openRegistration()">申請帳號</button>
       </div>
     </form>
 
-    <ng-template #registerPanel>
-      <form class="auth-form" (ngSubmit)="register()">
-        <label>
-          職員名稱
-          <input name="registerStaffName" [(ngModel)]="registerForm.staffName" required />
-        </label>
-        <label>
-          帳號
-          <input name="registerAccount" [(ngModel)]="registerForm.account" autocomplete="username" required />
-        </label>
-        <label>
-          密碼
-          <input type="password" name="registerPassword" [(ngModel)]="registerForm.password" autocomplete="new-password" required />
-        </label>
-        <label>
-          申請權限
-          <select name="registerRoleName" [(ngModel)]="registerForm.roleName">
-            <option *ngFor="let role of roleOptions" [ngValue]="role">{{ role }}</option>
-          </select>
-        </label>
-        <div class="form-actions">
-          <button type="submit">送出申請</button>
-          <button type="button" class="ghost" (click)="authMode.set('login'); error.set('')">返回登入</button>
-        </div>
-      </form>
-    </ng-template>
+    <form class="auth-form" *ngIf="authMode() === 'register'" (ngSubmit)="register()">
+      <label>
+        職員名稱
+        <input name="registerStaffName" [(ngModel)]="registerForm.staffName" autocomplete="name" required />
+      </label>
+      <label>
+        帳號
+        <input name="registerAccount" [(ngModel)]="registerForm.account" autocomplete="username" required />
+      </label>
+      <label>
+        工作 Email
+        <input type="email" name="registerEmail" [(ngModel)]="registerForm.email" autocomplete="email" required />
+      </label>
+      <label>
+        密碼
+        <span class="auth-password-field">
+          <input [type]="showRegisterPassword() ? 'text' : 'password'" name="registerPassword" [(ngModel)]="registerForm.password" autocomplete="new-password" minlength="8" required />
+          <button type="button" class="auth-password-toggle" (click)="toggleRegisterPassword()">
+            {{ showRegisterPassword() ? '隱藏' : '顯示' }}
+          </button>
+        </span>
+        <span class="auth-field-help">至少 8 個字元</span>
+      </label>
+      <label>
+        申請權限
+        <select name="registerRoleName" [(ngModel)]="registerForm.roleName">
+          <option *ngFor="let role of roleOptions" [ngValue]="role">{{ role }}</option>
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="submit" [disabled]="authBusy()">{{ authBusy() ? '送出中…' : '送出申請' }}</button>
+        <button type="button" class="ghost" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+      </div>
+    </form>
+
+    <form class="auth-form" *ngIf="authMode() === 'forgot'" (ngSubmit)="requestPasswordReset()">
+      <div class="auth-form-heading">
+        <h2>重設密碼</h2>
+        <p>為保護帳號安全，送出後一律顯示相同結果。</p>
+      </div>
+      <label>
+        帳號或工作 Email
+        <input name="passwordResetIdentifier" [(ngModel)]="forgotPasswordForm.identifier" autocomplete="username" required />
+      </label>
+      <div class="form-actions">
+        <button type="submit" [disabled]="authBusy()">{{ authBusy() ? '傳送中…' : '傳送重設連結' }}</button>
+        <button type="button" class="ghost" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+      </div>
+    </form>
+
+    <form class="auth-form" *ngIf="authMode() === 'reset'" (ngSubmit)="completePasswordReset()">
+      <div class="auth-form-heading">
+        <h2>設定新密碼</h2>
+        <p>請使用至少 8 個字元、未曾使用過的安全密碼。</p>
+      </div>
+      <label>
+        新密碼
+        <span class="auth-password-field">
+          <input [type]="showResetPassword() ? 'text' : 'password'" name="resetPassword" [(ngModel)]="resetPasswordForm.password" autocomplete="new-password" minlength="8" required />
+          <button type="button" class="auth-password-toggle" (click)="toggleResetPassword()">
+            {{ showResetPassword() ? '隱藏' : '顯示' }}
+          </button>
+        </span>
+      </label>
+      <label>
+        確認新密碼
+        <span class="auth-password-field">
+          <input [type]="showResetConfirmation() ? 'text' : 'password'" name="resetPasswordConfirmation" [(ngModel)]="resetPasswordForm.confirmPassword" autocomplete="new-password" minlength="8" required />
+          <button type="button" class="auth-password-toggle" (click)="toggleResetConfirmation()">
+            {{ showResetConfirmation() ? '隱藏' : '顯示' }}
+          </button>
+        </span>
+      </label>
+      <div class="form-actions">
+        <button type="submit" [disabled]="authBusy()">{{ authBusy() ? '更新中…' : '更新密碼' }}</button>
+        <button type="button" class="ghost" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+      </div>
+    </form>
   </section>
 </section>
 
@@ -1530,7 +1591,7 @@
         <div class="panel-header">
           <div>
             <h2>職員總覽</h2>
-            <p>依分館查詢職員資料；只有主管可以修改角色權限。</p>
+            <p>依分館查詢職員資料；只有主管可以修改角色權限與工作 Email。</p>
           </div>
           <label class="inline-filter">
             分館
@@ -1547,11 +1608,27 @@
           <div class="simple-row header staff-row">
             <span>分館</span>
             <span>職員名稱</span>
+            <span>工作 Email</span>
             <span>角色權限</span>
           </div>
           <div class="simple-row staff-row" *ngFor="let row of staffRows()">
             <span>{{ value(row, 'branch_name') }}</span>
             <span>{{ value(row, 'staff_name') }}</span>
+            <span *ngIf="canEditStaff(); else emailReadOnly">
+              <input
+                #staffEmail
+                class="compact-input"
+                type="email"
+                [value]="staffEmailValue(row)"
+                [attr.aria-label]="value(row, 'staff_name') + ' 的工作 Email'"
+                autocomplete="email"
+                placeholder="name@example.com"
+                (blur)="updateStaffEmail(row, staffEmail.value)"
+              />
+            </span>
+            <ng-template #emailReadOnly>
+              <span>{{ staffEmailValue(row) || '尚未設定' }}</span>
+            </ng-template>
             <span *ngIf="canEditStaff(); else roleReadOnly">
               <select
                 class="compact-select"

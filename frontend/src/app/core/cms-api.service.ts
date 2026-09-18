@@ -449,8 +449,16 @@ export class CmsApiService {
     return this.http.post<AuthUser>(`${this.baseUrl}/auth/login`, payload);
   }
 
-  register(payload: { staffName: string; account: string; password: string; roleName: string }): Observable<AuthUser> {
+  register(payload: { staffName: string; account: string; email: string; password: string; roleName: string }): Observable<AuthUser> {
     return this.http.post<AuthUser>(`${this.baseUrl}/auth/register`, payload);
+  }
+
+  requestPasswordReset(payload: { identifier: string }): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/auth/password-reset-requests`, payload);
+  }
+
+  resetPassword(payload: { token: string; password: string; confirmPassword: string }): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/auth/password-resets`, payload);
   }
 
   dashboard(): Observable<Dashboard> {
@@ -576,7 +584,7 @@ export class CmsApiService {
     });
   }
 
-  updateStaff(id: number, payload: { rolePermissionId: number }): Observable<Record<string, unknown>> {
+  updateStaff(id: number, payload: { rolePermissionId: number; email?: string }): Observable<Record<string, unknown>> {
     return this.http.put<Record<string, unknown>>(`${this.baseUrl}/staff/${id}`, payload);
   }
 

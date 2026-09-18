@@ -362,7 +362,13 @@ export class AppComponent implements OnInit {
   }
 
   currentUser = signal<AuthUser | null>(this.loadStoredUser());
-  authMode = signal<'login' | 'register'>('login');
+  authMode = signal<'login' | 'register' | 'forgot' | 'reset'>('login');
+  authBusy = signal(false);
+  authNotice = signal('');
+  showLoginPassword = signal(false);
+  showRegisterPassword = signal(false);
+  showResetPassword = signal(false);
+  showResetConfirmation = signal(false);
   activeView = signal<ViewKey>('home');
   isNarrowViewport = signal(this.isNarrowWindow());
   desktopSidebarCollapsed = signal(false);
@@ -506,8 +512,19 @@ export class AppComponent implements OnInit {
   registerForm = {
     staffName: '',
     account: '',
+    email: '',
     password: '',
     roleName: '一般秘書'
+  };
+
+  forgotPasswordForm = {
+    identifier: ''
+  };
+
+  resetPasswordForm = {
+    token: '',
+    password: '',
+    confirmPassword: ''
   };
 
   newCustomerForm: CustomerForm = emptyCustomerForm();
@@ -602,6 +619,12 @@ export class AppComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    const resetToken = new URLSearchParams(window.location.search).get('resetToken');
+    if (!this.currentUser() && resetToken) {
+      this.resetPasswordForm.token = resetToken;
+      this.authMode.set('reset');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
     this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.applyRoute(event.urlAfterRedirects);
@@ -741,17 +764,119 @@ export class AppComponent implements OnInit {
   }
 
   login(): void {
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
     this.api.login(this.loginForm).subscribe({
-      next: (user) => this.finishLogin(user),
-      error: () => this.error.set('登入失敗，請確認帳號密碼。')
+      next: (user) => {
+        this.authBusy.set(false);
+        this.finishLogin(user);
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.error.set('登入失敗，請確認帳號密碼。');
+      }
     });
   }
 
   register(): void {
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
     this.api.register(this.registerForm).subscribe({
-      next: (user) => this.finishLogin(user),
-      error: () => this.error.set('申請帳號失敗，請確認帳號是否重複或欄位未填。')
+      next: (user) => {
+        this.authBusy.set(false);
+        this.finishLogin(user);
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.error.set('申請帳號失敗，請確認帳號、工作 Email 是否重複或欄位未填。');
+      }
     });
+  }
+
+  openForgotPassword(): void {
+    this.clearAuthFeedback();
+    this.authMode.set('forgot');
+  }
+
+  openRegistration(): void {
+    this.clearAuthFeedback();
+    this.authMode.set('register');
+  }
+
+  returnToLogin(): void {
+    this.clearAuthFeedback();
+    this.authBusy.set(false);
+    this.authMode.set('login');
+  }
+
+  toggleLoginPassword(): void {
+    this.showLoginPassword.update((isVisible) => !isVisible);
+  }
+
+  toggleRegisterPassword(): void {
+    this.showRegisterPassword.update((isVisible) => !isVisible);
+  }
+
+  toggleResetPassword(): void {
+    this.showResetPassword.update((isVisible) => !isVisible);
+  }
+
+  toggleResetConfirmation(): void {
+    this.showResetConfirmation.update((isVisible) => !isVisible);
+  }
+
+  requestPasswordReset(): void {
+    const identifier = this.forgotPasswordForm.identifier.trim();
+    if (!identifier) {
+      this.error.set('請輸入帳號或工作 Email。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.requestPasswordReset({ identifier }).subscribe({
+      next: (response) => {
+        this.authBusy.set(false);
+        this.authNotice.set(response.message || '若帳號資料存在且已設定工作 Email，重設連結將寄送至該信箱。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.authNotice.set('若帳號資料存在且已設定工作 Email，重設連結將寄送至該信箱。');
+      }
+    });
+  }
+
+  completePasswordReset(): void {
+    if (!this.resetPasswordForm.token) {
+      this.error.set('重設連結無效或已過期，請重新申請。');
+      return;
+    }
+    if (this.resetPasswordForm.password.length < 8) {
+      this.error.set('新密碼至少需要 8 個字元。');
+      return;
+    }
+    if (this.resetPasswordForm.password !== this.resetPasswordForm.confirmPassword) {
+      this.error.set('兩次輸入的新密碼不一致。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.resetPassword(this.resetPasswordForm).subscribe({
+      next: () => {
+        this.authBusy.set(false);
+        this.resetPasswordForm = { token: '', password: '', confirmPassword: '' };
+        this.authMode.set('login');
+        this.authNotice.set('密碼已更新，請使用新密碼登入。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.error.set('重設連結無效或已過期，請重新申請。');
+      }
+    });
+  }
+
+  private clearAuthFeedback(): void {
+    this.error.set('');
+    this.authNotice.set('');
   }
 
   logout(): void {
@@ -1420,6 +1545,38 @@ export class AppComponent implements OnInit {
       },
       error: () => this.error.set('職員角色權限更新失敗。')
     });
+  }
+
+  updateStaffEmail(row: Record<string, unknown>, email: string): void {
+    if (!this.canEditStaff()) {
+      return;
+    }
+    const staffId = Number(row['staff_id']);
+    const rolePermissionId = Number(row['role_permission_id']);
+    const previousEmail = this.staffEmailValue(row);
+    const nextEmail = email.trim();
+    if (!staffId || !rolePermissionId || nextEmail === previousEmail) {
+      return;
+    }
+    this.api.updateStaff(staffId, { rolePermissionId, email: nextEmail }).subscribe({
+      next: () => {
+        this.error.set('');
+        this.showToast('職員工作 Email 已更新。');
+        this.loadStaffOverview();
+      },
+      error: (response: HttpErrorResponse) => {
+        const message = response.status === 409
+          ? '此工作 Email 已由其他職員使用。'
+          : '工作 Email 更新失敗，請確認格式。';
+        this.error.set(message);
+        this.loadStaffOverview();
+      }
+    });
+  }
+
+  staffEmailValue(row: Record<string, unknown>): string {
+    const email = row['email'];
+    return typeof email === 'string' ? email : '';
   }
 
   loadContracts(): void {
