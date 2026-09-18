@@ -19,6 +19,9 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Map;
@@ -735,6 +738,90 @@ class CmsApplicationTests {
     }
 
     @Test
+    void passwordResetRequestsAlwaysReturnAccepted() throws Exception {
+        Integer tokensBefore = jdbc.queryForObject("SELECT COUNT(*) FROM password_reset_tokens", Integer.class);
+        mvc.perform(post("/api/auth/password-reset-requests")
+                        .contentType("application/json")
+                        .content("{\"identifier\":\"manager\"}"))
+                .andExpect(status().isAccepted());
+
+        Integer tokensAfterKnownAccount = jdbc.queryForObject("SELECT COUNT(*) FROM password_reset_tokens", Integer.class);
+        String storedHash = jdbc.queryForObject("""
+                SELECT token_hash FROM password_reset_tokens
+                WHERE staff_id = 1 ORDER BY password_reset_token_id DESC LIMIT 1
+                """, String.class);
+        org.junit.jupiter.api.Assertions.assertEquals(tokensBefore + 1, tokensAfterKnownAccount);
+        org.junit.jupiter.api.Assertions.assertEquals(64, storedHash.length());
+
+        mvc.perform(post("/api/auth/password-reset-requests")
+                        .contentType("application/json")
+                        .content("{\"identifier\":\"unknown-account\"}"))
+                .andExpect(status().isAccepted());
+
+        Integer tokensAfterUnknownAccount = jdbc.queryForObject("SELECT COUNT(*) FROM password_reset_tokens", Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(tokensAfterKnownAccount, tokensAfterUnknownAccount);
+    }
+
+    @Test
+    void passwordResetChangesPasswordOnceAndRejectsReplay() throws Exception {
+        long staffId = insertPasswordResetStaff("reset-once", "reset-once@cms.test", "old-reset-password");
+        String rawToken = "known-single-use-token";
+        insertPasswordResetToken(staffId, rawToken, Instant.now().plusSeconds(600));
+
+        mvc.perform(post("/api/auth/password-resets")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "token": "known-single-use-token",
+                                  "password": "new-reset-password",
+                                  "confirmPassword": "new-reset-password"
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"reset-once\",\"password\":\"old-reset-password\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"reset-once\",\"password\":\"new-reset-password\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/auth/password-resets")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "token": "known-single-use-token",
+                                  "password": "another-password",
+                                  "confirmPassword": "another-password"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void passwordResetRejectsExpiredTokensWithoutChangingPassword() throws Exception {
+        long staffId = insertPasswordResetStaff("reset-expired", "reset-expired@cms.test", "still-the-password");
+        insertPasswordResetToken(staffId, "expired-token", Instant.now().minusSeconds(60));
+
+        mvc.perform(post("/api/auth/password-resets")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "token": "expired-token",
+                                  "password": "new-reset-password",
+                                  "confirmPassword": "new-reset-password"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"reset-expired\",\"password\":\"still-the-password\"}"))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void rentPaymentCanBeUpdated() throws Exception {
         mvc.perform(put("/api/rent-payments/1")
                         .contentType("application/json")
@@ -1012,6 +1099,31 @@ class CmsApplicationTests {
                 ) VALUES (?, ?, 0, '登記', 1, ?, ?, ?, '0900000000', '登記', 1)
                 """, customerId, companyName, companyName + " Owner", ownerBirthday, companyName + " Contact");
         return customerId;
+    }
+
+    private long insertPasswordResetStaff(String account, String email, String password) {
+        Long staffId = jdbc.queryForObject("SELECT COALESCE(MAX(staff_id), 0) + 1 FROM staff", Long.class);
+        jdbc.update("""
+                INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, email, password_hash)
+                VALUES (?, 3, 1, ?, ?, ?, ?)
+                """, staffId, account, account, email, "{noop}" + password);
+        return staffId;
+    }
+
+    private void insertPasswordResetToken(long staffId, String rawToken, Instant expiresAt) {
+        jdbc.update("""
+                INSERT INTO password_reset_tokens (staff_id, token_hash, expires_at)
+                VALUES (?, ?, ?)
+                """, staffId, sha256(rawToken), java.sql.Timestamp.from(expiresAt));
+    }
+
+    private String sha256(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private void insertDashboardContract(long customerId, LocalDate endDate, String leaseStatus) {

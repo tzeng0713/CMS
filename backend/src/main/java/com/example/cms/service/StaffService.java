@@ -28,11 +28,22 @@ public class StaffService extends CmsJdbcSupport {
         if (request.rolePermissionId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "rolePermissionId is required");
         }
+        String email = request.email() == null ? null : request.email().trim();
+        if (email != null && !email.isBlank()) {
+            if (!email.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email is invalid");
+            }
+            Integer duplicate = jdbc.queryForObject("SELECT COUNT(*) FROM staff WHERE LOWER(email) = LOWER(?) AND staff_id <> ?",
+                    Integer.class, email, id);
+            if (duplicate != null && duplicate > 0) {
+                throw new ResponseStatusException(HttpStatus.CONFLICT, "email already exists");
+            }
+        }
         jdbc.update("""
                 UPDATE staff
                 SET role_permission_id = ?, email = COALESCE(?, email)
                 WHERE staff_id = ?
-                """, request.rolePermissionId(), request.email(), id);
+                """, request.rolePermissionId(), email == null || email.isBlank() ? null : email, id);
         return jdbc.queryForMap(staffListSql() + " WHERE s.staff_id = ?", id);
     }
 
