@@ -73,12 +73,12 @@ public class AuthService extends CmsJdbcSupport {
         }
         Long staffId = nextId("staff", "staff_id");
         jdbc.update("""
-                INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, password_hash)
-                VALUES (?, ?, 1, ?, ?, ?)
+                INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, email, password_hash)
+                VALUES (?, ?, 1, ?, ?, ?, ?)
                 """, staffId, roleId, request.staffName().trim(), request.account().trim(),
-                passwordEncoder.encode(request.password()));
+                request.email() == null ? null : request.email().trim(), passwordEncoder.encode(request.password()));
         Map<String, Object> user = jdbc.queryForMap("""
-                SELECT s.staff_id, s.staff_name, s.account, s.branch_id,
+                SELECT s.staff_id, s.staff_name, s.account, s.email, s.branch_id,
                        b.branch_name, r.role_permission_id, r.role_name, r.scope
                 FROM staff s
                 JOIN role_permissions r ON r.role_permission_id = s.role_permission_id

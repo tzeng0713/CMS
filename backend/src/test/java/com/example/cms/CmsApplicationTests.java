@@ -1,5 +1,6 @@
 package com.example.cms;
 
+import com.example.cms.config.SchemaMigrationRunner;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -717,11 +718,13 @@ class CmsApplicationTests {
                                   "staffName": "Test Secretary",
                                   "account": "test.secretary",
                                   "password": "secret123",
+                                  "email": "test.secretary@cms.test",
                                   "roleName": "一般秘書"
                                 }
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.staff_name", is("Test Secretary")))
+                .andExpect(jsonPath("$.email", is("test.secretary@cms.test")))
                 .andExpect(jsonPath("$.role_name", is("一般秘書")))
                 .andExpect(jsonPath("$.canCreateRent", is(false)))
                 .andExpect(jsonPath("$.canEditRent", is(false)))
@@ -959,8 +962,28 @@ class CmsApplicationTests {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.staff_id", is(3)))
+                .andExpect(jsonPath("$.email", is("staff@cms.test")))
                 .andExpect(jsonPath("$.role_permission_id", is(2)))
                 .andExpect(jsonPath("$.role_name", is("督導秘書")));
+    }
+
+    @Test
+    void schemaMigrationAddsStaffEmailAndIndexToAnExistingStaffTable() {
+        jdbc.execute("DROP INDEX IF EXISTS idx_staff_email");
+        jdbc.execute("ALTER TABLE staff DROP COLUMN email");
+
+        new SchemaMigrationRunner(jdbc).run();
+
+        Integer emailColumn = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE LOWER(TABLE_NAME) = 'staff' AND LOWER(COLUMN_NAME) = 'email'
+                """, Integer.class);
+        Integer emailIndex = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES
+                WHERE LOWER(INDEX_NAME) = 'idx_staff_email'
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, emailColumn);
+        org.junit.jupiter.api.Assertions.assertEquals(1, emailIndex);
     }
 
     @Test

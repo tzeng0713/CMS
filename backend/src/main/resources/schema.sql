@@ -44,8 +44,6 @@ CREATE TABLE IF NOT EXISTS staff (
   CONSTRAINT fk_staff_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_email ON staff(email);
-
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   password_reset_token_id BIGINT PRIMARY KEY AUTO_INCREMENT,
   staff_id BIGINT NOT NULL,

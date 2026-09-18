@@ -21,6 +21,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
     public void run(String... args) {
         migrateRoleNames();
         migrateStaffBranch();
+        migrateStaffEmail();
         migrateCustomerRentalFields();
         migrateCustomerWorkflowFields();
         migrateCustomerRelationTables();
@@ -53,6 +54,11 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
             jdbc.update("UPDATE staff SET branch_id = 1 WHERE branch_id IS NULL");
             return null;
         });
+    }
+
+    private void migrateStaffEmail() {
+        addColumnIfMissing("staff", "email", "VARCHAR(254)");
+        addUniqueIndexIfMissing("staff", "idx_staff_email", "email");
     }
 
     private void migrateCustomerRentalFields() {
@@ -376,6 +382,20 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
                 }
             }
             jdbc.execute("CREATE INDEX " + indexName + " ON " + table + "(" + column + ")");
+            return null;
+        });
+    }
+
+    private void addUniqueIndexIfMissing(String table, String indexName, String column) {
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            try (var indexes = connection.getMetaData().getIndexInfo(null, null, table, false, false)) {
+                while (indexes.next()) {
+                    if (indexName.equalsIgnoreCase(indexes.getString("INDEX_NAME"))) {
+                        return null;
+                    }
+                }
+            }
+            jdbc.execute("CREATE UNIQUE INDEX " + indexName + " ON " + table + "(" + column + ")");
             return null;
         });
     }
