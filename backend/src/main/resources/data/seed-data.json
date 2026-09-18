@@ -31,6 +31,7 @@
       "staffId": 1,
       "staffName": "系統主管",
       "account": "manager",
+      "email": "manager@cms.test",
       "rolePermissionId": 1,
       "branchId": 1
     },
@@ -38,6 +39,7 @@
       "staffId": 2,
       "staffName": "督導秘書",
       "account": "supervisor",
+      "email": "supervisor@cms.test",
       "rolePermissionId": 2,
       "branchId": 1
     },
@@ -45,6 +47,7 @@
       "staffId": 3,
       "staffName": "一般秘書",
       "account": "staff",
+      "email": "staff@cms.test",
       "rolePermissionId": 3,
       "branchId": 2
     }

@@ -4,6 +4,7 @@ public record RegisterRequest(
         String staffName,
         String account,
         String password,
+        String email,
         String roleName
 ) {
 }

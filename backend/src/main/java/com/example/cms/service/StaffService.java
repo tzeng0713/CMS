@@ -30,15 +30,15 @@ public class StaffService extends CmsJdbcSupport {
         }
         jdbc.update("""
                 UPDATE staff
-                SET role_permission_id = ?
+                SET role_permission_id = ?, email = COALESCE(?, email)
                 WHERE staff_id = ?
-                """, request.rolePermissionId(), id);
+                """, request.rolePermissionId(), request.email(), id);
         return jdbc.queryForMap(staffListSql() + " WHERE s.staff_id = ?", id);
     }
 
     private String staffListSql() {
         return """
-                SELECT s.staff_id, s.staff_name, s.account, s.role_permission_id, s.branch_id,
+                SELECT s.staff_id, s.staff_name, s.account, s.email, s.role_permission_id, s.branch_id,
                        r.role_name, b.branch_name
                 FROM staff s
                 JOIN role_permissions r ON r.role_permission_id = s.role_permission_id

@@ -963,6 +963,15 @@ class CmsApplicationTests {
                 .andExpect(jsonPath("$.role_name", is("督導秘書")));
     }
 
+    @Test
+    void staffEmailCanBeMaintained() throws Exception {
+        mvc.perform(put("/api/staff/1")
+                        .contentType("application/json")
+                        .content("{\"rolePermissionId\":1,\"email\":\"manager@cms.test\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email", is("manager@cms.test")));
+    }
+
     private long insertDashboardCustomer(String companyName, String ownerBirthday) {
         Long customerId = jdbc.queryForObject("SELECT COALESCE(MAX(customer_id), 0) + 1 FROM customers", Long.class);
         jdbc.update("""

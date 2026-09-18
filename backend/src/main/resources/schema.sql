@@ -38,9 +38,22 @@ CREATE TABLE IF NOT EXISTS staff (
   branch_id BIGINT DEFAULT 1,
   staff_name VARCHAR(80) NOT NULL,
   account VARCHAR(80) NOT NULL,
+  email VARCHAR(254),
   password_hash VARCHAR(255),
   CONSTRAINT fk_staff_role FOREIGN KEY (role_permission_id) REFERENCES role_permissions(role_permission_id),
   CONSTRAINT fk_staff_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_email ON staff(email);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  password_reset_token_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  staff_id BIGINT NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  used_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_password_reset_tokens_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
 );
 
 CREATE TABLE IF NOT EXISTS customers (
