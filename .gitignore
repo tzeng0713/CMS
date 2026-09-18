@@ -16,6 +16,7 @@ tools/
 outputs/
 .agents/
 .codex/
+.worktrees/
 
 # Local documents and source spreadsheets
 *.docx
