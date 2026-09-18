@@ -8,6 +8,8 @@ import { forkJoin } from 'rxjs';
 import {
   CmsApiService,
   AuthUser,
+  BackupLogSummary,
+  BackupTriggerResult,
   BonusRule,
   BonusRulePayload,
   BranchPayload,
@@ -60,7 +62,8 @@ type ViewKey =
   | 'office-search'
   | 'office-new'
   | 'branch-management'
-  | 'tax-bureau-notices';
+  | 'tax-bureau-notices'
+  | 'data-backup';
 
 type NotificationKind = 'expiring' | 'unpaid' | 'incomplete';
 
@@ -405,7 +408,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       children: [
         { key: 'charges', label: '收費清單' },
         { key: 'refunds', label: '退款紀錄' },
-        { key: 'tax-bureau-notices', label: '國稅局通報' }
+        { key: 'tax-bureau-notices', label: '國稅局通報' },
+        { key: 'data-backup', label: '資料備份' }
       ]
     }
   ];
@@ -495,6 +499,10 @@ export class AppComponent implements OnInit, AfterViewInit {
   taxNoticeBranchInfo = signal<Record<number, TaxBureauNoticeBranchInfo>>({});
   taxNoticeLoading = signal(false);
   taxNoticeGenerating = signal(false);
+  backupTriggering = signal(false);
+  backupResult = signal<BackupTriggerResult | null>(null);
+  backupLogs = signal<BackupLogSummary[]>([]);
+  backupLogsLoading = signal(false);
   salesTargetRows = signal<SalesTarget[]>([]);
   salesTargetTotal = signal(0);
   salesTargetPage = signal(0);
@@ -737,7 +745,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       home: '客戶與租金作業總覽',
       'customer-search': '查詢客戶',
       'contract-search': '查詢租約',
-      'rent-search': '查詢對帳'
+      'rent-search': '查詢對帳',
+      'data-backup': '資料備份'
     };
     return titles[this.activeView()] ?? 'AFW 商務中心';
   });
@@ -941,6 +950,9 @@ export class AppComponent implements OnInit, AfterViewInit {
         break;
       case 'tax-bureau-notices':
         this.loadTaxBureauNoticePreview();
+        break;
+      case 'data-backup':
+        this.loadBackupLogs();
         break;
     }
   }
@@ -1650,6 +1662,10 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   canManageBonusRules(): boolean {
     return this.currentUser()?.canManageBonusRules === true;
+  }
+
+  canManageBackup(): boolean {
+    return this.currentUser()?.canManageBackup === true;
   }
 
   // ---------- 業績目標 ----------
@@ -2950,6 +2966,40 @@ export class AppComponent implements OnInit, AfterViewInit {
     });
   }
 
+  triggerBackup(): void {
+    this.backupTriggering.set(true);
+    this.backupResult.set(null);
+    this.api.triggerBackup(this.currentStaffId()).subscribe({
+      next: (result) => {
+        this.backupTriggering.set(false);
+        this.backupResult.set(result);
+        if (result.success) {
+          this.showToast('資料備份完成。');
+        } else {
+          this.error.set(`資料備份失敗：${result.errorMessage ?? '未知錯誤'}`);
+        }
+        this.loadBackupLogs();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.backupTriggering.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '資料備份觸發失敗。'));
+      }
+    });
+  }
+
+  loadBackupLogs(): void {
+    this.backupLogsLoading.set(true);
+    this.api.backupLogs().subscribe({
+      next: (rows) => {
+        this.backupLogsLoading.set(false);
+        this.backupLogs.set(rows);
+      },
+      error: () => {
+        this.backupLogsLoading.set(false);
+      }
+    });
+  }
+
   private taxNoticeBranchInfoStorageKey(branchId: number): string {
     return `cmsTaxNoticeBranchInfo:${branchId}`;
   }
@@ -3692,7 +3742,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       '/targets': 'targets',
       '/bonus-rules': 'bonus-rules',
       '/performance-bonuses': 'performance-bonuses',
-      '/tax-bureau-notices': 'tax-bureau-notices'
+      '/tax-bureau-notices': 'tax-bureau-notices',
+      '/data-backup': 'data-backup'
     };
     this.activateView(routeMap[path] ?? 'home');
   }
@@ -3717,7 +3768,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       targets: '/targets',
       'bonus-rules': '/bonus-rules',
       'performance-bonuses': '/performance-bonuses',
-      'tax-bureau-notices': '/tax-bureau-notices'
+      'tax-bureau-notices': '/tax-bureau-notices',
+      'data-backup': '/data-backup'
     };
     return routeMap[view];
   }

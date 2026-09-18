@@ -24,6 +24,7 @@ const routes: Routes = [
   { path: 'bonus-rules', component: RouteSinkComponent },
   { path: 'performance-bonuses', component: RouteSinkComponent },
   { path: 'tax-bureau-notices', component: RouteSinkComponent },
+  { path: 'data-backup', component: RouteSinkComponent },
   { path: '**', redirectTo: 'home' }
 ];
 

@@ -3318,6 +3318,84 @@
         </div>
       </section>
     </section>
+
+    <section class="single-view" *ngIf="activeView() === 'data-backup'">
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <h2>資料備份</h2>
+            <p>將合約、收款、業績獎金、退款資料匯出成 Excel 檔案，並上傳至指定的 Google Drive 資料夾。</p>
+          </div>
+        </div>
+
+        <div class="gold-card" *ngIf="canManageBackup()">
+          <div class="panel-header">
+            <div>
+              <h3>立即備份</h3>
+              <p>備份範圍固定為：合約、收款、業績獎金、退款，各為同一份 Excel 中的一個分頁。匯出＋上傳期間請勿關閉頁面。</p>
+            </div>
+          </div>
+          <button type="button" [disabled]="backupTriggering()" (click)="triggerBackup()">
+            {{ backupTriggering() ? '備份中…' : '立即備份' }}
+          </button>
+
+          <div class="settle-result" *ngIf="backupResult() as result">
+            <ng-container *ngIf="result.success; else backupFailed">
+              備份完成（{{ result.createdAt }}）：{{ result.fileName }}
+              <a [href]="result.driveUrl" target="_blank" rel="noopener" *ngIf="result.driveUrl">開啟 Google Drive 連結</a>
+            </ng-container>
+            <ng-template #backupFailed>
+              備份失敗：{{ result.errorMessage }}
+            </ng-template>
+          </div>
+        </div>
+
+        <div class="empty-hint" *ngIf="!canManageBackup()">僅主管可執行資料備份。</div>
+
+        <div class="panel-header" *ngIf="canManageBackup()">
+          <div>
+            <h3>備份歷史紀錄</h3>
+          </div>
+        </div>
+
+        <div class="simple-table" *ngIf="canManageBackup()">
+          <div class="simple-row header">
+            <span>觸發者</span>
+            <span>時間</span>
+            <span>檔名</span>
+            <span>狀態</span>
+            <span>Drive 連結</span>
+          </div>
+          <div class="simple-row" *ngFor="let log of backupLogs()">
+            <span class="stacked-field">
+              <span class="stacked-field-label">觸發者</span>
+              {{ log.triggered_by_name || '-' }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">時間</span>
+              {{ log.created_at }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">檔名</span>
+              {{ log.file_name }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">狀態</span>
+              {{ log.status === 'SUCCESS' ? '成功' : '失敗' }}
+            </span>
+            <span class="stacked-field">
+              <span class="stacked-field-label">Drive 連結</span>
+              <a [href]="log.drive_url" target="_blank" rel="noopener" *ngIf="log.drive_url">開啟連結</a>
+              <span *ngIf="!log.drive_url">-</span>
+            </span>
+          </div>
+        </div>
+
+        <div class="empty-hint" *ngIf="canManageBackup() && !backupLogs().length && !backupLogsLoading()">
+          尚無備份紀錄。
+        </div>
+      </section>
+    </section>
   </main>
   <router-outlet></router-outlet>
 </div>

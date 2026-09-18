@@ -115,5 +115,6 @@ public class AuthService extends CmsJdbcSupport {
         user.put("canManageBranch", "主管".equals(roleName));
         user.put("canReviewRefund", "主管".equals(roleName));
         user.put("canManageBonusRules", "主管".equals(roleName));
+        user.put("canManageBackup", "主管".equals(roleName));
     }
 }

@@ -17,6 +17,9 @@ spring:
 cms:
   seed:
     enabled: ${CMS_SEED_ENABLED:true}
+  backup:
+    google-service-account-json: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_JSON:}
+    drive-folder-id: ${GOOGLE_DRIVE_BACKUP_FOLDER_ID:}
 
 management:
   endpoints:

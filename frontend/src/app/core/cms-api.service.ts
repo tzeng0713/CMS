@@ -59,6 +59,28 @@ export interface AuthUser {
   canManageBranch: boolean;
   canReviewRefund: boolean;
   canManageBonusRules: boolean;
+  canManageBackup: boolean;
+}
+
+export interface BackupTriggerResult {
+  success: boolean;
+  fileName: string;
+  driveFileId: string | null;
+  driveUrl: string | null;
+  createdAt: string;
+  errorMessage: string | null;
+}
+
+export interface BackupLogSummary {
+  backup_log_id: number;
+  triggered_by: number;
+  triggered_by_name: string | null;
+  file_name: string;
+  drive_file_id: string | null;
+  drive_url: string | null;
+  status: 'SUCCESS' | 'FAILED';
+  error_message: string | null;
+  created_at: string;
 }
 
 export interface CustomerSummary {
@@ -838,5 +860,13 @@ export class CmsApiService {
 
   generateTaxBureauNotice(payload: TaxBureauNoticeGenerateRequest): Observable<Blob> {
     return this.http.post(`${this.baseUrl}/tax-bureau-notices/generate`, payload, { responseType: 'blob' });
+  }
+
+  triggerBackup(staffId: number): Observable<BackupTriggerResult> {
+    return this.http.post<BackupTriggerResult>(`${this.baseUrl}/backups/trigger`, { staffId });
+  }
+
+  backupLogs(): Observable<BackupLogSummary[]> {
+    return this.http.get<BackupLogSummary[]>(`${this.baseUrl}/backups/logs`);
   }
 }

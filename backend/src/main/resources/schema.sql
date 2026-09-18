@@ -242,3 +242,15 @@ CREATE TABLE IF NOT EXISTS performance_bonuses (
   CONSTRAINT fk_performance_bonuses_rent_payment FOREIGN KEY (rent_payment_id) REFERENCES rent_payments(rent_payment_id),
   CONSTRAINT fk_performance_bonuses_created_by FOREIGN KEY (created_by) REFERENCES staff(staff_id)
 );
+
+CREATE TABLE IF NOT EXISTS backup_logs (
+  backup_log_id BIGINT PRIMARY KEY,
+  triggered_by BIGINT NOT NULL,
+  file_name VARCHAR(255) NOT NULL,
+  drive_file_id VARCHAR(255),
+  drive_url VARCHAR(500),
+  status VARCHAR(20) NOT NULL,
+  error_message VARCHAR(1000),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_backup_logs_staff FOREIGN KEY (triggered_by) REFERENCES staff(staff_id)
+);
