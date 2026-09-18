@@ -6,7 +6,10 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.mock.web.MockMultipartFile;
@@ -969,16 +972,21 @@ class CmsApplicationTests {
 
     @Test
     void schemaMigrationAddsStaffEmailAndIndexToAnExistingStaffTable() {
-        jdbc.execute("DROP INDEX IF EXISTS idx_staff_email");
-        jdbc.execute("ALTER TABLE staff DROP COLUMN email");
+        DriverManagerDataSource legacyDataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:staff_email_migration;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa", "");
+        new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(legacyDataSource);
+        JdbcTemplate legacyJdbc = new JdbcTemplate(legacyDataSource);
+        legacyJdbc.execute("DROP INDEX IF EXISTS idx_staff_email");
+        legacyJdbc.execute("ALTER TABLE staff DROP COLUMN email");
 
-        new SchemaMigrationRunner(jdbc).run();
+        new SchemaMigrationRunner(legacyJdbc).run();
 
-        Integer emailColumn = jdbc.queryForObject("""
+        Integer emailColumn = legacyJdbc.queryForObject("""
                 SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
                 WHERE LOWER(TABLE_NAME) = 'staff' AND LOWER(COLUMN_NAME) = 'email'
                 """, Integer.class);
-        Integer emailIndex = jdbc.queryForObject("""
+        Integer emailIndex = legacyJdbc.queryForObject("""
                 SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES
                 WHERE LOWER(INDEX_NAME) = 'idx_staff_email'
                 """, Integer.class);

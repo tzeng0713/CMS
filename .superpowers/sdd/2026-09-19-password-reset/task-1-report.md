@@ -148,3 +148,46 @@ BUILD SUCCESS
 ### Remaining concern
 
 Duplicate-email persistence is database-enforced; mapping that database constraint to HTTP 409 remains for the later API/error-handling work. Registration email validation remains intentionally deferred.
+
+---
+
+## Review-fix round 2 — migration test isolation
+
+### Change
+
+`schemaMigrationAddsStaffEmailAndIndexToAnExistingStaffTable` no longer drops the shared Spring test database's `staff.email` column. It now creates an independent H2 database, initializes it from `schema.sql`, removes `email` there to emulate the legacy schema, and runs `SchemaMigrationRunner` against that private `JdbcTemplate`.
+
+The test continues to assert that both `staff.email` and `idx_staff_email` are restored, while the shared seeded staff rows (including `staff@cms.test`) remain untouched for every other test.
+
+### Verification
+
+Focused command:
+
+```powershell
+& '..\..\..\tools\apache-maven-3.9.9\bin\mvn.cmd' test '-Dtest=CmsApplicationTests#schemaMigrationAddsStaffEmailAndIndexToAnExistingStaffTable+staffCanBeFilteredAndRoleUpdated'
+```
+
+Result:
+
+```text
+Tests run: 2, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+Full command:
+
+```powershell
+& '..\..\..\tools\apache-maven-3.9.9\bin\mvn.cmd' test
+```
+
+Result:
+
+```text
+Tests run: 35, Failures: 0, Errors: 0, Skipped: 0
+BUILD SUCCESS
+```
+
+Changed files:
+
+- `backend/src/test/java/com/example/cms/CmsApplicationTests.java`
+- `.superpowers/sdd/2026-09-19-password-reset/task-1-report.md`
