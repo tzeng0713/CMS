@@ -1,9 +1,10 @@
-<section class="auth-page" *ngIf="!currentUser(); else appShell">
+<section class="auth-page" *ngIf="!currentUser(); else signedIn">
   <section class="auth-card">
     <div class="auth-intro">
       <span class="brand-mark">CMS</span>
       <h1>客戶管理資訊系統</h1>
-      <p *ngIf="authMode() === 'login' || authMode() === 'register'">請登入後使用客戶與租金作業。</p>
+      <p *ngIf="authMode() === 'login'">請登入後使用客戶與租金作業。</p>
+      <p *ngIf="authMode() === 'register'">完成 Email 驗證與主管審核後，即可使用系統。</p>
       <p *ngIf="authMode() === 'verification-pending'">請完成 Email 驗證後啟用帳號。</p>
       <p *ngIf="authMode() === 'verify'">驗證完成後，你就能安全登入系統。</p>
       <p *ngIf="authMode() === 'forgot'">輸入帳號或工作 Email，我們會協助你重設密碼。</p>
@@ -57,12 +58,14 @@
         </span>
         <span class="auth-field-help">至少 8 個字元</span>
       </label>
-      <label>
-        申請權限
-        <select name="registerRoleName" [(ngModel)]="registerForm.roleName">
-          <option *ngFor="let role of roleOptions" [ngValue]="role">{{ role }}</option>
-        </select>
-      </label>
+      <section class="application-path" aria-label="帳號開通流程">
+        <span><b>1</b>送出申請</span>
+        <span><b>2</b>驗證 Email</span>
+        <span><b>3</b>主管開通</span>
+      </section>
+      <p class="auth-field-help application-note">
+        自助申請帳號會先設定為一般秘書；主管審核後，才會依工作需要調整角色權限。
+      </p>
       <div class="form-actions">
         <button type="submit" [disabled]="authBusy()">{{ authBusy() ? '送出中…' : '送出申請' }}</button>
         <button type="button" class="ghost" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
@@ -72,7 +75,7 @@
     <form class="auth-form" *ngIf="authMode() === 'verification-pending'" (ngSubmit)="requestEmailVerification()">
       <div class="auth-form-heading">
         <h2>驗證你的 Email</h2>
-        <p>請開啟註冊信箱中的驗證連結。尚未收到信件時，可重新寄送。</p>
+        <p>請開啟註冊信箱中的驗證連結。完成驗證後，帳號會送交主管審核；尚未收到信件時，可重新寄送。</p>
       </div>
       <label>
         帳號或工作 Email
@@ -87,7 +90,7 @@
     <form class="auth-form" *ngIf="authMode() === 'verify'" (ngSubmit)="completeEmailVerification()">
       <div class="auth-form-heading">
         <h2>完成 Email 驗證</h2>
-        <p>確認後會啟用此帳號；此驗證連結只能使用一次。</p>
+        <p>確認後會完成信箱驗證，並送交主管開通；此驗證連結只能使用一次。</p>
       </div>
       <div class="form-actions">
         <button type="submit" [disabled]="authBusy()">{{ authBusy() ? '驗證中…' : '完成驗證' }}</button>
@@ -140,6 +143,35 @@
     </form>
   </section>
 </section>
+
+<ng-template #signedIn>
+  <section class="approval-pending-page" *ngIf="isAccountPending(); else appShell" aria-labelledby="approval-pending-title">
+    <article class="approval-pending-card" *ngIf="currentUser() as user">
+      <div class="approval-pending-symbol" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3.2 19 6v5.1c0 4.3-2.8 8.2-7 9.7-4.2-1.5-7-5.4-7-9.7V6l7-2.8Z"></path><path d="m9.4 12 1.7 1.7 3.7-3.8"></path></svg>
+      </div>
+      <p class="approval-pending-kicker">帳號審核中</p>
+      <h1 id="approval-pending-title">已完成登入，等待主管開通</h1>
+      <p class="approval-pending-copy">
+        {{ user.staff_name }}，我們已確認你的 Email。為保護客戶與租約資料，你的帳號尚未開通任何系統功能。
+      </p>
+
+      <ol class="approval-progress" aria-label="帳號開通進度">
+        <li class="complete"><span>1</span><div><strong>已送出申請</strong><small>帳號資料已建立</small></div></li>
+        <li class="complete"><span>2</span><div><strong>Email 已驗證</strong><small>已確認可聯繫的工作信箱</small></div></li>
+        <li class="current"><span>3</span><div><strong>等待主管開通</strong><small>核准後，請登出再重新登入</small></div></li>
+      </ol>
+
+      <div class="approval-pending-account">
+        <span>申請帳號</span>
+        <strong>{{ user.account }}</strong>
+      </div>
+      <div class="approval-pending-actions">
+        <button type="button" (click)="logout()">登出</button>
+      </div>
+    </article>
+  </section>
+</ng-template>
 
 <ng-template #appShell>
 <div class="shell" [class.sidebar-open]="sidebarOpen()" [class.sidebar-collapsed]="!sidebarOpen()">
@@ -1619,7 +1651,7 @@
         <div class="panel-header">
           <div>
             <h2>職員總覽</h2>
-            <p>依分館查詢職員資料；只有主管可以修改角色權限與工作 Email。</p>
+            <p>主管可審核已完成 Email 驗證的帳號，並調整角色權限與工作 Email。</p>
           </div>
           <label class="inline-filter">
             分館
@@ -1638,6 +1670,8 @@
             <span>職員名稱</span>
             <span>工作 Email</span>
             <span>角色權限</span>
+            <span>帳號狀態</span>
+            <span>開通作業</span>
           </div>
           <div class="simple-row staff-row" *ngFor="let row of staffRows()">
             <span>{{ value(row, 'branch_name') }}</span>
@@ -1672,6 +1706,26 @@
             <ng-template #roleReadOnly>
               <span>{{ value(row, 'role_name') }}</span>
             </ng-template>
+            <span>
+              <span
+                class="approval-status"
+                [class.active]="row['account_status'] === 'ACTIVE'"
+                [class.waiting]="row['account_status'] === 'PENDING_APPROVAL'"
+                [class.unverified]="row['account_status'] === 'EMAIL_UNVERIFIED'"
+              >
+                <i aria-hidden="true"></i>{{ accountStatusLabel(row) }}
+              </span>
+            </span>
+            <span class="staff-approval-cell">
+              <button
+                *ngIf="canEditStaff() && isPendingApproval(row)"
+                type="button"
+                class="approval-action"
+                (click)="approveStaffAccount(row)"
+              >核准開通</button>
+              <small *ngIf="row['account_status'] === 'ACTIVE'">{{ accountApprovedByLabel(row) }}</small>
+              <small *ngIf="row['account_status'] === 'EMAIL_UNVERIFIED'">尚待信箱驗證</small>
+            </span>
           </div>
         </div>
       </section>

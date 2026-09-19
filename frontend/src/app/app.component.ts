@@ -273,7 +273,6 @@ export class AppComponent implements OnInit {
   readonly chargeListBankInfo = CHARGE_LIST_BANK_INFO;
   readonly chargeListBankAccountName = CHARGE_LIST_BANK_ACCOUNT_NAME;
   readonly chargeListBankAccountNumber = CHARGE_LIST_BANK_ACCOUNT_NUMBER;
-  readonly roleOptions = ['主管', '督導秘書', '一般秘書'];
   readonly statusOptions = [
     { value: 0, label: '租賃中' },
     { value: 1, label: '解約中' },
@@ -513,8 +512,7 @@ export class AppComponent implements OnInit {
     staffName: '',
     account: '',
     email: '',
-    password: '',
-    roleName: '一般秘書'
+    password: ''
   };
 
   forgotPasswordForm = {
@@ -646,7 +644,7 @@ export class AppComponent implements OnInit {
     } else {
       this.applyRoute(this.router.url);
     }
-    if (this.currentUser()) {
+    if (this.currentUser() && !this.isAccountPending()) {
       this.refresh();
     }
   }
@@ -873,7 +871,7 @@ export class AppComponent implements OnInit {
         this.authBusy.set(false);
         this.emailVerificationForm.token = '';
         this.authMode.set('login');
-        this.authNotice.set('Email 驗證完成，現在可以登入。');
+        this.authNotice.set('Email 驗證完成，帳號已送交主管審核。');
       },
       error: () => {
         this.authBusy.set(false);
@@ -1604,6 +1602,10 @@ export class AppComponent implements OnInit {
     });
   }
 
+  isAccountPending(): boolean {
+    return this.currentUser()?.is_account_approved === false;
+  }
+
   updateStaffEmail(row: Record<string, unknown>, email: string): void {
     if (!this.canEditStaff()) {
       return;
@@ -1626,6 +1628,50 @@ export class AppComponent implements OnInit {
           ? '此工作 Email 已由其他職員使用。'
           : '工作 Email 更新失敗，請確認格式。';
         this.error.set(message);
+        this.loadStaffOverview();
+      }
+    });
+  }
+
+  isPendingApproval(row: Record<string, unknown>): boolean {
+    return row['account_status'] === 'PENDING_APPROVAL';
+  }
+
+  accountStatusLabel(row: Record<string, unknown>): string {
+    switch (row['account_status']) {
+      case 'ACTIVE':
+        return '已開通';
+      case 'PENDING_APPROVAL':
+        return '待主管審核';
+      default:
+        return '待 Email 驗證';
+    }
+  }
+
+  accountApprovedByLabel(row: Record<string, unknown>): string {
+    const approvedBy = row['account_approved_by_name'];
+    return typeof approvedBy === 'string' && approvedBy ? `核准：${approvedBy}` : '既有帳號';
+  }
+
+  approveStaffAccount(row: Record<string, unknown>): void {
+    if (!this.canEditStaff() || !this.isPendingApproval(row)) {
+      return;
+    }
+    const staffId = Number(row['staff_id']);
+    const approvedByStaffId = this.currentStaffId();
+    if (!staffId || !approvedByStaffId) {
+      return;
+    }
+    this.api.approveStaff(staffId, { approvedByStaffId }).subscribe({
+      next: () => {
+        this.error.set('');
+        this.showToast('帳號已核准開通，對方重新登入後即可使用系統。');
+        this.loadStaffOverview();
+      },
+      error: (response: HttpErrorResponse) => {
+        this.error.set(response.status === 409
+          ? '此帳號尚未完成 Email 驗證，或已完成開通。'
+          : '帳號開通失敗，請重新整理後再試。');
         this.loadStaffOverview();
       }
     });
@@ -2913,6 +2959,10 @@ export class AppComponent implements OnInit {
     this.authMode.set('login');
     this.error.set('');
     this.success.set('');
+    if (this.isAccountPending()) {
+      this.router.navigateByUrl('/home');
+      return;
+    }
     this.loadDashboard();
     this.applyRoute(this.router.url === '/' ? '/home' : this.router.url);
   }
@@ -3122,7 +3172,7 @@ export class AppComponent implements OnInit {
 
   private applyRoute(url: string): void {
     const path = url.split('?')[0].split('#')[0];
-    if (!this.currentUser()) {
+    if (!this.currentUser() || this.isAccountPending()) {
       return;
     }
     const customerMatch = path.match(/^\/customers\/(\d+)$/);

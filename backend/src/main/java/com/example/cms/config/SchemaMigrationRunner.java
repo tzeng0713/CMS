@@ -23,6 +23,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         migrateStaffBranch();
         migrateStaffEmail();
         migrateStaffEmailVerification();
+        migrateStaffAccountApproval();
         migrateCustomerRentalFields();
         migrateCustomerWorkflowFields();
         migrateCustomerRelationTables();
@@ -75,6 +76,13 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
                   CONSTRAINT fk_email_verification_tokens_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
                 )
                 """);
+    }
+
+    private void migrateStaffAccountApproval() {
+        // Existing staff must retain access after the feature is introduced. New self-service
+        // registrations explicitly set this value to NULL until a manager approves them.
+        addColumnIfMissing("staff", "account_approved_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        addColumnIfMissing("staff", "account_approved_by", "BIGINT");
     }
 
     private void migrateCustomerRentalFields() {

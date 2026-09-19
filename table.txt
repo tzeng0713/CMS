@@ -73,9 +73,12 @@ CREATE TABLE staff (
   account VARCHAR(80) NOT NULL,
   email VARCHAR(254),
   email_verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  account_approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  account_approved_by BIGINT,
   password_hash VARCHAR(255),
   CONSTRAINT fk_staff_role FOREIGN KEY (role_permission_id) REFERENCES role_permissions(role_permission_id),
-  CONSTRAINT fk_staff_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
+  CONSTRAINT fk_staff_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id),
+  CONSTRAINT fk_staff_approved_by FOREIGN KEY (account_approved_by) REFERENCES staff(staff_id)
 );
 
 CREATE TABLE password_reset_tokens (

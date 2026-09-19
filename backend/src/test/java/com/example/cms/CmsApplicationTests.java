@@ -34,6 +34,7 @@ import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -702,7 +703,7 @@ class CmsApplicationTests {
     }
 
     @Test
-    void staffCanLoginAndRegisterAfterEmailVerification() throws Exception {
+    void staffCanRegisterButMustVerifyEmailBeforeLoggingIn() throws Exception {
         mvc.perform(post("/api/auth/login")
                         .contentType("application/json")
                 .content("""
@@ -724,8 +725,7 @@ class CmsApplicationTests {
                                   "staffName": "Test Secretary",
                                   "account": "test.secretary",
                                   "password": "secret123",
-                                  "email": "test.secretary@cms.test",
-                                  "roleName": "一般秘書"
+                                  "email": "test.secretary@cms.test"
                                 }
                                 """))
                 .andExpect(status().isAccepted())
@@ -733,7 +733,9 @@ class CmsApplicationTests {
 
         Integer unverified = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM staff
-                WHERE account = 'test.secretary' AND email_verified_at IS NULL
+                WHERE account = 'test.secretary'
+                  AND email_verified_at IS NULL
+                  AND account_approved_at IS NULL
                 """, Integer.class);
         org.junit.jupiter.api.Assertions.assertEquals(1, unverified);
 
@@ -741,6 +743,35 @@ class CmsApplicationTests {
                         .contentType("application/json")
                         .content("{\"account\":\"test.secretary\",\"password\":\"secret123\"}"))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void verifiedSelfRegisteredAccountWaitsForManagerApproval() throws Exception {
+        long staffId = insertPasswordResetStaff("pending-approval", "pending-approval@cms.test", "verify-password");
+        jdbc.update("UPDATE staff SET account_approved_at = NULL, account_approved_by = NULL WHERE staff_id = ?", staffId);
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"pending-approval\",\"password\":\"verify-password\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.account_status", is("PENDING_APPROVAL")))
+                .andExpect(jsonPath("$.is_account_approved", is(false)))
+                .andExpect(jsonPath("$.canCreateOffice", is(false)));
+
+        mvc.perform(patch("/api/staff/{id}/approval", staffId)
+                        .contentType("application/json")
+                        .content("{\"approvedByStaffId\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.account_status", is("ACTIVE")))
+                .andExpect(jsonPath("$.account_approved_by", is(1)));
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"pending-approval\",\"password\":\"verify-password\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.account_status", is("ACTIVE")))
+                .andExpect(jsonPath("$.is_account_approved", is(true)))
+                .andExpect(jsonPath("$.canCreateOffice", is(true)));
     }
 
     @Test
@@ -1098,6 +1129,7 @@ class CmsApplicationTests {
         JdbcTemplate legacyJdbc = new JdbcTemplate(legacyDataSource);
         legacyJdbc.execute("DROP INDEX IF EXISTS idx_staff_email");
         legacyJdbc.execute("DROP TABLE IF EXISTS email_verification_tokens");
+        legacyJdbc.execute("ALTER TABLE staff DROP COLUMN account_approved_at");
         legacyJdbc.execute("ALTER TABLE staff DROP COLUMN email_verified_at");
         legacyJdbc.execute("ALTER TABLE staff DROP COLUMN email");
 
@@ -1123,6 +1155,11 @@ class CmsApplicationTests {
                 """, Integer.class);
         org.junit.jupiter.api.Assertions.assertEquals(1, verificationColumn);
         org.junit.jupiter.api.Assertions.assertEquals(1, verificationTable);
+        Integer approvalColumn = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE LOWER(TABLE_NAME) = 'staff' AND LOWER(COLUMN_NAME) = 'account_approved_at'
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, approvalColumn);
     }
 
     @Test

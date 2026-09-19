@@ -50,6 +50,9 @@ export interface AuthUser {
   role_permission_id: number;
   role_name: string;
   scope: string | null;
+  account_approved_at?: string | null;
+  account_status?: 'ACTIVE' | 'PENDING_APPROVAL';
+  is_account_approved?: boolean;
   canCreateRent: boolean;
   canEditRent: boolean;
   canEditStaff: boolean;
@@ -449,7 +452,7 @@ export class CmsApiService {
     return this.http.post<AuthUser>(`${this.baseUrl}/auth/login`, payload);
   }
 
-  register(payload: { staffName: string; account: string; email: string; password: string; roleName: string }): Observable<{ message: string }> {
+  register(payload: { staffName: string; account: string; email: string; password: string }): Observable<{ message: string }> {
     return this.http.post<{ message: string }>(`${this.baseUrl}/auth/register`, payload);
   }
 
@@ -594,6 +597,10 @@ export class CmsApiService {
 
   updateStaff(id: number, payload: { rolePermissionId: number; email?: string }): Observable<Record<string, unknown>> {
     return this.http.put<Record<string, unknown>>(`${this.baseUrl}/staff/${id}`, payload);
+  }
+
+  approveStaff(id: number, payload: { approvedByStaffId: number }): Observable<Record<string, unknown>> {
+    return this.http.patch<Record<string, unknown>>(`${this.baseUrl}/staff/${id}/approval`, payload);
   }
 
   rentPayments(

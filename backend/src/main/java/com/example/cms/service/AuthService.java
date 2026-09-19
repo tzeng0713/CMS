@@ -58,7 +58,8 @@ public class AuthService extends CmsJdbcSupport {
         }
         try {
             Map<String, Object> user = jdbc.queryForMap("""
-                    SELECT s.staff_id, s.staff_name, s.account, s.password_hash, s.email_verified_at, s.branch_id,
+                    SELECT s.staff_id, s.staff_name, s.account, s.password_hash, s.email_verified_at,
+                           s.account_approved_at, s.branch_id,
                            b.branch_name, r.role_permission_id, r.role_name, r.scope
                     FROM staff s
                     JOIN role_permissions r ON r.role_permission_id = s.role_permission_id
@@ -88,8 +89,7 @@ public class AuthService extends CmsJdbcSupport {
         if (request.staffName() == null || request.staffName().isBlank()
                 || request.account() == null || request.account().isBlank()
                 || request.password() == null || request.password().isBlank()
-                || request.email() == null || request.email().isBlank()
-                || request.roleName() == null || request.roleName().isBlank()) {
+                || request.email() == null || request.email().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "all fields are required");
         }
         String email = request.email().trim();
@@ -108,15 +108,18 @@ public class AuthService extends CmsJdbcSupport {
         }
         Long roleId;
         try {
-            roleId = jdbc.queryForObject("SELECT role_permission_id FROM role_permissions WHERE role_name = ?",
-                    Long.class, request.roleName().trim());
+            roleId = jdbc.queryForObject("SELECT role_permission_id FROM role_permissions WHERE role_name = '一般秘書'",
+                    Long.class);
         } catch (EmptyResultDataAccessException e) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid role");
         }
         Long staffId = nextId("staff", "staff_id");
         jdbc.update("""
-                INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, email, email_verified_at, password_hash)
-                VALUES (?, ?, 1, ?, ?, ?, NULL, ?)
+                INSERT INTO staff (
+                  staff_id, role_permission_id, branch_id, staff_name, account, email,
+                  email_verified_at, account_approved_at, account_approved_by, password_hash
+                )
+                VALUES (?, ?, 1, ?, ?, ?, NULL, NULL, NULL, ?)
                 """, staffId, roleId, request.staffName().trim(), request.account().trim(),
                 email, passwordEncoder.encode(request.password()));
         issueEmailVerification(staffId, email);
@@ -326,14 +329,17 @@ public class AuthService extends CmsJdbcSupport {
     }
 
     private void applyPermissions(Map<String, Object> user) {
+        boolean accountApproved = user.get("account_approved_at") != null;
         String roleName = (String) user.get("role_name");
-        user.put("canCreateRent", "主管".equals(roleName));
-        user.put("canEditRent", !"一般秘書".equals(roleName));
-        user.put("canEditStaff", "主管".equals(roleName));
-        user.put("canCreateOffice", true);
-        user.put("canEditAllBranches", "主管".equals(roleName));
-        user.put("canViewAllOffices", !"一般秘書".equals(roleName));
-        user.put("canManageBranch", "主管".equals(roleName));
-        user.put("canReviewRefund", "主管".equals(roleName));
+        user.put("account_status", accountApproved ? "ACTIVE" : "PENDING_APPROVAL");
+        user.put("is_account_approved", accountApproved);
+        user.put("canCreateRent", accountApproved && "主管".equals(roleName));
+        user.put("canEditRent", accountApproved && !"一般秘書".equals(roleName));
+        user.put("canEditStaff", accountApproved && "主管".equals(roleName));
+        user.put("canCreateOffice", accountApproved);
+        user.put("canEditAllBranches", accountApproved && "主管".equals(roleName));
+        user.put("canViewAllOffices", accountApproved && !"一般秘書".equals(roleName));
+        user.put("canManageBranch", accountApproved && "主管".equals(roleName));
+        user.put("canReviewRefund", accountApproved && "主管".equals(roleName));
     }
 }
