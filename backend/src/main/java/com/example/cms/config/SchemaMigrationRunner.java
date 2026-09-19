@@ -127,7 +127,8 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
 
     private void addColumnIfMissing(String tableName, String columnName, String definition) {
         jdbc.execute((ConnectionCallback<Void>) connection -> {
-            try (var columns = connection.getMetaData().getColumns(null, null, tableName, columnName)) {
+            try (var columns = connection.getMetaData().getColumns(
+                    metadataCatalog(connection), null, tableName, columnName)) {
                 if (columns.next()) {
                     return null;
                 }
@@ -374,7 +375,8 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
 
     private void addIndexIfMissing(String table, String indexName, String column) {
         jdbc.execute((ConnectionCallback<Void>) connection -> {
-            try (var indexes = connection.getMetaData().getIndexInfo(null, null, table, false, false)) {
+            try (var indexes = connection.getMetaData().getIndexInfo(
+                    metadataCatalog(connection), null, table, false, false)) {
                 while (indexes.next()) {
                     if (indexName.equalsIgnoreCase(indexes.getString("INDEX_NAME"))) {
                         return null;
@@ -388,7 +390,8 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
 
     private void addUniqueIndexIfMissing(String table, String indexName, String column) {
         jdbc.execute((ConnectionCallback<Void>) connection -> {
-            try (var indexes = connection.getMetaData().getIndexInfo(null, null, table, false, false)) {
+            try (var indexes = connection.getMetaData().getIndexInfo(
+                    metadataCatalog(connection), null, table, false, false)) {
                 while (indexes.next()) {
                     if (indexName.equalsIgnoreCase(indexes.getString("INDEX_NAME"))) {
                         return null;
@@ -408,6 +411,12 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         addColumnIfMissing("branches", "bank_account",      "VARCHAR(50)");
         addColumnIfMissing("branches", "bank_branch",       "VARCHAR(100)");
         addColumnIfMissing("branches", "bank_account_name", "VARCHAR(100)");
+    }
+
+    private String metadataCatalog(java.sql.Connection connection) throws java.sql.SQLException {
+        return connection.getMetaData().getDatabaseProductName().toLowerCase().contains("mysql")
+                ? connection.getCatalog()
+                : null;
     }
 
     private void migrateContractLeaseStatus() {
