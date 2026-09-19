@@ -2,6 +2,8 @@ package com.example.cms;
 
 import com.example.cms.config.SchemaMigrationRunner;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -19,16 +21,20 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
@@ -622,9 +628,17 @@ class CmsApplicationTests {
                 .andExpect(jsonPath("$.owner_birthday", is("1990-03-04")))
                 .andExpect(jsonPath("$.referrer", is("Ref Two")));
 
-        mvc.perform(get("/api/customers/lookup").param("search", "TEST002"))
+        mvc.perform(get("/api/customers/lookup").param("search", "Edited Customer"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].company_name", is("Edited Customer Co")));
+
+        mvc.perform(get("/api/customers/lookup").param("search", "TEST002"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+
+        mvc.perform(get("/api/customers/lookup").param("search", "Owner Two"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
     }
 
     @Test
@@ -703,6 +717,133 @@ class CmsApplicationTests {
     }
 
     @Test
+    void rentPaymentExcelImportPreviewsEachRowBeforeWriting() throws Exception {
+        long customerId = insertDashboardCustomer("Excel Preview Co", "1980-01-01");
+        insertDashboardContractWithTerms(customerId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31),
+                "辦公室", 1, 12000, "綁約中");
+
+        MockMultipartFile workbook = rentPaymentWorkbook(List.of(
+                new String[] { "公司名稱", "租金月份", "繳款日期", "費用起日", "費用迄日", "金額", "收據號碼", "備註" },
+                new String[] { "Excel Preview Co", "2026-09", "2026-09-05", "2026-09-01", "2026-09-30", "12000", "RCPT-001", "九月租金" },
+                new String[] { "不存在的客戶", "2026-09", "2026-09-05", "", "", "8000", "RCPT-002", "" }
+        ));
+
+        mvc.perform(multipart("/api/rent-payments/import-preview").file(workbook))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fileName", is("rent-payment-import.xlsx")))
+                .andExpect(jsonPath("$.totalRows", is(2)))
+                .andExpect(jsonPath("$.validRows", is(1)))
+                .andExpect(jsonPath("$.errorRows", is(1)))
+                .andExpect(jsonPath("$.rows[0].rowNumber", is(2)))
+                .andExpect(jsonPath("$.rows[0].valid", is(true)))
+                .andExpect(jsonPath("$.rows[0].paymentMonth", is("2026-09")))
+                .andExpect(jsonPath("$.rows[1].valid", is(false)))
+                .andExpect(jsonPath("$.rows[1].errors", hasItem("找不到客戶")));
+    }
+
+    @Test
+    void rentPaymentExcelImportReportsMissingHeadersAndDuplicateRows() throws Exception {
+        MockMultipartFile missingHeaderWorkbook = rentPaymentWorkbook(List.of(
+                new String[] { "公司名稱", "租金月份", "繳款日期", "金額" },
+                new String[] { "任意公司", "2026-09", "2026-09-05", "12000" }
+        ));
+
+        mvc.perform(multipart("/api/rent-payments/import-preview").file(missingHeaderWorkbook))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("缺少必要欄位：費用起日、費用迄日、收據號碼、備註")));
+
+        long customerId = insertDashboardCustomer("Excel Duplicate Co", "1980-01-01");
+        insertDashboardContractWithTerms(customerId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31),
+                "辦公室", 1, 12000, "綁約中");
+        MockMultipartFile duplicateWorkbook = rentPaymentWorkbook(List.of(
+                new String[] { "公司名稱", "租金月份", "繳款日期", "費用起日", "費用迄日", "金額", "收據號碼", "備註" },
+                new String[] { "Excel Duplicate Co", "2026-09", "2026-09-05", "", "", "12000", "RCPT-003", "" },
+                new String[] { "Excel Duplicate Co", "2026-09", "2026-09-05", "", "", "12000", "RCPT-003", "" }
+        ));
+
+        mvc.perform(multipart("/api/rent-payments/import-preview").file(duplicateWorkbook))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validRows", is(1)))
+                .andExpect(jsonPath("$.errorRows", is(1)))
+                .andExpect(jsonPath("$.rows[1].errors", hasItem("Excel 內有重複的對帳資料")));
+    }
+
+    @Test
+    void rentPaymentExcelImportRevalidatesAndWritesAllRowsAtomically() throws Exception {
+        long customerId = insertDashboardCustomer("Excel Atomic Co", "1980-01-01");
+        insertDashboardContractWithTerms(customerId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31),
+                "辦公室", 1, 12000, "綁約中");
+        int before = jdbc.queryForObject("SELECT COUNT(*) FROM rent_payments", Integer.class);
+
+        String invalidPayload = """
+                {
+                  "updatedBy": 1,
+                  "rows": [
+                    {
+                      "rowNumber": 2,
+                      "companyName": "Excel Atomic Co",
+                      "paymentMonth": "2026-09",
+                      "paymentDateText": "2026-09-05",
+                      "feeStartDateText": "2026-09-01",
+                      "feeEndDateText": "2026-09-30",
+                      "amount": "12000",
+                      "receiptNo": "RCPT-004",
+                      "note": ""
+                    },
+                    {
+                      "rowNumber": 3,
+                      "companyName": "不存在的客戶",
+                      "paymentMonth": "2026-09",
+                      "paymentDateText": "2026-09-05",
+                      "feeStartDateText": "",
+                      "feeEndDateText": "",
+                      "amount": "8000",
+                      "receiptNo": "RCPT-005",
+                      "note": ""
+                    }
+                  ]
+                }
+                """;
+
+        mvc.perform(post("/api/rent-payments/import")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidPayload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("第 3 列：找不到客戶")));
+
+        int afterRejectedImport = jdbc.queryForObject("SELECT COUNT(*) FROM rent_payments", Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(before, afterRejectedImport);
+
+        String validPayload = """
+                {
+                  "updatedBy": 1,
+                  "rows": [
+                    {
+                      "rowNumber": 2,
+                      "companyName": "Excel Atomic Co",
+                      "paymentMonth": "2026-09",
+                      "paymentDateText": "2026-09-05",
+                      "feeStartDateText": "2026-09-01",
+                      "feeEndDateText": "2026-09-30",
+                      "amount": "12000",
+                      "receiptNo": "RCPT-004",
+                      "note": ""
+                    }
+                  ]
+                }
+                """;
+
+        mvc.perform(post("/api/rent-payments/import")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.createdCount", is(1)));
+
+        int afterValidImport = jdbc.queryForObject("SELECT COUNT(*) FROM rent_payments", Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(before + 1, afterValidImport);
+    }
+
+    @Test
     void staffCanRegisterButMustVerifyEmailBeforeLoggingIn() throws Exception {
         mvc.perform(post("/api/auth/login")
                         .contentType("application/json")
@@ -760,8 +901,8 @@ class CmsApplicationTests {
 
         mvc.perform(get("/api/staff"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].account", is("pending-approval")))
-                .andExpect(jsonPath("$[0].account_status", is("PENDING_APPROVAL")));
+                .andExpect(jsonPath("$.content[0].account", is("pending-approval")))
+                .andExpect(jsonPath("$.content[0].account_status", is("PENDING_APPROVAL")));
 
         mvc.perform(patch("/api/staff/{id}/approval", staffId)
                         .contentType("application/json")
@@ -1149,11 +1290,35 @@ class CmsApplicationTests {
     }
 
     @Test
-    void staffCanBeFilteredAndRoleUpdated() throws Exception {
-        mvc.perform(get("/api/staff").param("branchId", "1"))
+    void staffCanBePagedFilteredAndRoleUpdated() throws Exception {
+        jdbc.update("DELETE FROM email_verification_tokens WHERE staff_id IN (SELECT staff_id FROM staff WHERE account = 'test.secretary')");
+        jdbc.update("DELETE FROM password_reset_tokens WHERE staff_id IN (SELECT staff_id FROM staff WHERE account = 'test.secretary')");
+        jdbc.update("DELETE FROM staff_profile_change_requests WHERE staff_id IN (SELECT staff_id FROM staff WHERE account = 'test.secretary')");
+        jdbc.update("DELETE FROM staff WHERE account = 'test.secretary'");
+        Integer branchStaffTotal = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM staff WHERE branch_id = 1", Integer.class);
+        int firstPageCount = Math.min(10, branchStaffTotal);
+        int secondPageCount = Math.min(10, Math.max(0, branchStaffTotal - 10));
+
+        mvc.perform(get("/api/staff")
+                        .param("branchId", "1")
+                        .param("page", "0")
+                        .param("pageSize", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].branch_name").exists())
-                .andExpect(jsonPath("$[0].role_name").exists());
+                .andExpect(jsonPath("$.content.length()", is(firstPageCount)))
+                .andExpect(jsonPath("$.totalElements", is(branchStaffTotal)))
+                .andExpect(jsonPath("$.page", is(0)))
+                .andExpect(jsonPath("$.pageSize", is(10)))
+                .andExpect(jsonPath("$.content[0].branch_name").exists())
+                .andExpect(jsonPath("$.content[0].role_name").exists());
+
+        mvc.perform(get("/api/staff")
+                        .param("branchId", "1")
+                        .param("page", "1")
+                        .param("pageSize", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()", is(secondPageCount)))
+                .andExpect(jsonPath("$.totalElements", is(branchStaffTotal)));
 
         mvc.perform(put("/api/staff/3")
                         .contentType("application/json")
@@ -1304,5 +1469,24 @@ class CmsApplicationTests {
                 """, paymentId, customerId, contractId,
                 feeStartDate.getYear() * 100 + feeStartDate.getMonthValue(),
                 feeStartDate.toString(), feeStartDate.toString(), feeEndDate.toString());
+    }
+
+    private MockMultipartFile rentPaymentWorkbook(List<String[]> values) throws IOException {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            var sheet = workbook.createSheet("對帳資料");
+            for (int rowIndex = 0; rowIndex < values.size(); rowIndex++) {
+                Row row = sheet.createRow(rowIndex);
+                String[] cells = values.get(rowIndex);
+                for (int cellIndex = 0; cellIndex < cells.length; cellIndex++) {
+                    row.createCell(cellIndex).setCellValue(cells[cellIndex]);
+                }
+            }
+            workbook.write(output);
+            return new MockMultipartFile(
+                    "file",
+                    "rent-payment-import.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    output.toByteArray());
+        }
     }
 }

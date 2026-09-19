@@ -154,13 +154,10 @@ public class CustomerService extends CmsJdbcSupport {
                   AND co.contract_id = (SELECT MAX(latest.contract_id) FROM contracts latest WHERE latest.customer_id = c.customer_id)
                 LEFT JOIN offices o ON o.office_id = co.office_id
                 LEFT JOIN branches b ON b.branch_id = o.branch_id
-                WHERE (? = '%%'
-                   OR c.company_name LIKE ?
-                   OR c.owner_name LIKE ?
-                   OR c.tax_id LIKE ?)
+                WHERE (? = '%%' OR c.company_name LIKE ?)
                 ORDER BY c.company_name
                 LIMIT 20
-                """, like, like, like, like);
+                """, like, like);
     }
 
     @Transactional

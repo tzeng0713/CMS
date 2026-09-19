@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -22,11 +24,28 @@ public class StaffService extends CmsJdbcSupport {
         this.authService = authService;
     }
 
-    public List<Map<String, Object>> staff(Long branchId) {
+    public Map<String, Object> staff(Long branchId, Integer page, Integer pageSize) {
+        int size = pageSize == null || pageSize <= 0 ? 20 : Math.min(pageSize, 200);
+        int pageNumber = page == null || page < 0 ? 0 : page;
+        String where = branchId == null ? "" : " WHERE s.branch_id = ?";
+        List<Object> filterArguments = new ArrayList<>();
         if (branchId != null) {
-            return jdbc.queryForList(staffListSql() + " WHERE s.branch_id = ?" + staffOrderSql(), branchId);
+            filterArguments.add(branchId);
         }
-        return jdbc.queryForList(staffListSql() + staffOrderSql());
+
+        List<Object> pageArguments = new ArrayList<>(filterArguments);
+        pageArguments.add(size);
+        pageArguments.add(pageNumber * size);
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                staffListSql() + where + staffOrderSql() + " LIMIT ? OFFSET ?", pageArguments.toArray());
+        Long total = jdbc.queryForObject("SELECT COUNT(*) FROM staff s" + where, Long.class, filterArguments.toArray());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("content", rows);
+        result.put("totalElements", total == null ? 0L : total);
+        result.put("page", pageNumber);
+        result.put("pageSize", size);
+        return result;
     }
 
     public Map<String, Object> updateStaff(long id, StaffUpdateRequest request) {

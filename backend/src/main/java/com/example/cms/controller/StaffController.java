@@ -28,8 +28,10 @@ public class StaffController {
     }
 
     @GetMapping
-    public List<Map<String, Object>> staff(@RequestParam(required = false) Long branchId) {
-        return service.staff(branchId);
+    public Map<String, Object> staff(@RequestParam(required = false) Long branchId,
+                                     @RequestParam(required = false) Integer page,
+                                     @RequestParam(required = false) Integer pageSize) {
+        return service.staff(branchId, page, pageSize);
     }
 
     @PutMapping("/{id}")

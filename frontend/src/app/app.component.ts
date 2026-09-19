@@ -22,6 +22,7 @@ import {
   OfficePayload,
   OfficeSummary,
   RoleSummary,
+  RentPaymentImportPreview,
   RentPaymentPayload,
   RefundPayload,
   RefundSearchFilters,
@@ -364,7 +365,7 @@ export class AppComponent implements OnInit {
   authMode = signal<'login' | 'register' | 'verification-pending' | 'verify' | 'forgot' | 'reset'>('login');
   authBusy = signal(false);
   authNotice = signal('');
-  showLoginPassword = signal(false);
+  loginPasswordVisible = signal(false);
   showRegisterPassword = signal(false);
   showResetPassword = signal(false);
   showResetConfirmation = signal(false);
@@ -395,6 +396,9 @@ export class AppComponent implements OnInit {
   pendingProfileChangeRows = signal<Array<Record<string, unknown>>>([]);
   profileEditing = signal(false);
   profileBusy = signal(false);
+  staffTotal = signal(0);
+  staffPage = signal(0);
+  staffPageSize = signal(20);
   contractTotal = signal(0);
   contractPage = signal(0);
   contractPageSize = signal(20);
@@ -402,6 +406,10 @@ export class AppComponent implements OnInit {
   rentPaymentTotal = signal(0);
   rentPaymentPage = signal(0);
   rentPaymentPageSize = signal(20);
+  rentPaymentImportPreview = signal<RentPaymentImportPreview | null>(null);
+  rentPaymentImportPage = signal(0);
+  readonly rentPaymentImportPageSize = 20;
+  rentPaymentImporting = signal(false);
   chargeListRows = signal<ChargeListSummary[]>([]);
   chargeListTotal = signal(0);
   chargeListPage = signal(0);
@@ -447,9 +455,13 @@ export class AppComponent implements OnInit {
   error = signal('');
   success = signal('');
   toast = signal<Toast | null>(null);
+  toastLeaving = signal(false);
   newCustomerFieldErrors = signal<Record<string, string>>({});
   customerEditFieldErrors = signal<Record<string, string>>({});
+  newContractFieldErrors = signal<Record<string, string>>({});
+  contractCustomerDropdownOpen = signal(false);
   private toastTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private toastExitTimeoutId: ReturnType<typeof setTimeout> | null = null;
   search = '';
   rentPaymentFilters: RentPaymentSearchFilters = {
     companyName: '',
@@ -571,6 +583,7 @@ export class AppComponent implements OnInit {
   @ViewChild('chargeListPrintArea') chargeListPrintArea?: ElementRef<HTMLDivElement>;
   @ViewChild('newCompanyNameInput') newCompanyNameInput?: ElementRef<HTMLInputElement>;
   @ViewChild('editCompanyNameInput') editCompanyNameInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('contractCustomerSearchInput') contractCustomerSearchInput?: ElementRef<HTMLInputElement>;
 
   selectedCustomerId = computed(() => this.selectedCustomer()?.customer_id ?? null);
   sameOwnerCompanies = computed(() => this.selectedCustomer()?.sameOwnerCompanies ?? []);
@@ -579,8 +592,11 @@ export class AppComponent implements OnInit {
     const titles: Partial<Record<ViewKey, string>> = {
       home: '客戶與租金作業總覽',
       'customer-search': '查詢客戶',
+      'contract-new': '續約租約',
       'contract-search': '查詢租約',
-      'rent-search': '查詢對帳'
+      'rent-new': '新增對帳',
+      'rent-search': '查詢對帳',
+      'staff-overview': '職員總覽'
     };
     return titles[this.activeView()] ?? 'AFW 商務中心';
   });
@@ -588,33 +604,70 @@ export class AppComponent implements OnInit {
     const subtitles: Partial<Record<ViewKey, string>> = {
       home: 'Customer Operations',
       'customer-search': 'Customer Search',
+      'contract-new': 'Renew Contract',
       'contract-search': 'Contract Search',
-      'rent-search': 'Reconciliation Search'
+      'rent-new': 'New Reconciliation',
+      'rent-search': 'Reconciliation Search',
+      'staff-overview': 'Staff Management'
     };
     return subtitles[this.activeView()] ?? 'AFW Business Center';
   });
+  pageDescription = computed(() => {
+    const descriptions: Partial<Record<ViewKey, string>> = {
+      'contract-new': '選擇客戶後會帶入最新租約資料，請填寫本次續約的日期與變動內容。',
+      'rent-new': '匯入 Excel 後先檢核每筆對帳資料，確認無誤再一次新增。'
+    };
+    return descriptions[this.activeView()] ?? '';
+  });
   customerTotalPages = computed(() => Math.max(1, Math.ceil(this.customerTotal() / this.customerPageSize())));
+  staffTotalPages = computed(() => Math.max(1, Math.ceil(this.staffTotal() / this.staffPageSize())));
   contractTotalPages = computed(() => Math.max(1, Math.ceil(this.contractTotal() / this.contractPageSize())));
   rentPaymentTotalPages = computed(() => Math.max(1, Math.ceil(this.rentPaymentTotal() / this.rentPaymentPageSize())));
+  rentPaymentImportTotalPages = computed(() => {
+    const totalRows = this.rentPaymentImportPreview()?.totalRows ?? 0;
+    return Math.max(1, Math.ceil(totalRows / this.rentPaymentImportPageSize));
+  });
+  rentPaymentImportPageRows = computed(() => {
+    const preview = this.rentPaymentImportPreview();
+    if (!preview) {
+      return [];
+    }
+    const start = this.rentPaymentImportPage() * this.rentPaymentImportPageSize;
+    return preview.rows.slice(start, start + this.rentPaymentImportPageSize);
+  });
   chargeListTotalPages = computed(() => Math.max(1, Math.ceil(this.chargeListTotal() / this.chargeListPageSize)));
   refundTotalPages = computed(() => Math.max(1, Math.ceil(this.refundTotal() / this.refundPageSize)));
 
   constructor(private readonly api: CmsApiService, private readonly router: Router) {}
 
   showToast(message: string, kind: Toast['kind'] = 'success'): void {
-    this.toast.set({ message, kind });
     if (this.toastTimeoutId !== null) {
       clearTimeout(this.toastTimeoutId);
     }
+    if (this.toastExitTimeoutId !== null) {
+      clearTimeout(this.toastExitTimeoutId);
+    }
+    this.toastLeaving.set(false);
+    this.toast.set({ message, kind });
     this.toastTimeoutId = setTimeout(() => {
-      this.toast.set(null);
+      this.toastLeaving.set(true);
       this.toastTimeoutId = null;
-    }, 3600);
+      this.toastExitTimeoutId = setTimeout(() => {
+        this.toast.set(null);
+        this.toastLeaving.set(false);
+        this.toastExitTimeoutId = null;
+      }, 200);
+    }, 3400);
   }
 
   clearNewCustomerFieldError(field: string): void {
     const { [field]: _removed, ...remaining } = this.newCustomerFieldErrors();
     this.newCustomerFieldErrors.set(remaining);
+  }
+
+  clearNewContractFieldError(field: string): void {
+    const { [field]: _removed, ...remaining } = this.newContractFieldErrors();
+    this.newContractFieldErrors.set(remaining);
   }
 
   clearCustomerEditFieldError(field: string): void {
@@ -697,13 +750,30 @@ export class AppComponent implements OnInit {
 
   @HostListener('document:keydown.escape')
   onEscapeKey(): void {
+    this.closeContractCustomerDropdown();
     this.closeSidebarAfterNavigation();
   }
 
+  @HostListener('document:click', ['$event.target'])
+  onDocumentClick(target: EventTarget | null): void {
+    const element = target as Element | null;
+    if (!element?.closest('.contract-customer-combobox')) {
+      this.closeContractCustomerDropdown();
+    }
+  }
+
   private activateView(view: ViewKey): void {
+    const enteringNewCustomerPage = view === 'customer-new' && this.activeView() !== 'customer-new';
+    const enteringRentPaymentImportPage = view === 'rent-new' && this.activeView() !== 'rent-new';
     this.activeView.set(view);
     this.error.set('');
     this.success.set('');
+    if (enteringNewCustomerPage) {
+      this.newCustomerFieldErrors.set({});
+    }
+    if (enteringRentPaymentImportPage) {
+      this.clearRentPaymentImport();
+    }
     this.loadActiveViewData();
   }
 
@@ -736,7 +806,6 @@ export class AppComponent implements OnInit {
         this.loadRentPayments();
         break;
       case 'rent-new':
-        this.loadRentFromRoute();
         break;
       case 'office-search':
         this.loadOfficeRows();
@@ -801,6 +870,16 @@ export class AppComponent implements OnInit {
     });
   }
 
+  setAuthMode(mode: 'login' | 'register' | 'verification-pending' | 'forgot'): void {
+    this.authMode.set(mode);
+    this.loginPasswordVisible.set(false);
+    this.clearAuthFeedback();
+  }
+
+  toggleLoginPasswordVisibility(): void {
+    this.loginPasswordVisible.update((visible) => !visible);
+  }
+
   register(): void {
     this.clearAuthFeedback();
     this.authBusy.set(true);
@@ -833,10 +912,6 @@ export class AppComponent implements OnInit {
     this.clearAuthFeedback();
     this.authBusy.set(false);
     this.authMode.set('login');
-  }
-
-  toggleLoginPassword(): void {
-    this.showLoginPassword.update((isVisible) => !isVisible);
   }
 
   toggleRegisterPassword(): void {
@@ -1597,10 +1672,44 @@ export class AppComponent implements OnInit {
     if (this.canEditStaff()) {
       this.loadPendingProfileChanges();
     }
-    this.api.staff(this.staffBranchFilter).subscribe({
-      next: (rows) => this.staffRows.set(rows),
+    this.api.staff(this.staffBranchFilter, this.staffPage(), this.staffPageSize()).subscribe({
+      next: (result) => {
+        this.staffRows.set(result.content);
+        this.staffTotal.set(result.totalElements);
+        this.staffPage.set(result.page);
+      },
       error: () => this.error.set('無法載入職員資料。')
     });
+  }
+
+  private requireNewContractCompanyName(): void {
+    this.newContractFieldErrors.set({ companyName: '公司名稱為必填。' });
+    this.error.set('');
+    setTimeout(() => this.contractCustomerSearchInput?.nativeElement.focus(), 0);
+  }
+
+  changeStaffBranch(): void {
+    this.staffPage.set(0);
+    this.loadStaffOverview();
+  }
+
+  changeStaffPageSize(size: number): void {
+    const pageSize = Number(size);
+    if (![10, 20, 50].includes(pageSize) || pageSize === this.staffPageSize()) {
+      return;
+    }
+    this.staffPageSize.set(pageSize);
+    this.staffPage.set(0);
+    this.loadStaffOverview();
+  }
+
+  changeStaffPage(delta: number): void {
+    const next = this.staffPage() + delta;
+    if (next < 0 || next >= this.staffTotalPages()) {
+      return;
+    }
+    this.staffPage.set(next);
+    this.loadStaffOverview();
   }
 
   updateStaffRole(row: Record<string, unknown>, rolePermissionId: number): void {
@@ -1834,19 +1943,41 @@ export class AppComponent implements OnInit {
 
   lookupContractCustomers(): void {
     const term = this.contractCustomerSearch.trim();
-    if (!term) {
-      this.contractCustomerOptions.set([]);
-      return;
-    }
     this.api.customerLookup(term).subscribe({
       next: (rows) => this.contractCustomerOptions.set(rows),
       error: () => this.error.set('無法查詢客戶資料。')
     });
   }
 
+  onContractCustomerSearchChanged(): void {
+    this.clearNewContractFieldError('companyName');
+    this.newContractForm = { ...this.newContractForm, customerId: null };
+    this.contractCustomerDropdownOpen.set(true);
+    this.lookupContractCustomers();
+  }
+
+  openContractCustomerDropdown(): void {
+    this.contractCustomerDropdownOpen.set(true);
+    this.lookupContractCustomers();
+  }
+
+  toggleContractCustomerDropdown(): void {
+    if (this.contractCustomerDropdownOpen()) {
+      this.closeContractCustomerDropdown();
+      return;
+    }
+    this.openContractCustomerDropdown();
+  }
+
+  closeContractCustomerDropdown(): void {
+    this.contractCustomerDropdownOpen.set(false);
+  }
+
   selectContractCustomer(customer: CustomerSummary): void {
     this.contractCustomerSearch = customer.company_name;
     this.contractCustomerOptions.set([]);
+    this.contractCustomerDropdownOpen.set(false);
+    this.clearNewContractFieldError('companyName');
     this.newContractFirstPaymentAmount = null;
     this.newContractFirstPaymentDateText = '';
     this.newContractForm = {
@@ -1903,6 +2034,15 @@ export class AppComponent implements OnInit {
   }
 
   createContract(): void {
+    if (!this.contractCustomerSearch.trim()) {
+      this.requireNewContractCompanyName();
+      return;
+    }
+    this.clearNewContractFieldError('companyName');
+    if (!this.newContractForm.customerId) {
+      this.error.set('請先選擇客戶。');
+      return;
+    }
     if (!this.hasValidNewContractPayment()) {
       return;
     }
@@ -1960,6 +2100,8 @@ export class AppComponent implements OnInit {
           this.newContractFirstPaymentDateText = '';
           this.contractCustomerSearch = '';
           this.contractCustomerOptions.set([]);
+          this.contractCustomerDropdownOpen.set(false);
+          this.newContractFieldErrors.set({});
           this.setView('contract-search');
         }
         this.loadDashboard();
@@ -2108,6 +2250,73 @@ export class AppComponent implements OnInit {
   updateRentPaymentMonth(value: string): void {
     this.rentPaymentMonth = value;
     this.rentForm.paymentMonth = this.monthNumberFromInput(value);
+  }
+
+  onRentPaymentImportFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file) {
+      return;
+    }
+    this.previewRentPaymentImport(file);
+  }
+
+  previewRentPaymentImport(file: File): void {
+    this.rentPaymentImporting.set(true);
+    this.error.set('');
+    this.api.previewRentPaymentImport(file).subscribe({
+      next: (preview) => {
+        this.rentPaymentImportPreview.set(preview);
+        this.rentPaymentImportPage.set(0);
+        this.rentPaymentImporting.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.rentPaymentImporting.set(false);
+        this.error.set(this.branchApiErrorMessage(err, 'Excel 匯入檢核失敗。'));
+      }
+    });
+  }
+
+  clearRentPaymentImport(): void {
+    this.rentPaymentImportPreview.set(null);
+    this.rentPaymentImportPage.set(0);
+    this.rentPaymentImporting.set(false);
+    this.error.set('');
+  }
+
+  changeRentPaymentImportPage(delta: number): void {
+    const nextPage = this.rentPaymentImportPage() + delta;
+    if (nextPage < 0 || nextPage >= this.rentPaymentImportTotalPages()) {
+      return;
+    }
+    this.rentPaymentImportPage.set(nextPage);
+  }
+
+  confirmRentPaymentImport(): void {
+    const preview = this.rentPaymentImportPreview();
+    if (!preview || preview.errorRows > 0 || !preview.validRows) {
+      return;
+    }
+    this.saving.set(true);
+    this.error.set('');
+    this.api.importRentPayments({
+      rows: preview.rows,
+      updatedBy: this.currentStaffId()
+    }).subscribe({
+      next: (result) => {
+        this.saving.set(false);
+        this.clearRentPaymentImport();
+        this.showToast(`已新增 ${result.createdCount} 筆對帳資料。`);
+        this.setView('rent-search');
+        this.loadDashboard();
+        this.loadRentPayments();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '新增對帳資料失敗。'));
+      }
+    });
   }
 
   loadRentPayments(): void {

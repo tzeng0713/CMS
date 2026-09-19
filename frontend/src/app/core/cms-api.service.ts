@@ -163,6 +163,33 @@ export interface RentPaymentPayload {
   updatedBy?: number;
 }
 
+export interface RentPaymentImportRow {
+  rowNumber: number | null;
+  companyName: string;
+  paymentMonth: string;
+  paymentDateText: string;
+  feeStartDateText: string;
+  feeEndDateText: string;
+  amount: string;
+  receiptNo: string;
+  note: string;
+  valid: boolean;
+  errors: string[];
+}
+
+export interface RentPaymentImportPreview {
+  fileName: string;
+  totalRows: number;
+  validRows: number;
+  errorRows: number;
+  rows: RentPaymentImportRow[];
+}
+
+export interface RentPaymentImportRequest {
+  rows: RentPaymentImportRow[];
+  updatedBy: number;
+}
+
 export interface OfficeContact {
   office_contact_id: number;
   person_name: string | null;
@@ -590,9 +617,13 @@ export class CmsApiService {
     return this.http.put<Record<string, unknown>>(`${this.baseUrl}/contracts/${id}`, payload);
   }
 
-  staff(branchId?: number | null): Observable<Array<Record<string, unknown>>> {
-    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/staff`, {
-      params: branchId ? { branchId } : {}
+  staff(
+    branchId?: number | null,
+    page = 0,
+    pageSize = 20
+  ): Observable<PagedResult<Record<string, unknown>>> {
+    return this.http.get<PagedResult<Record<string, unknown>>>(`${this.baseUrl}/staff`, {
+      params: { ...(branchId ? { branchId } : {}), page, pageSize }
     });
   }
 
@@ -698,6 +729,16 @@ export class CmsApiService {
 
   createRentPayment(payload: RentPaymentPayload): Observable<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>(`${this.baseUrl}/rent-payments`, payload);
+  }
+
+  previewRentPaymentImport(file: File): Observable<RentPaymentImportPreview> {
+    const payload = new FormData();
+    payload.append('file', file);
+    return this.http.post<RentPaymentImportPreview>(`${this.baseUrl}/rent-payments/import-preview`, payload);
+  }
+
+  importRentPayments(payload: RentPaymentImportRequest): Observable<{ createdCount: number }> {
+    return this.http.post<{ createdCount: number }>(`${this.baseUrl}/rent-payments/import`, payload);
   }
 
   updateRentPayment(id: number, payload: RentPaymentPayload): Observable<Record<string, unknown>> {
