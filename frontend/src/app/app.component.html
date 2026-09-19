@@ -54,9 +54,9 @@
       <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '登入中…' : '登入' }}</button>
 
       <div class="auth-support-actions" aria-label="帳號協助">
-        <button type="button" class="auth-support-action" [disabled]="authBusy()" (click)="setAuthMode('forgot')">忘記密碼</button>
-        <span aria-hidden="true"></span>
         <button type="button" class="auth-support-action" [disabled]="authBusy()" (click)="setAuthMode('register')">申請帳號</button>
+        <span aria-hidden="true"></span>
+        <button type="button" class="auth-support-action" [disabled]="authBusy()" (click)="setAuthMode('forgot')">忘記密碼</button>
       </div>
     </form>
 
