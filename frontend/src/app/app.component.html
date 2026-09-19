@@ -4,6 +4,8 @@
       <span class="brand-mark">CMS</span>
       <h1>客戶管理資訊系統</h1>
       <p *ngIf="authMode() === 'login' || authMode() === 'register'">請登入後使用客戶與租金作業。</p>
+      <p *ngIf="authMode() === 'verification-pending'">請完成 Email 驗證後啟用帳號。</p>
+      <p *ngIf="authMode() === 'verify'">驗證完成後，你就能安全登入系統。</p>
       <p *ngIf="authMode() === 'forgot'">輸入帳號或工作 Email，我們會協助你重設密碼。</p>
       <p *ngIf="authMode() === 'reset'">請設定一組新的安全密碼。</p>
     </div>
@@ -63,6 +65,32 @@
       </label>
       <div class="form-actions">
         <button type="submit" [disabled]="authBusy()">{{ authBusy() ? '送出中…' : '送出申請' }}</button>
+        <button type="button" class="ghost" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+      </div>
+    </form>
+
+    <form class="auth-form" *ngIf="authMode() === 'verification-pending'" (ngSubmit)="requestEmailVerification()">
+      <div class="auth-form-heading">
+        <h2>驗證你的 Email</h2>
+        <p>請開啟註冊信箱中的驗證連結。尚未收到信件時，可重新寄送。</p>
+      </div>
+      <label>
+        帳號或工作 Email
+        <input name="emailVerificationIdentifier" [(ngModel)]="emailVerificationForm.identifier" autocomplete="username" required />
+      </label>
+      <div class="form-actions">
+        <button type="submit" [disabled]="authBusy()">{{ authBusy() ? '傳送中…' : '重新寄送驗證信' }}</button>
+        <button type="button" class="ghost" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+      </div>
+    </form>
+
+    <form class="auth-form" *ngIf="authMode() === 'verify'" (ngSubmit)="completeEmailVerification()">
+      <div class="auth-form-heading">
+        <h2>完成 Email 驗證</h2>
+        <p>確認後會啟用此帳號；此驗證連結只能使用一次。</p>
+      </div>
+      <div class="form-actions">
+        <button type="submit" [disabled]="authBusy()">{{ authBusy() ? '驗證中…' : '完成驗證' }}</button>
         <button type="button" class="ghost" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
       </div>
     </form>

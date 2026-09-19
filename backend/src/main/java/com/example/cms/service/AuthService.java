@@ -1,6 +1,8 @@
 package com.example.cms.service;
 
 import com.example.cms.dto.LoginRequest;
+import com.example.cms.dto.EmailVerificationConfirmationRequest;
+import com.example.cms.dto.EmailVerificationRequest;
 import com.example.cms.dto.PasswordResetConfirmationRequest;
 import com.example.cms.dto.PasswordResetRequest;
 import com.example.cms.dto.RegisterRequest;
@@ -27,22 +29,26 @@ import java.util.Map;
 @Service
 public class AuthService extends CmsJdbcSupport {
     private static final String NOOP_PREFIX = "{noop}";
-    private static final String PASSWORD_RESET_MESSAGE = "若帳號資料存在，重設說明已寄送至註冊信箱。";
+    private static final String PASSWORD_RESET_MESSAGE = "重設連結已寄送至註冊信箱。";
+    private static final String EMAIL_VERIFICATION_MESSAGE = "驗證連結已寄送至註冊信箱。";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final PasswordResetMailService passwordResetMailService;
     private final String passwordResetAppBaseUrl;
     private final int passwordResetTokenTtlMinutes;
+    private final int emailVerificationTokenTtlMinutes;
 
     public AuthService(JdbcTemplate jdbc,
                        PasswordResetMailService passwordResetMailService,
                        @org.springframework.beans.factory.annotation.Value("${cms.password-reset.app-base-url}") String passwordResetAppBaseUrl,
-                       @org.springframework.beans.factory.annotation.Value("${cms.password-reset.token-ttl-minutes}") int passwordResetTokenTtlMinutes) {
+                       @org.springframework.beans.factory.annotation.Value("${cms.password-reset.token-ttl-minutes}") int passwordResetTokenTtlMinutes,
+                       @org.springframework.beans.factory.annotation.Value("${cms.email-verification.token-ttl-minutes}") int emailVerificationTokenTtlMinutes) {
         super(jdbc);
         this.passwordResetMailService = passwordResetMailService;
         this.passwordResetAppBaseUrl = passwordResetAppBaseUrl;
         this.passwordResetTokenTtlMinutes = passwordResetTokenTtlMinutes;
+        this.emailVerificationTokenTtlMinutes = emailVerificationTokenTtlMinutes;
     }
 
     public Map<String, Object> login(LoginRequest request) {
@@ -52,7 +58,7 @@ public class AuthService extends CmsJdbcSupport {
         }
         try {
             Map<String, Object> user = jdbc.queryForMap("""
-                    SELECT s.staff_id, s.staff_name, s.account, s.password_hash, s.branch_id,
+                    SELECT s.staff_id, s.staff_name, s.account, s.password_hash, s.email_verified_at, s.branch_id,
                            b.branch_name, r.role_permission_id, r.role_name, r.scope
                     FROM staff s
                     JOIN role_permissions r ON r.role_permission_id = s.role_permission_id
@@ -62,6 +68,9 @@ public class AuthService extends CmsJdbcSupport {
             String storedHash = (String) user.get("password_hash");
             if (!passwordMatches(storedHash, request.password())) {
                 throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "invalid account or password");
+            }
+            if (user.get("email_verified_at") == null) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN, "email verification is required");
             }
             if (storedHash != null && storedHash.startsWith(NOOP_PREFIX)) {
                 upgradeToHashedPassword((Number) user.get("staff_id"), request.password());
@@ -74,6 +83,7 @@ public class AuthService extends CmsJdbcSupport {
         }
     }
 
+    @Transactional
     public Map<String, Object> register(RegisterRequest request) {
         if (request.staffName() == null || request.staffName().isBlank()
                 || request.account() == null || request.account().isBlank()
@@ -105,20 +115,65 @@ public class AuthService extends CmsJdbcSupport {
         }
         Long staffId = nextId("staff", "staff_id");
         jdbc.update("""
-                INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, email, password_hash)
-                VALUES (?, ?, 1, ?, ?, ?, ?)
+                INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, email, email_verified_at, password_hash)
+                VALUES (?, ?, 1, ?, ?, ?, NULL, ?)
                 """, staffId, roleId, request.staffName().trim(), request.account().trim(),
                 email, passwordEncoder.encode(request.password()));
-        Map<String, Object> user = jdbc.queryForMap("""
-                SELECT s.staff_id, s.staff_name, s.account, s.email, s.branch_id,
-                       b.branch_name, r.role_permission_id, r.role_name, r.scope
-                FROM staff s
-                JOIN role_permissions r ON r.role_permission_id = s.role_permission_id
-                LEFT JOIN branches b ON b.branch_id = s.branch_id
-                WHERE s.staff_id = ?
-                """, staffId);
-        applyPermissions(user);
-        return user;
+        issueEmailVerification(staffId, email);
+        return Map.of("message", EMAIL_VERIFICATION_MESSAGE);
+    }
+
+    @Transactional
+    public Map<String, Object> requestEmailVerification(EmailVerificationRequest request) {
+        String identifier = request == null || request.identifier() == null ? "" : request.identifier().trim();
+        if (identifier.isBlank()) {
+            return Map.of("message", EMAIL_VERIFICATION_MESSAGE);
+        }
+        try {
+            Map<String, Object> user = jdbc.queryForMap("""
+                    SELECT staff_id, email, email_verified_at
+                    FROM staff
+                    WHERE LOWER(account) = LOWER(?) OR LOWER(email) = LOWER(?)
+                    LIMIT 1
+                    """, identifier, identifier);
+            String email = (String) user.get("email");
+            if (email != null && !email.isBlank() && user.get("email_verified_at") == null) {
+                issueEmailVerification(((Number) user.get("staff_id")).longValue(), email);
+            }
+        } catch (EmptyResultDataAccessException ignored) {
+            // Return the same status and message for an unknown account or email.
+        }
+        return Map.of("message", EMAIL_VERIFICATION_MESSAGE);
+    }
+
+    @Transactional
+    public void verifyEmail(EmailVerificationConfirmationRequest request) {
+        if (request == null || request.token() == null || request.token().isBlank()) {
+            throw invalidEmailVerificationToken();
+        }
+        Map<String, Object> token;
+        try {
+            token = jdbc.queryForMap("""
+                    SELECT email_verification_token_id, staff_id
+                    FROM email_verification_tokens
+                    WHERE token_hash = ?
+                    """, sha256(request.token()));
+        } catch (EmptyResultDataAccessException e) {
+            throw invalidEmailVerificationToken();
+        }
+        long tokenId = ((Number) token.get("email_verification_token_id")).longValue();
+        int markedUsed = jdbc.update("""
+                UPDATE email_verification_tokens
+                SET used_at = CURRENT_TIMESTAMP
+                WHERE email_verification_token_id = ?
+                  AND used_at IS NULL
+                  AND expires_at > CURRENT_TIMESTAMP
+                """, tokenId);
+        if (markedUsed != 1) {
+            throw invalidEmailVerificationToken();
+        }
+        jdbc.update("UPDATE staff SET email_verified_at = CURRENT_TIMESTAMP WHERE staff_id = ?",
+                ((Number) token.get("staff_id")).longValue());
     }
 
     @Transactional
@@ -140,7 +195,7 @@ public class AuthService extends CmsJdbcSupport {
             }
             long staffId = ((Number) user.get("staff_id")).longValue();
             jdbc.update("UPDATE password_reset_tokens SET used_at = CURRENT_TIMESTAMP WHERE staff_id = ? AND used_at IS NULL", staffId);
-            String rawToken = newPasswordResetToken();
+            String rawToken = newSecureToken();
             jdbc.update("""
                     INSERT INTO password_reset_tokens (staff_id, token_hash, expires_at)
                     VALUES (?, ?, ?)
@@ -212,7 +267,22 @@ public class AuthService extends CmsJdbcSupport {
                 passwordEncoder.encode(rawPassword), staffId.longValue());
     }
 
-    private String newPasswordResetToken() {
+    private void issueEmailVerification(long staffId, String email) {
+        jdbc.update("UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE staff_id = ? AND used_at IS NULL", staffId);
+        String rawToken = newSecureToken();
+        jdbc.update("""
+                INSERT INTO email_verification_tokens (staff_id, token_hash, expires_at)
+                VALUES (?, ?, ?)
+                """, staffId, sha256(rawToken),
+                java.sql.Timestamp.from(Instant.now().plusSeconds(emailVerificationTokenTtlMinutes * 60L)));
+        try {
+            passwordResetMailService.sendEmailVerificationLink(email, verificationLink(rawToken));
+        } catch (RuntimeException ignored) {
+            // Keep registration and re-send responses generic even if SMTP delivery fails.
+        }
+    }
+
+    private String newSecureToken() {
         byte[] bytes = new byte[32];
         SECURE_RANDOM.nextBytes(bytes);
         return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
@@ -221,6 +291,14 @@ public class AuthService extends CmsJdbcSupport {
     private String resetLink(String rawToken) {
         return UriComponentsBuilder.fromUriString(passwordResetAppBaseUrl)
                 .replaceQueryParam("resetToken", rawToken)
+                .build()
+                .encode()
+                .toUriString();
+    }
+
+    private String verificationLink(String rawToken) {
+        return UriComponentsBuilder.fromUriString(passwordResetAppBaseUrl)
+                .replaceQueryParam("verificationToken", rawToken)
                 .build()
                 .encode()
                 .toUriString();
@@ -237,6 +315,10 @@ public class AuthService extends CmsJdbcSupport {
 
     private ResponseStatusException invalidPasswordResetToken() {
         return new ResponseStatusException(HttpStatus.BAD_REQUEST, "password reset token is invalid or expired");
+    }
+
+    private ResponseStatusException invalidEmailVerificationToken() {
+        return new ResponseStatusException(HttpStatus.BAD_REQUEST, "email verification token is invalid or expired");
     }
 
     private boolean isEmail(String email) {

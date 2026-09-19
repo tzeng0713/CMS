@@ -22,6 +22,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         migrateRoleNames();
         migrateStaffBranch();
         migrateStaffEmail();
+        migrateStaffEmailVerification();
         migrateCustomerRentalFields();
         migrateCustomerWorkflowFields();
         migrateCustomerRelationTables();
@@ -59,6 +60,21 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
     private void migrateStaffEmail() {
         addColumnIfMissing("staff", "email", "VARCHAR(254)");
         addUniqueIndexIfMissing("staff", "idx_staff_email", "email");
+    }
+
+    private void migrateStaffEmailVerification() {
+        addColumnIfMissing("staff", "email_verified_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                  email_verification_token_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                  staff_id BIGINT NOT NULL,
+                  token_hash CHAR(64) NOT NULL,
+                  expires_at TIMESTAMP NOT NULL,
+                  used_at TIMESTAMP,
+                  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  CONSTRAINT fk_email_verification_tokens_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
+                )
+                """);
     }
 
     private void migrateCustomerRentalFields() {

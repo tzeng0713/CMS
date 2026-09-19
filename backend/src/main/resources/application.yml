@@ -32,6 +32,8 @@ cms:
     app-base-url: ${CMS_APP_BASE_URL:http://localhost:4200}
     from: ${CMS_PASSWORD_RESET_FROM:no-reply@cms.local}
     token-ttl-minutes: ${CMS_PASSWORD_RESET_TOKEN_TTL_MINUTES:30}
+  email-verification:
+    token-ttl-minutes: ${CMS_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES:1440}
 
 management:
   endpoints:

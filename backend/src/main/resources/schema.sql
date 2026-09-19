@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS staff (
   staff_name VARCHAR(80) NOT NULL,
   account VARCHAR(80) NOT NULL,
   email VARCHAR(254),
+  email_verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   password_hash VARCHAR(255),
   CONSTRAINT fk_staff_role FOREIGN KEY (role_permission_id) REFERENCES role_permissions(role_permission_id),
   CONSTRAINT fk_staff_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
@@ -52,6 +53,16 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   used_at TIMESTAMP,
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_password_reset_tokens_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  email_verification_token_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  staff_id BIGINT NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  used_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_email_verification_tokens_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
 );
 
 CREATE TABLE IF NOT EXISTS customers (

@@ -22,6 +22,18 @@ public class SmtpPasswordResetMailService implements PasswordResetMailService {
     }
 
     @Override
+    public void sendEmailVerificationLink(String recipientEmail, String verificationLink) {
+        send(recipientEmail, "驗證您的 CMS Email", """
+                感謝您申請 CMS 帳號。
+
+                請在 24 小時內開啟以下連結驗證 Email，完成後即可登入：
+                %s
+
+                若不是您本人提出申請，請忽略此信件。
+                """.formatted(verificationLink));
+    }
+
+    @Override
     public void sendResetLink(String recipientEmail, String resetLink) {
         send(recipientEmail, "CMS 密碼重設", """
                 我們收到您的 CMS 密碼重設申請。

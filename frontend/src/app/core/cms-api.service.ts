@@ -449,8 +449,16 @@ export class CmsApiService {
     return this.http.post<AuthUser>(`${this.baseUrl}/auth/login`, payload);
   }
 
-  register(payload: { staffName: string; account: string; email: string; password: string; roleName: string }): Observable<AuthUser> {
-    return this.http.post<AuthUser>(`${this.baseUrl}/auth/register`, payload);
+  register(payload: { staffName: string; account: string; email: string; password: string; roleName: string }): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/auth/register`, payload);
+  }
+
+  requestEmailVerification(payload: { identifier: string }): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/auth/email-verification-requests`, payload);
+  }
+
+  verifyEmail(payload: { token: string }): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/auth/email-verifications`, payload);
   }
 
   requestPasswordReset(payload: { identifier: string }): Observable<{ message: string }> {

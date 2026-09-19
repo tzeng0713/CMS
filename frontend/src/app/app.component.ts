@@ -362,7 +362,7 @@ export class AppComponent implements OnInit {
   }
 
   currentUser = signal<AuthUser | null>(this.loadStoredUser());
-  authMode = signal<'login' | 'register' | 'forgot' | 'reset'>('login');
+  authMode = signal<'login' | 'register' | 'verification-pending' | 'verify' | 'forgot' | 'reset'>('login');
   authBusy = signal(false);
   authNotice = signal('');
   showLoginPassword = signal(false);
@@ -527,6 +527,11 @@ export class AppComponent implements OnInit {
     confirmPassword: ''
   };
 
+  emailVerificationForm = {
+    identifier: '',
+    token: ''
+  };
+
   newCustomerForm: CustomerForm = emptyCustomerForm();
   newCustomerContractForm: ContractForm = emptyContractForm();
   newCustomerLeaseImage: File | null = null;
@@ -619,8 +624,14 @@ export class AppComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    const resetToken = new URLSearchParams(window.location.search).get('resetToken');
-    if (!this.currentUser() && resetToken) {
+    const searchParams = new URLSearchParams(window.location.search);
+    const verificationToken = searchParams.get('verificationToken');
+    const resetToken = searchParams.get('resetToken');
+    if (!this.currentUser() && verificationToken) {
+      this.emailVerificationForm.token = verificationToken;
+      this.authMode.set('verify');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (!this.currentUser() && resetToken) {
       this.resetPasswordForm.token = resetToken;
       this.authMode.set('reset');
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -771,9 +782,11 @@ export class AppComponent implements OnInit {
         this.authBusy.set(false);
         this.finishLogin(user);
       },
-      error: () => {
+      error: (response: HttpErrorResponse) => {
         this.authBusy.set(false);
-        this.error.set('登入失敗，請確認帳號密碼。');
+        this.error.set(response.status === 403
+          ? '請先完成 Email 驗證，再登入。'
+          : '登入失敗，請確認帳號密碼。');
       }
     });
   }
@@ -782,9 +795,12 @@ export class AppComponent implements OnInit {
     this.clearAuthFeedback();
     this.authBusy.set(true);
     this.api.register(this.registerForm).subscribe({
-      next: (user) => {
+      next: (response) => {
         this.authBusy.set(false);
-        this.finishLogin(user);
+        this.emailVerificationForm.identifier = this.registerForm.account;
+        this.registerForm.password = '';
+        this.authMode.set('verification-pending');
+        this.authNotice.set(response.message || '驗證連結已寄送至註冊信箱。');
       },
       error: () => {
         this.authBusy.set(false);
@@ -825,6 +841,47 @@ export class AppComponent implements OnInit {
     this.showResetConfirmation.update((isVisible) => !isVisible);
   }
 
+  requestEmailVerification(): void {
+    const identifier = this.emailVerificationForm.identifier.trim();
+    if (!identifier) {
+      this.error.set('請輸入帳號或工作 Email。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.requestEmailVerification({ identifier }).subscribe({
+      next: (response) => {
+        this.authBusy.set(false);
+        this.authNotice.set(response.message || '驗證連結已寄送至註冊信箱。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.authNotice.set('驗證連結已寄送至註冊信箱。');
+      }
+    });
+  }
+
+  completeEmailVerification(): void {
+    if (!this.emailVerificationForm.token) {
+      this.error.set('驗證連結無效或已過期，請重新申請帳號或寄送驗證信。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.verifyEmail({ token: this.emailVerificationForm.token }).subscribe({
+      next: () => {
+        this.authBusy.set(false);
+        this.emailVerificationForm.token = '';
+        this.authMode.set('login');
+        this.authNotice.set('Email 驗證完成，現在可以登入。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.error.set('驗證連結無效或已過期，請重新寄送驗證信。');
+      }
+    });
+  }
+
   requestPasswordReset(): void {
     const identifier = this.forgotPasswordForm.identifier.trim();
     if (!identifier) {
@@ -836,11 +893,11 @@ export class AppComponent implements OnInit {
     this.api.requestPasswordReset({ identifier }).subscribe({
       next: (response) => {
         this.authBusy.set(false);
-        this.authNotice.set(response.message || '若帳號資料存在且已設定工作 Email，重設連結將寄送至該信箱。');
+        this.authNotice.set(response.message || '重設連結已寄送至註冊信箱。');
       },
       error: () => {
         this.authBusy.set(false);
-        this.authNotice.set('若帳號資料存在且已設定工作 Email，重設連結將寄送至該信箱。');
+        this.authNotice.set('重設連結已寄送至註冊信箱。');
       }
     });
   }

@@ -702,10 +702,10 @@ class CmsApplicationTests {
     }
 
     @Test
-    void staffCanLoginAndRegister() throws Exception {
+    void staffCanLoginAndRegisterAfterEmailVerification() throws Exception {
         mvc.perform(post("/api/auth/login")
                         .contentType("application/json")
-                        .content("""
+                .content("""
                                 {
                                   "account": "manager",
                                   "password": "password"
@@ -728,13 +728,45 @@ class CmsApplicationTests {
                                   "roleName": "一般秘書"
                                 }
                                 """))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.staff_name", is("Test Secretary")))
-                .andExpect(jsonPath("$.email", is("test.secretary@cms.test")))
-                .andExpect(jsonPath("$.role_name", is("一般秘書")))
-                .andExpect(jsonPath("$.canCreateRent", is(false)))
-                .andExpect(jsonPath("$.canEditRent", is(false)))
-                .andExpect(jsonPath("$.canEditStaff", is(false)));
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.message", is("驗證連結已寄送至註冊信箱。")));
+
+        Integer unverified = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM staff
+                WHERE account = 'test.secretary' AND email_verified_at IS NULL
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, unverified);
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"test.secretary\",\"password\":\"secret123\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void emailVerificationActivatesAccountOnce() throws Exception {
+        long staffId = insertPasswordResetStaff("verify-once", "verify-once@cms.test", "verify-password");
+        jdbc.update("UPDATE staff SET email_verified_at = NULL WHERE staff_id = ?", staffId);
+        insertEmailVerificationToken(staffId, "email-verification-token", Instant.now().plusSeconds(600));
+
+        mvc.perform(post("/api/auth/email-verifications")
+                        .contentType("application/json")
+                        .content("{\"token\":\"email-verification-token\"}"))
+                .andExpect(status().isNoContent());
+
+        Integer verified = jdbc.queryForObject("SELECT COUNT(*) FROM staff WHERE staff_id = ? AND email_verified_at IS NOT NULL",
+                Integer.class, staffId);
+        org.junit.jupiter.api.Assertions.assertEquals(1, verified);
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"verify-once\",\"password\":\"verify-password\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/auth/email-verifications")
+                        .contentType("application/json")
+                        .content("{\"token\":\"email-verification-token\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -1065,6 +1097,8 @@ class CmsApplicationTests {
         new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(legacyDataSource);
         JdbcTemplate legacyJdbc = new JdbcTemplate(legacyDataSource);
         legacyJdbc.execute("DROP INDEX IF EXISTS idx_staff_email");
+        legacyJdbc.execute("DROP TABLE IF EXISTS email_verification_tokens");
+        legacyJdbc.execute("ALTER TABLE staff DROP COLUMN email_verified_at");
         legacyJdbc.execute("ALTER TABLE staff DROP COLUMN email");
 
         new SchemaMigrationRunner(legacyJdbc).run();
@@ -1079,6 +1113,16 @@ class CmsApplicationTests {
                 """, Integer.class);
         org.junit.jupiter.api.Assertions.assertEquals(1, emailColumn);
         org.junit.jupiter.api.Assertions.assertEquals(1, emailIndex);
+        Integer verificationColumn = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE LOWER(TABLE_NAME) = 'staff' AND LOWER(COLUMN_NAME) = 'email_verified_at'
+                """, Integer.class);
+        Integer verificationTable = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_NAME) = 'email_verification_tokens'
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, verificationColumn);
+        org.junit.jupiter.api.Assertions.assertEquals(1, verificationTable);
     }
 
     @Test
@@ -1113,6 +1157,13 @@ class CmsApplicationTests {
     private void insertPasswordResetToken(long staffId, String rawToken, Instant expiresAt) {
         jdbc.update("""
                 INSERT INTO password_reset_tokens (staff_id, token_hash, expires_at)
+                VALUES (?, ?, ?)
+                """, staffId, sha256(rawToken), java.sql.Timestamp.from(expiresAt));
+    }
+
+    private void insertEmailVerificationToken(long staffId, String rawToken, Instant expiresAt) {
+        jdbc.update("""
+                INSERT INTO email_verification_tokens (staff_id, token_hash, expires_at)
                 VALUES (?, ?, ?)
                 """, staffId, sha256(rawToken), java.sql.Timestamp.from(expiresAt));
     }
