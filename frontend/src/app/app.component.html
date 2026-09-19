@@ -1,10 +1,12 @@
 <section class="auth-page" *ngIf="!currentUser(); else signedIn">
-  <section class="auth-card" aria-labelledby="auth-heading">
-    <header class="auth-brand">
+  <section class="auth-card" [attr.aria-labelledby]="authMode() === 'login' ? 'auth-heading' : null">
+    <header class="auth-brand" [class.auth-brand-compact]="authMode() !== 'login'">
       <img class="auth-logo" src="assets/LOGO1.jpg" alt="AFW Full Business Center" />
-      <span class="auth-eyebrow">Customer Operations</span>
-      <h1 id="auth-heading">客戶管理資訊系統</h1>
-      <p>請登入後使用客戶與租金作業。</p>
+      <ng-container *ngIf="authMode() === 'login'">
+        <span class="auth-eyebrow">Customer Operations</span>
+        <h1 id="auth-heading">客戶管理資訊系統</h1>
+        <p>請登入後使用客戶與租金作業。</p>
+      </ng-container>
     </header>
 
     <p class="auth-notice" *ngIf="authNotice()" role="status">{{ authNotice() }}</p>

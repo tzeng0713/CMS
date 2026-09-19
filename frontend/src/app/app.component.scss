@@ -63,11 +63,19 @@ router-outlet {
   text-align: center;
 }
 
+.auth-brand-compact {
+  gap: 0;
+}
+
 .auth-logo {
   width: min(248px, 82%);
   height: auto;
   margin-bottom: 8px;
   object-fit: contain;
+}
+
+.auth-brand-compact .auth-logo {
+  margin-bottom: 0;
 }
 
 .auth-eyebrow {

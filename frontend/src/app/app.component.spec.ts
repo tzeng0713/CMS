@@ -283,6 +283,24 @@ describe('new customer flow', () => {
     fixture.destroy();
   });
 
+  it('keeps only the logo on account support flows', () => {
+    const fixture = TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [provideRouter([]), { provide: CmsApiService, useValue: {} }]
+    }).createComponent(AppComponent);
+    const view = fixture.componentInstance;
+    view.currentUser.set(null);
+    view.authMode.set('forgot');
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('.auth-logo')).not.toBeNull();
+    expect(page.querySelector('.auth-eyebrow')).toBeNull();
+    expect(page.querySelector('#auth-heading')).toBeNull();
+    expect(page.querySelector('.auth-card')?.getAttribute('aria-labelledby')).toBeNull();
+    fixture.destroy();
+  });
+
   it('clears the selected customer before returning to the customer overview', () => {
     component.selectedCustomer.set({ customer_id: 6 } as never);
 
