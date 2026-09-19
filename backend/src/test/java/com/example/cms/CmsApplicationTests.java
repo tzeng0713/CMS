@@ -780,6 +780,50 @@ class CmsApplicationTests {
     }
 
     @Test
+    void staffProfileChangesRequireReviewAndReverifyAnUpdatedEmail() throws Exception {
+        long staffId = insertPasswordResetStaff("profile-change", "profile-change@cms.test", "profile-password");
+
+        mvc.perform(post("/api/staff/{id}/profile-change-requests", staffId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "requestedByStaffId": %d,
+                                  "staffName": "Updated Profile",
+                                  "email": "updated-profile@cms.test"
+                                }
+                                """.formatted(staffId)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status", is("PENDING")))
+                .andExpect(jsonPath("$.requested_staff_name", is("Updated Profile")));
+
+        String emailBeforeApproval = jdbc.queryForObject("SELECT email FROM staff WHERE staff_id = ?", String.class, staffId);
+        org.junit.jupiter.api.Assertions.assertEquals("profile-change@cms.test", emailBeforeApproval);
+
+        mvc.perform(put("/api/staff/{id}", staffId)
+                        .contentType("application/json")
+                        .content("{\"rolePermissionId\":3,\"email\":\"not-allowed@cms.test\"}"))
+                .andExpect(status().isBadRequest());
+
+        Long requestId = jdbc.queryForObject("""
+                SELECT MAX(staff_profile_change_request_id)
+                FROM staff_profile_change_requests WHERE staff_id = ?
+                """, Long.class, staffId);
+        mvc.perform(patch("/api/staff/profile-change-requests/{requestId}", requestId)
+                        .contentType("application/json")
+                        .content("{\"reviewedByStaffId\":1,\"approve\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("APPROVED")));
+
+        Map<String, Object> staff = jdbc.queryForMap("""
+                SELECT staff_name, email, email_verified_at
+                FROM staff WHERE staff_id = ?
+                """, staffId);
+        org.junit.jupiter.api.Assertions.assertEquals("Updated Profile", staff.get("staff_name"));
+        org.junit.jupiter.api.Assertions.assertEquals("updated-profile@cms.test", staff.get("email"));
+        org.junit.jupiter.api.Assertions.assertNull(staff.get("email_verified_at"));
+    }
+
+    @Test
     void emailVerificationActivatesAccountOnce() throws Exception {
         long staffId = insertPasswordResetStaff("verify-once", "verify-once@cms.test", "verify-password");
         jdbc.update("UPDATE staff SET email_verified_at = NULL WHERE staff_id = ?", staffId);
@@ -1134,6 +1178,7 @@ class CmsApplicationTests {
         JdbcTemplate legacyJdbc = new JdbcTemplate(legacyDataSource);
         legacyJdbc.execute("DROP INDEX IF EXISTS idx_staff_email");
         legacyJdbc.execute("DROP TABLE IF EXISTS email_verification_tokens");
+        legacyJdbc.execute("DROP TABLE IF EXISTS staff_profile_change_requests");
         legacyJdbc.execute("ALTER TABLE staff DROP COLUMN account_approved_at");
         legacyJdbc.execute("ALTER TABLE staff DROP COLUMN email_verified_at");
         legacyJdbc.execute("ALTER TABLE staff DROP COLUMN email");
@@ -1165,15 +1210,19 @@ class CmsApplicationTests {
                 WHERE LOWER(TABLE_NAME) = 'staff' AND LOWER(COLUMN_NAME) = 'account_approved_at'
                 """, Integer.class);
         org.junit.jupiter.api.Assertions.assertEquals(1, approvalColumn);
+        Integer profileChangeRequestsTable = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_NAME) = 'staff_profile_change_requests'
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, profileChangeRequestsTable);
     }
 
     @Test
-    void staffEmailCanBeMaintained() throws Exception {
+    void staffEmailCannotBeMaintainedDirectly() throws Exception {
         mvc.perform(put("/api/staff/1")
                         .contentType("application/json")
                         .content("{\"rolePermissionId\":1,\"email\":\"manager@cms.test\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.email", is("manager@cms.test")));
+                .andExpect(status().isBadRequest());
     }
 
     private long insertDashboardCustomer(String companyName, String ownerBirthday) {

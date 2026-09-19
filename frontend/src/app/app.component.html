@@ -1647,10 +1647,75 @@
     </section>
 
     <section class="single-view" *ngIf="activeView() === 'staff-overview'">
-      <section class="panel">
+      <section class="panel my-profile-panel">
         <div class="panel-header">
           <div>
-            <h2>職員總覽</h2>
+            <h2>我的資料</h2>
+            <p>姓名與信箱異動需送主管審核。</p>
+          </div>
+          <button *ngIf="!profileEditing()" type="button" class="ghost compact-button" (click)="openProfileEditor()">更新資料</button>
+        </div>
+
+        <div class="profile-summary" *ngIf="!profileEditing(); else profileEditForm">
+          <div><span>姓名</span><strong>{{ currentUser()?.staff_name }}</strong></div>
+          <div><span>信箱</span><strong>{{ currentUser()?.email || '尚未設定' }}</strong></div>
+          <div><span>帳號</span><strong>{{ currentUser()?.account }}</strong></div>
+          <div><span>角色</span><strong>{{ currentUser()?.role_name }}</strong></div>
+        </div>
+        <div class="profile-request-notice" *ngIf="myProfileChange() as request">
+          <span class="approval-status" [class.waiting]="isMyPendingProfileChange()" [class.active]="request['status'] === 'APPROVED'">
+            <i aria-hidden="true"></i>{{ profileChangeStatusLabel(request) }}
+          </span>
+          <span *ngIf="isMyPendingProfileChange()">資料異動已送出，等待主管審核。</span>
+          <span *ngIf="request['status'] === 'APPROVED'">最近一次資料異動已核准。</span>
+          <span *ngIf="request['status'] === 'REJECTED'">最近一次資料異動未獲核准。</span>
+        </div>
+        <ng-template #profileEditForm>
+          <form class="profile-edit-form" (ngSubmit)="submitProfileChange()">
+            <label>姓名<input name="profileStaffName" [(ngModel)]="profileForm.staffName" maxlength="80" required /></label>
+            <label>信箱<input name="profileEmail" type="email" [(ngModel)]="profileForm.email" maxlength="254" autocomplete="email" required /></label>
+            <div class="profile-locked-fields">
+              <span>帳號<strong>{{ currentUser()?.account }}</strong></span>
+              <span>角色<strong>{{ currentUser()?.role_name }}</strong></span>
+            </div>
+            <div class="form-actions profile-actions">
+              <button type="button" class="ghost" (click)="cancelProfileEdit()">取消</button>
+              <button type="submit" [disabled]="profileBusy()">{{ profileBusy() ? '送出中…' : '送出審核' }}</button>
+            </div>
+          </form>
+        </ng-template>
+      </section>
+
+      <section class="panel profile-review-panel" *ngIf="canEditStaff() && pendingProfileChangeRows().length">
+        <div class="panel-header">
+          <div>
+            <h2>資料異動待審</h2>
+            <p>核准信箱異動後，系統會寄送驗證信。</p>
+          </div>
+        </div>
+        <div class="profile-review-list">
+          <article class="profile-review-card" *ngFor="let row of pendingProfileChangeRows()">
+            <div>
+              <strong>{{ value(row, 'current_staff_name') }}</strong>
+              <span>{{ value(row, 'account') }}</span>
+            </div>
+            <dl>
+              <div><dt>姓名</dt><dd>{{ value(row, 'current_staff_name') }} → {{ value(row, 'requested_staff_name') }}</dd></div>
+              <div><dt>信箱</dt><dd>{{ value(row, 'current_email') }} → {{ value(row, 'requested_email') }}</dd></div>
+            </dl>
+            <div class="profile-review-actions" *ngIf="canReviewProfileChange(row); else ownProfileChange">
+              <button type="button" class="ghost compact-button" (click)="reviewProfileChange(row, false)">退回</button>
+              <button type="button" class="approval-action" (click)="reviewProfileChange(row, true)">核准</button>
+            </div>
+            <ng-template #ownProfileChange><span class="self-review-note">需由其他主管審核</span></ng-template>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel staff-directory-panel">
+        <div class="panel-header">
+          <div>
+            <h2>職員名冊</h2>
             <p>待審核帳號優先置頂。</p>
           </div>
           <label class="inline-filter">
@@ -1664,7 +1729,7 @@
           </label>
         </div>
 
-        <div class="simple-table">
+        <div class="simple-table staff-directory-table">
           <div class="simple-row header staff-row">
             <span>分館</span>
             <span>職員名稱</span>
@@ -1675,21 +1740,7 @@
           <div class="simple-row staff-row" *ngFor="let row of staffRows()">
             <span>{{ value(row, 'branch_name') }}</span>
             <span>{{ value(row, 'staff_name') }}</span>
-            <span *ngIf="canEditStaff(); else emailReadOnly">
-              <input
-                #staffEmail
-                class="compact-input"
-                type="email"
-                [value]="staffEmailValue(row)"
-                [attr.aria-label]="value(row, 'staff_name') + ' 的工作 Email'"
-                autocomplete="email"
-                placeholder="name@example.com"
-                (blur)="updateStaffEmail(row, staffEmail.value)"
-              />
-            </span>
-            <ng-template #emailReadOnly>
-              <span>{{ staffEmailValue(row) || '尚未設定' }}</span>
-            </ng-template>
+            <span class="staff-email">{{ staffEmailValue(row) || '尚未設定' }}</span>
             <span *ngIf="canEditStaff(); else roleReadOnly">
               <select
                 class="compact-select"

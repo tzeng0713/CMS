@@ -68,6 +68,19 @@ CREATE TABLE IF NOT EXISTS email_verification_tokens (
   CONSTRAINT fk_email_verification_tokens_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
 );
 
+CREATE TABLE IF NOT EXISTS staff_profile_change_requests (
+  staff_profile_change_request_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  staff_id BIGINT NOT NULL,
+  requested_staff_name VARCHAR(80) NOT NULL,
+  requested_email VARCHAR(254) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+  requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at TIMESTAMP,
+  reviewed_by BIGINT,
+  CONSTRAINT fk_profile_change_requests_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id),
+  CONSTRAINT fk_profile_change_requests_reviewer FOREIGN KEY (reviewed_by) REFERENCES staff(staff_id)
+);
+
 CREATE TABLE IF NOT EXISTS customers (
   customer_id BIGINT PRIMARY KEY,
   company_name VARCHAR(255) NOT NULL,

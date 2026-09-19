@@ -24,6 +24,7 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         migrateStaffEmail();
         migrateStaffEmailVerification();
         migrateStaffAccountApproval();
+        migrateStaffProfileChangeRequests();
         migrateCustomerRentalFields();
         migrateCustomerWorkflowFields();
         migrateCustomerRelationTables();
@@ -83,6 +84,23 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         // registrations explicitly set this value to NULL until a manager approves them.
         addColumnIfMissing("staff", "account_approved_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
         addColumnIfMissing("staff", "account_approved_by", "BIGINT");
+    }
+
+    private void migrateStaffProfileChangeRequests() {
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS staff_profile_change_requests (
+                  staff_profile_change_request_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                  staff_id BIGINT NOT NULL,
+                  requested_staff_name VARCHAR(80) NOT NULL,
+                  requested_email VARCHAR(254) NOT NULL,
+                  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+                  requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  reviewed_at TIMESTAMP,
+                  reviewed_by BIGINT,
+                  CONSTRAINT fk_profile_change_requests_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id),
+                  CONSTRAINT fk_profile_change_requests_reviewer FOREIGN KEY (reviewed_by) REFERENCES staff(staff_id)
+                )
+                """);
     }
 
     private void migrateCustomerRentalFields() {

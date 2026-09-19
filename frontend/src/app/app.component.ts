@@ -391,6 +391,10 @@ export class AppComponent implements OnInit {
   roles = signal<RoleSummary[]>([]);
   staffOptions = signal<Array<Record<string, unknown>>>([]);
   staffRows = signal<Array<Record<string, unknown>>>([]);
+  myProfileChange = signal<Record<string, unknown> | null>(null);
+  pendingProfileChangeRows = signal<Array<Record<string, unknown>>>([]);
+  profileEditing = signal(false);
+  profileBusy = signal(false);
   contractTotal = signal(0);
   contractPage = signal(0);
   contractPageSize = signal(20);
@@ -497,6 +501,10 @@ export class AppComponent implements OnInit {
   refundSortBy = 'createdAt';
   refundSortDir: 'asc' | 'desc' = 'desc';
   staffBranchFilter: number | null = null;
+  profileForm = {
+    staffName: this.currentUser()?.staff_name ?? '',
+    email: this.currentUser()?.email ?? ''
+  };
   contractCustomerSearch = '';
   chargeListCustomerSearch = '';
   rentCustomerSearch = '';
@@ -782,9 +790,13 @@ export class AppComponent implements OnInit {
       },
       error: (response: HttpErrorResponse) => {
         this.authBusy.set(false);
-        this.error.set(response.status === 403
-          ? '請先完成 Email 驗證，再登入。'
-          : '登入失敗，請確認帳號密碼。');
+        if (response.status === 403) {
+          this.emailVerificationForm.identifier = this.loginForm.account.trim();
+          this.authMode.set('verification-pending');
+          this.authNotice.set('請先完成 Email 驗證，再登入。');
+          return;
+        }
+        this.error.set('登入失敗，請確認帳號密碼。');
       }
     });
   }
@@ -952,6 +964,9 @@ export class AppComponent implements OnInit {
     this.editingRefund.set(null);
     this.viewingRefund.set(null);
     this.staffRows.set([]);
+    this.myProfileChange.set(null);
+    this.pendingProfileChangeRows.set([]);
+    this.profileEditing.set(false);
     this.router.navigateByUrl('/home');
     this.error.set('');
     this.success.set('');
@@ -1578,6 +1593,10 @@ export class AppComponent implements OnInit {
 
   loadStaffOverview(): void {
     this.loadStaffSupportData();
+    this.loadMyProfileChange();
+    if (this.canEditStaff()) {
+      this.loadPendingProfileChanges();
+    }
     this.api.staff(this.staffBranchFilter).subscribe({
       next: (rows) => this.staffRows.set(rows),
       error: () => this.error.set('無法載入職員資料。')
@@ -1606,29 +1625,113 @@ export class AppComponent implements OnInit {
     return this.currentUser()?.is_account_approved === false;
   }
 
-  updateStaffEmail(row: Record<string, unknown>, email: string): void {
-    if (!this.canEditStaff()) {
+  openProfileEditor(): void {
+    this.profileForm = {
+      staffName: this.currentUser()?.staff_name ?? '',
+      email: this.currentUser()?.email ?? ''
+    };
+    this.profileEditing.set(true);
+    this.error.set('');
+  }
+
+  cancelProfileEdit(): void {
+    this.profileEditing.set(false);
+    this.error.set('');
+  }
+
+  submitProfileChange(): void {
+    const staffId = this.currentStaffId();
+    const staffName = this.profileForm.staffName.trim();
+    const email = this.profileForm.email.trim();
+    if (!staffId || !staffName || !email) {
+      this.error.set('請完整填寫姓名與信箱。');
       return;
     }
-    const staffId = Number(row['staff_id']);
-    const rolePermissionId = Number(row['role_permission_id']);
-    const previousEmail = this.staffEmailValue(row);
-    const nextEmail = email.trim();
-    if (!staffId || !rolePermissionId || nextEmail === previousEmail) {
+    this.profileBusy.set(true);
+    this.api.requestProfileChange(staffId, { requestedByStaffId: staffId, staffName, email }).subscribe({
+      next: (request) => {
+        this.profileBusy.set(false);
+        this.myProfileChange.set(request);
+        this.profileEditing.set(false);
+        this.error.set('');
+        this.showToast('資料異動申請已送出，等待主管審核。');
+        if (this.canEditStaff()) {
+          this.loadPendingProfileChanges();
+        }
+      },
+      error: (response: HttpErrorResponse) => {
+        this.profileBusy.set(false);
+        this.error.set(response.status === 409
+          ? '此信箱已由其他職員使用。'
+          : '資料異動申請失敗，請確認姓名與信箱格式。');
+      }
+    });
+  }
+
+  loadMyProfileChange(): void {
+    const staffId = this.currentUser()?.staff_id;
+    if (!staffId) {
+      this.myProfileChange.set(null);
       return;
     }
-    this.api.updateStaff(staffId, { rolePermissionId, email: nextEmail }).subscribe({
+    this.api.profileChangeRequests(staffId).subscribe({
+      next: (rows) => this.myProfileChange.set(rows[0] ?? null),
+      error: () => this.myProfileChange.set(null)
+    });
+  }
+
+  loadPendingProfileChanges(): void {
+    this.api.profileChangeRequests(undefined, true).subscribe({
+      next: (rows) => this.pendingProfileChangeRows.set(rows),
+      error: () => this.error.set('無法載入資料異動申請。')
+    });
+  }
+
+  profileChangeStatusLabel(row: Record<string, unknown> | null): string {
+    switch (row?.['status']) {
+      case 'APPROVED':
+        return '已核准';
+      case 'REJECTED':
+        return '未核准';
+      case 'SUPERSEDED':
+        return '已更新';
+      default:
+        return '待審核';
+    }
+  }
+
+  isMyPendingProfileChange(): boolean {
+    return this.myProfileChange()?.['status'] === 'PENDING';
+  }
+
+  canReviewProfileChange(row: Record<string, unknown>): boolean {
+    return Number(row['staff_id']) !== this.currentStaffId();
+  }
+
+  reviewProfileChange(row: Record<string, unknown>, approve: boolean): void {
+    if (!this.canEditStaff() || !this.canReviewProfileChange(row)) {
+      return;
+    }
+    const requestId = Number(row['staff_profile_change_request_id']);
+    const reviewedByStaffId = this.currentStaffId();
+    if (!requestId || !reviewedByStaffId) {
+      return;
+    }
+    const emailChanged = this.textValue(row['current_email']) !== this.textValue(row['requested_email']);
+    this.api.reviewProfileChange(requestId, { reviewedByStaffId, approve }).subscribe({
       next: () => {
         this.error.set('');
-        this.showToast('職員工作 Email 已更新。');
+        this.showToast(approve
+          ? emailChanged ? '資料異動已核准，驗證信已寄出。' : '資料異動已核准。'
+          : '資料異動申請已退回。');
+        this.loadPendingProfileChanges();
         this.loadStaffOverview();
       },
       error: (response: HttpErrorResponse) => {
-        const message = response.status === 409
-          ? '此工作 Email 已由其他職員使用。'
-          : '工作 Email 更新失敗，請確認格式。';
-        this.error.set(message);
-        this.loadStaffOverview();
+        this.error.set(response.status === 409
+          ? '此申請已被處理，請重新整理。'
+          : '資料異動審核失敗，請重新整理後再試。');
+        this.loadPendingProfileChanges();
       }
     });
   }
@@ -2951,6 +3054,7 @@ export class AppComponent implements OnInit {
   private finishLogin(user: AuthUser): void {
     sessionStorage.setItem('cmsUser', JSON.stringify(user));
     this.currentUser.set(user);
+    this.profileForm = { staffName: user.staff_name, email: user.email ?? '' };
     this.authMode.set('login');
     this.error.set('');
     this.success.set('');

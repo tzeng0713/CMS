@@ -58,7 +58,7 @@ public class AuthService extends CmsJdbcSupport {
         }
         try {
             Map<String, Object> user = jdbc.queryForMap("""
-                    SELECT s.staff_id, s.staff_name, s.account, s.password_hash, s.email_verified_at,
+                    SELECT s.staff_id, s.staff_name, s.account, s.email, s.password_hash, s.email_verified_at,
                            s.account_approved_at, s.branch_id,
                            b.branch_name, r.role_permission_id, r.role_name, r.scope
                     FROM staff s
@@ -122,7 +122,7 @@ public class AuthService extends CmsJdbcSupport {
                 VALUES (?, ?, 1, ?, ?, ?, NULL, NULL, NULL, ?)
                 """, staffId, roleId, request.staffName().trim(), request.account().trim(),
                 email, passwordEncoder.encode(request.password()));
-        issueEmailVerification(staffId, email);
+        sendEmailVerification(staffId, email);
         return Map.of("message", EMAIL_VERIFICATION_MESSAGE);
     }
 
@@ -141,7 +141,7 @@ public class AuthService extends CmsJdbcSupport {
                     """, identifier, identifier);
             String email = (String) user.get("email");
             if (email != null && !email.isBlank() && user.get("email_verified_at") == null) {
-                issueEmailVerification(((Number) user.get("staff_id")).longValue(), email);
+                sendEmailVerification(((Number) user.get("staff_id")).longValue(), email);
             }
         } catch (EmptyResultDataAccessException ignored) {
             // Return the same status and message for an unknown account or email.
@@ -270,7 +270,7 @@ public class AuthService extends CmsJdbcSupport {
                 passwordEncoder.encode(rawPassword), staffId.longValue());
     }
 
-    private void issueEmailVerification(long staffId, String email) {
+    public void sendEmailVerification(long staffId, String email) {
         jdbc.update("UPDATE email_verification_tokens SET used_at = CURRENT_TIMESTAMP WHERE staff_id = ? AND used_at IS NULL", staffId);
         String rawToken = newSecureToken();
         jdbc.update("""
