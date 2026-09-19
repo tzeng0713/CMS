@@ -758,6 +758,11 @@ class CmsApplicationTests {
                 .andExpect(jsonPath("$.is_account_approved", is(false)))
                 .andExpect(jsonPath("$.canCreateOffice", is(false)));
 
+        mvc.perform(get("/api/staff"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].account", is("pending-approval")))
+                .andExpect(jsonPath("$[0].account_status", is("PENDING_APPROVAL")));
+
         mvc.perform(patch("/api/staff/{id}/approval", staffId)
                         .contentType("application/json")
                         .content("{\"approvedByStaffId\":1}"))

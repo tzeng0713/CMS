@@ -1642,15 +1642,10 @@ export class AppComponent implements OnInit {
       case 'ACTIVE':
         return '已開通';
       case 'PENDING_APPROVAL':
-        return '待主管審核';
+        return '待審核';
       default:
-        return '待 Email 驗證';
+        return '待驗證';
     }
-  }
-
-  accountApprovedByLabel(row: Record<string, unknown>): string {
-    const approvedBy = row['account_approved_by_name'];
-    return typeof approvedBy === 'string' && approvedBy ? `核准：${approvedBy}` : '既有帳號';
   }
 
   approveStaffAccount(row: Record<string, unknown>): void {

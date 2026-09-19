@@ -20,9 +20,9 @@ public class StaffService extends CmsJdbcSupport {
 
     public List<Map<String, Object>> staff(Long branchId) {
         if (branchId != null) {
-            return jdbc.queryForList(staffListSql() + " WHERE s.branch_id = ? ORDER BY s.staff_id", branchId);
+            return jdbc.queryForList(staffListSql() + " WHERE s.branch_id = ?" + staffOrderSql(), branchId);
         }
-        return jdbc.queryForList(staffListSql() + " ORDER BY s.staff_id");
+        return jdbc.queryForList(staffListSql() + staffOrderSql());
     }
 
     public Map<String, Object> updateStaff(long id, StaffUpdateRequest request) {
@@ -99,6 +99,17 @@ public class StaffService extends CmsJdbcSupport {
                 JOIN role_permissions r ON r.role_permission_id = s.role_permission_id
                 LEFT JOIN branches b ON b.branch_id = s.branch_id
                 LEFT JOIN staff approver ON approver.staff_id = s.account_approved_by
+                """;
+    }
+
+    private String staffOrderSql() {
+        return """
+                 ORDER BY CASE
+                              WHEN s.email_verified_at IS NOT NULL AND s.account_approved_at IS NULL THEN 0
+                              WHEN s.email_verified_at IS NULL THEN 1
+                              ELSE 2
+                          END,
+                          s.staff_id
                 """;
     }
 }

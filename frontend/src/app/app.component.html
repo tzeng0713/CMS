@@ -1651,7 +1651,7 @@
         <div class="panel-header">
           <div>
             <h2>職員總覽</h2>
-            <p>主管可審核已完成 Email 驗證的帳號，並調整角色權限與工作 Email。</p>
+            <p>待審核帳號優先置頂。</p>
           </div>
           <label class="inline-filter">
             分館
@@ -1668,10 +1668,9 @@
           <div class="simple-row header staff-row">
             <span>分館</span>
             <span>職員名稱</span>
-            <span>工作 Email</span>
+            <span>信箱</span>
             <span>角色權限</span>
             <span>帳號狀態</span>
-            <span>開通作業</span>
           </div>
           <div class="simple-row staff-row" *ngFor="let row of staffRows()">
             <span>{{ value(row, 'branch_name') }}</span>
@@ -1706,7 +1705,7 @@
             <ng-template #roleReadOnly>
               <span>{{ value(row, 'role_name') }}</span>
             </ng-template>
-            <span>
+            <span class="approval-status-cell">
               <span
                 class="approval-status"
                 [class.active]="row['account_status'] === 'ACTIVE'"
@@ -1715,16 +1714,12 @@
               >
                 <i aria-hidden="true"></i>{{ accountStatusLabel(row) }}
               </span>
-            </span>
-            <span class="staff-approval-cell">
               <button
                 *ngIf="canEditStaff() && isPendingApproval(row)"
                 type="button"
                 class="approval-action"
                 (click)="approveStaffAccount(row)"
               >核准開通</button>
-              <small *ngIf="row['account_status'] === 'ACTIVE'">{{ accountApprovedByLabel(row) }}</small>
-              <small *ngIf="row['account_status'] === 'EMAIL_UNVERIFIED'">尚待信箱驗證</small>
             </span>
           </div>
         </div>
