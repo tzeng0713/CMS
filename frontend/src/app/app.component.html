@@ -66,23 +66,23 @@
           <p>完成 Email 驗證與主管審核後，即可使用系統。</p>
         </div>
 
-        <label for="registerStaffName">
-          職員名稱
-        </label>
-        <input id="registerStaffName" name="registerStaffName" [(ngModel)]="registerForm.staffName" required />
-
         <label for="registerAccount">
           帳號
         </label>
         <input id="registerAccount" name="registerAccount" [(ngModel)]="registerForm.account" autocomplete="username" required />
 
-        <label for="registerEmail">信箱</label>
-        <input id="registerEmail" type="email" name="registerEmail" [(ngModel)]="registerForm.email" autocomplete="email" required />
-
         <label for="registerPassword">
           密碼
         </label>
         <input id="registerPassword" type="password" name="registerPassword" [(ngModel)]="registerForm.password" autocomplete="new-password" minlength="8" required />
+
+        <label for="registerStaffName">
+          職員名稱
+        </label>
+        <input id="registerStaffName" name="registerStaffName" [(ngModel)]="registerForm.staffName" required />
+
+        <label for="registerEmail">信箱</label>
+        <input id="registerEmail" type="email" name="registerEmail" [(ngModel)]="registerForm.email" autocomplete="email" required />
 
         <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '送出中…' : '送出申請' }}</button>
         <button type="button" class="auth-back-action" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
