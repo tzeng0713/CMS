@@ -92,6 +92,9 @@ public class AuthService extends CmsJdbcSupport {
                 || request.email() == null || request.email().isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "all fields are required");
         }
+        if (request.password().length() < 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "password must be at least 8 characters");
+        }
         String email = request.email().trim();
         if (!isEmail(email)) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "email is invalid");

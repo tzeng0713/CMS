@@ -59,6 +59,9 @@ type Toast = {
   kind: 'success' | 'error';
 };
 
+type RegistrationField = 'account' | 'password' | 'staffName' | 'email';
+type RegistrationFieldErrors = Partial<Record<RegistrationField, string>>;
+
 interface NavItem {
   key: ViewKey;
   label: string;
@@ -459,6 +462,7 @@ export class AppComponent implements OnInit {
   newCustomerFieldErrors = signal<Record<string, string>>({});
   customerEditFieldErrors = signal<Record<string, string>>({});
   newContractFieldErrors = signal<Record<string, string>>({});
+  registrationFieldErrors = signal<RegistrationFieldErrors>({});
   contractCustomerDropdownOpen = signal(false);
   private toastTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private toastExitTimeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -873,6 +877,7 @@ export class AppComponent implements OnInit {
   setAuthMode(mode: 'login' | 'register' | 'verification-pending' | 'forgot'): void {
     this.authMode.set(mode);
     this.loginPasswordVisible.set(false);
+    this.registrationFieldErrors.set({});
     this.clearAuthFeedback();
   }
 
@@ -882,20 +887,91 @@ export class AppComponent implements OnInit {
 
   register(): void {
     this.clearAuthFeedback();
+    const validationErrors = this.validateRegistrationForm();
+    this.registrationFieldErrors.set(validationErrors);
+    if (Object.keys(validationErrors).length > 0) {
+      this.focusFirstRegistrationError(validationErrors);
+      return;
+    }
+
+    const payload = {
+      account: this.registerForm.account.trim(),
+      password: this.registerForm.password,
+      staffName: this.registerForm.staffName.trim(),
+      email: this.registerForm.email.trim()
+    };
     this.authBusy.set(true);
-    this.api.register(this.registerForm).subscribe({
+    this.api.register(payload).subscribe({
       next: (response) => {
         this.authBusy.set(false);
-        this.emailVerificationForm.identifier = this.registerForm.account;
+        this.registrationFieldErrors.set({});
+        this.emailVerificationForm.identifier = payload.account;
         this.registerForm.password = '';
         this.authMode.set('verification-pending');
         this.authNotice.set(response.message || '驗證連結已寄送至註冊信箱。');
       },
-      error: () => {
+      error: (response: HttpErrorResponse) => {
         this.authBusy.set(false);
-        this.error.set('申請帳號失敗，請確認帳號、工作 Email 是否重複或欄位未填。');
+        const fieldErrors = this.registrationErrorsFromResponse(response);
+        if (Object.keys(fieldErrors).length > 0) {
+          this.registrationFieldErrors.set(fieldErrors);
+          this.focusFirstRegistrationError(fieldErrors);
+          return;
+        }
+        this.error.set('申請帳號暫時無法送出，請稍後再試。');
       }
     });
+  }
+
+  clearRegistrationFieldError(field: RegistrationField): void {
+    const { [field]: _removed, ...remaining } = this.registrationFieldErrors();
+    this.registrationFieldErrors.set(remaining);
+  }
+
+  private validateRegistrationForm(): RegistrationFieldErrors {
+    const errors: RegistrationFieldErrors = {};
+    if (!this.registerForm.account.trim()) {
+      errors.account = '請輸入帳號。';
+    }
+    if (!this.registerForm.password) {
+      errors.password = '請輸入密碼。';
+    } else if (this.registerForm.password.length < 8) {
+      errors.password = '密碼至少需要 8 個字元。';
+    }
+    if (!this.registerForm.staffName.trim()) {
+      errors.staffName = '請輸入職員名稱。';
+    }
+    const email = this.registerForm.email.trim();
+    if (!email) {
+      errors.email = '請輸入信箱。';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = '請輸入有效的信箱格式。';
+    }
+    return errors;
+  }
+
+  private registrationErrorsFromResponse(response: HttpErrorResponse): RegistrationFieldErrors {
+    const fieldErrors = response.error?.fieldErrors as Record<string, unknown> | undefined;
+    const errors: RegistrationFieldErrors = {};
+    if (typeof fieldErrors?.['account'] === 'string') errors.account = fieldErrors['account'];
+    if (typeof fieldErrors?.['password'] === 'string') errors.password = fieldErrors['password'];
+    if (typeof fieldErrors?.['staffName'] === 'string') errors.staffName = fieldErrors['staffName'];
+    if (typeof fieldErrors?.['email'] === 'string') errors.email = fieldErrors['email'];
+    return errors;
+  }
+
+  private focusFirstRegistrationError(errors: RegistrationFieldErrors): void {
+    const fieldIds: Record<RegistrationField, string> = {
+      account: 'registerAccount',
+      password: 'registerPassword',
+      staffName: 'registerStaffName',
+      email: 'registerEmail'
+    };
+    const firstInvalidField = (Object.keys(fieldIds) as RegistrationField[])
+      .find((field) => Boolean(errors[field]));
+    if (firstInvalidField) {
+      setTimeout(() => document.getElementById(fieldIds[firstInvalidField])?.focus(), 0);
+    }
   }
 
   openForgotPassword(): void {
@@ -905,11 +981,13 @@ export class AppComponent implements OnInit {
 
   openRegistration(): void {
     this.clearAuthFeedback();
+    this.registrationFieldErrors.set({});
     this.authMode.set('register');
   }
 
   returnToLogin(): void {
     this.clearAuthFeedback();
+    this.registrationFieldErrors.set({});
     this.authBusy.set(false);
     this.authMode.set('login');
   }

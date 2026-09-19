@@ -60,7 +60,7 @@
       </div>
     </form>
 
-    <form class="auth-form" *ngIf="authMode() === 'register'" (ngSubmit)="register()">
+    <form class="auth-form" *ngIf="authMode() === 'register'" (ngSubmit)="register()" novalidate>
         <div class="auth-panel-intro">
           <h2>申請帳號</h2>
           <p>完成 Email 驗證與主管審核後，即可使用系統。</p>
@@ -68,21 +68,77 @@
 
         <label for="registerAccount">
           帳號
+          <input
+            id="registerAccount"
+            name="registerAccount"
+            [(ngModel)]="registerForm.account"
+            (ngModelChange)="clearRegistrationFieldError('account')"
+            [class.field-invalid]="registrationFieldErrors()['account']"
+            [attr.aria-invalid]="registrationFieldErrors()['account'] ? 'true' : null"
+            [attr.aria-describedby]="registrationFieldErrors()['account'] ? 'registerAccountError' : null"
+            autocomplete="username"
+            required
+          />
+          <span id="registerAccountError" class="field-error" *ngIf="registrationFieldErrors()['account']" role="alert">
+            {{ registrationFieldErrors()['account'] }}
+          </span>
         </label>
-        <input id="registerAccount" name="registerAccount" [(ngModel)]="registerForm.account" autocomplete="username" required />
 
         <label for="registerPassword">
           密碼
+          <input
+            id="registerPassword"
+            type="password"
+            name="registerPassword"
+            [(ngModel)]="registerForm.password"
+            (ngModelChange)="clearRegistrationFieldError('password')"
+            [class.field-invalid]="registrationFieldErrors()['password']"
+            [attr.aria-invalid]="registrationFieldErrors()['password'] ? 'true' : null"
+            [attr.aria-describedby]="registrationFieldErrors()['password'] ? 'registerPasswordError' : null"
+            autocomplete="new-password"
+            minlength="8"
+            required
+          />
+          <span id="registerPasswordError" class="field-error" *ngIf="registrationFieldErrors()['password']" role="alert">
+            {{ registrationFieldErrors()['password'] }}
+          </span>
         </label>
-        <input id="registerPassword" type="password" name="registerPassword" [(ngModel)]="registerForm.password" autocomplete="new-password" minlength="8" required />
 
         <label for="registerStaffName">
           職員名稱
+          <input
+            id="registerStaffName"
+            name="registerStaffName"
+            [(ngModel)]="registerForm.staffName"
+            (ngModelChange)="clearRegistrationFieldError('staffName')"
+            [class.field-invalid]="registrationFieldErrors()['staffName']"
+            [attr.aria-invalid]="registrationFieldErrors()['staffName'] ? 'true' : null"
+            [attr.aria-describedby]="registrationFieldErrors()['staffName'] ? 'registerStaffNameError' : null"
+            required
+          />
+          <span id="registerStaffNameError" class="field-error" *ngIf="registrationFieldErrors()['staffName']" role="alert">
+            {{ registrationFieldErrors()['staffName'] }}
+          </span>
         </label>
-        <input id="registerStaffName" name="registerStaffName" [(ngModel)]="registerForm.staffName" required />
 
-        <label for="registerEmail">信箱</label>
-        <input id="registerEmail" type="email" name="registerEmail" [(ngModel)]="registerForm.email" autocomplete="email" required />
+        <label for="registerEmail">
+          信箱
+          <input
+            id="registerEmail"
+            type="email"
+            name="registerEmail"
+            [(ngModel)]="registerForm.email"
+            (ngModelChange)="clearRegistrationFieldError('email')"
+            [class.field-invalid]="registrationFieldErrors()['email']"
+            [attr.aria-invalid]="registrationFieldErrors()['email'] ? 'true' : null"
+            [attr.aria-describedby]="registrationFieldErrors()['email'] ? 'registerEmailError' : null"
+            autocomplete="email"
+            required
+          />
+          <span id="registerEmailError" class="field-error" *ngIf="registrationFieldErrors()['email']" role="alert">
+            {{ registrationFieldErrors()['email'] }}
+          </span>
+        </label>
 
         <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '送出中…' : '送出申請' }}</button>
         <button type="button" class="auth-back-action" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>

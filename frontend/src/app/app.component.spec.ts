@@ -1,6 +1,7 @@
 import { TestBed, fakeAsync, tick } from '@angular/core/testing';
+import { HttpErrorResponse } from '@angular/common/http';
 import { provideRouter, Router } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { AuthUser, CmsApiService, Dashboard } from './core/cms-api.service';
 import { AppComponent } from './app.component';
 
@@ -91,6 +92,48 @@ describe('new customer flow', () => {
     expect(component.newCustomerFieldErrors()).toEqual({});
   });
 
+  it('keeps registration validation beside the specific invalid field', () => {
+    component.registerForm = {
+      account: '',
+      password: 'short',
+      staffName: '',
+      email: 'not-an-email'
+    };
+
+    component.register();
+
+    expect(component.registrationFieldErrors()).toEqual({
+      account: '請輸入帳號。',
+      password: '密碼至少需要 8 個字元。',
+      staffName: '請輸入職員名稱。',
+      email: '請輸入有效的信箱格式。'
+    });
+    expect(component.error()).toBe('');
+  });
+
+  it('maps duplicate registration responses to their matching field', () => {
+    const api = {
+      register: () => throwError(() => new HttpErrorResponse({
+        status: 409,
+        error: { fieldErrors: { account: '此帳號已被使用，請改用其他帳號。' } }
+      }))
+    } as unknown as CmsApiService;
+    const registrationComponent = new AppComponent(api, {} as Router);
+    registrationComponent.registerForm = {
+      account: 'already-used',
+      password: 'secret123',
+      staffName: '測試職員',
+      email: 'new-account@cms.test'
+    };
+
+    registrationComponent.register();
+
+    expect(registrationComponent.registrationFieldErrors()).toEqual({
+      account: '此帳號已被使用，請改用其他帳號。'
+    });
+    expect(registrationComponent.error()).toBe('');
+  });
+
   it('clears stale new customer validation when re-entering the page', () => {
     spyOn(component, 'loadActiveViewData');
     component.activeView.set('customer-search');
@@ -176,7 +219,27 @@ describe('new customer flow', () => {
 
     expect(logo?.getAttribute('src')).toBe('assets/LOGO1.jpg');
     expect(passwordToggle).not.toBeNull();
-    expect(supportActions.map((button) => button.textContent?.trim())).toEqual(['忘記密碼', '申請帳號']);
+    expect(supportActions.map((button) => button.textContent?.trim())).toEqual(['申請帳號', '忘記密碼']);
+    fixture.destroy();
+  });
+
+  it('renders a field-level registration error below the invalid input', () => {
+    const fixture = TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [provideRouter([]), { provide: CmsApiService, useValue: {} }]
+    }).createComponent(AppComponent);
+    const view = fixture.componentInstance;
+    view.currentUser.set(null);
+    view.authMode.set('register');
+    fixture.detectChanges();
+
+    view.register();
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    const accountInput = page.querySelector<HTMLInputElement>('#registerAccount');
+    expect(accountInput?.classList.contains('field-invalid')).toBeTrue();
+    expect(page.querySelector('#registerAccountError')?.textContent?.trim()).toBe('請輸入帳號。');
     fixture.destroy();
   });
 
@@ -215,7 +278,7 @@ describe('new customer flow', () => {
     forgotPassword!.click();
     fixture.detectChanges();
 
-    expect(page.querySelector('.auth-help-panel')?.textContent).toContain('聯絡系統管理員');
+    expect(page.querySelector('.auth-help-panel')?.textContent).toContain('輸入帳號或信箱後，我們會寄送重設連結。');
     expect(page.querySelector('button.auth-back-action')?.textContent?.trim()).toBe('返回登入');
     fixture.destroy();
   });

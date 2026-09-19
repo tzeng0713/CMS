@@ -887,6 +887,48 @@ class CmsApplicationTests {
     }
 
     @Test
+    void registrationReturnsErrorsForTheSpecificInvalidField() throws Exception {
+        mvc.perform(post("/api/auth/register")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "staffName": "Field Error Tester",
+                                  "account": "manager",
+                                  "password": "secret123",
+                                  "email": "field-error-account@cms.test"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.fieldErrors.account", is("此帳號已被使用，請改用其他帳號。")));
+
+        mvc.perform(post("/api/auth/register")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "staffName": "Field Error Tester",
+                                  "account": "field-error-email",
+                                  "password": "secret123",
+                                  "email": "manager@cms.test"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.fieldErrors.email", is("此信箱已被使用，請改用其他信箱。")));
+
+        mvc.perform(post("/api/auth/register")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "staffName": "Field Error Tester",
+                                  "account": "field-error-password",
+                                  "password": "short",
+                                  "email": "field-error-password@cms.test"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.password", is("密碼至少需要 8 個字元。")));
+    }
+
+    @Test
     void verifiedSelfRegisteredAccountWaitsForManagerApproval() throws Exception {
         long staffId = insertPasswordResetStaff("pending-approval", "pending-approval@cms.test", "verify-password");
         jdbc.update("UPDATE staff SET account_approved_at = NULL, account_approved_by = NULL WHERE staff_id = ?", staffId);
