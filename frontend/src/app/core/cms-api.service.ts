@@ -45,11 +45,15 @@ export interface AuthUser {
   staff_id: number;
   staff_name: string;
   account: string;
+  email: string | null;
   branch_id: number | null;
   branch_name: string | null;
   role_permission_id: number;
   role_name: string;
   scope: string | null;
+  account_approved_at?: string | null;
+  account_status?: 'ACTIVE' | 'PENDING_APPROVAL';
+  is_account_approved?: boolean;
   canCreateRent: boolean;
   canEditRent: boolean;
   canEditStaff: boolean;
@@ -449,8 +453,24 @@ export class CmsApiService {
     return this.http.post<AuthUser>(`${this.baseUrl}/auth/login`, payload);
   }
 
-  register(payload: { staffName: string; account: string; password: string; roleName: string }): Observable<AuthUser> {
-    return this.http.post<AuthUser>(`${this.baseUrl}/auth/register`, payload);
+  register(payload: { staffName: string; account: string; email: string; password: string }): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/auth/register`, payload);
+  }
+
+  requestEmailVerification(payload: { identifier: string }): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/auth/email-verification-requests`, payload);
+  }
+
+  verifyEmail(payload: { token: string }): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/auth/email-verifications`, payload);
+  }
+
+  requestPasswordReset(payload: { identifier: string }): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/auth/password-reset-requests`, payload);
+  }
+
+  resetPassword(payload: { token: string; password: string; confirmPassword: string }): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/auth/password-resets`, payload);
   }
 
   dashboard(): Observable<Dashboard> {
@@ -578,6 +598,34 @@ export class CmsApiService {
 
   updateStaff(id: number, payload: { rolePermissionId: number }): Observable<Record<string, unknown>> {
     return this.http.put<Record<string, unknown>>(`${this.baseUrl}/staff/${id}`, payload);
+  }
+
+  approveStaff(id: number, payload: { approvedByStaffId: number }): Observable<Record<string, unknown>> {
+    return this.http.patch<Record<string, unknown>>(`${this.baseUrl}/staff/${id}/approval`, payload);
+  }
+
+  requestProfileChange(
+    id: number,
+    payload: { requestedByStaffId: number; staffName: string; email: string }
+  ): Observable<Record<string, unknown>> {
+    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/staff/${id}/profile-change-requests`, payload);
+  }
+
+  profileChangeRequests(staffId?: number, pendingOnly = false): Observable<Array<Record<string, unknown>>> {
+    const params: Record<string, string | number> = pendingOnly
+      ? { pendingOnly: 'true' }
+      : staffId ? { staffId } : {};
+    return this.http.get<Array<Record<string, unknown>>>(`${this.baseUrl}/staff/profile-change-requests`, { params });
+  }
+
+  reviewProfileChange(
+    requestId: number,
+    payload: { reviewedByStaffId: number; approve: boolean }
+  ): Observable<Record<string, unknown>> {
+    return this.http.patch<Record<string, unknown>>(
+      `${this.baseUrl}/staff/profile-change-requests/${requestId}`,
+      payload
+    );
   }
 
   rentPayments(

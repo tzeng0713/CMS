@@ -273,7 +273,6 @@ export class AppComponent implements OnInit {
   readonly chargeListBankInfo = CHARGE_LIST_BANK_INFO;
   readonly chargeListBankAccountName = CHARGE_LIST_BANK_ACCOUNT_NAME;
   readonly chargeListBankAccountNumber = CHARGE_LIST_BANK_ACCOUNT_NUMBER;
-  readonly roleOptions = ['主管', '督導秘書', '一般秘書'];
   readonly statusOptions = [
     { value: 0, label: '租賃中' },
     { value: 1, label: '解約中' },
@@ -362,7 +361,13 @@ export class AppComponent implements OnInit {
   }
 
   currentUser = signal<AuthUser | null>(this.loadStoredUser());
-  authMode = signal<'login' | 'register'>('login');
+  authMode = signal<'login' | 'register' | 'verification-pending' | 'verify' | 'forgot' | 'reset'>('login');
+  authBusy = signal(false);
+  authNotice = signal('');
+  showLoginPassword = signal(false);
+  showRegisterPassword = signal(false);
+  showResetPassword = signal(false);
+  showResetConfirmation = signal(false);
   activeView = signal<ViewKey>('home');
   isNarrowViewport = signal(this.isNarrowWindow());
   desktopSidebarCollapsed = signal(false);
@@ -386,6 +391,10 @@ export class AppComponent implements OnInit {
   roles = signal<RoleSummary[]>([]);
   staffOptions = signal<Array<Record<string, unknown>>>([]);
   staffRows = signal<Array<Record<string, unknown>>>([]);
+  myProfileChange = signal<Record<string, unknown> | null>(null);
+  pendingProfileChangeRows = signal<Array<Record<string, unknown>>>([]);
+  profileEditing = signal(false);
+  profileBusy = signal(false);
   contractTotal = signal(0);
   contractPage = signal(0);
   contractPageSize = signal(20);
@@ -492,6 +501,10 @@ export class AppComponent implements OnInit {
   refundSortBy = 'createdAt';
   refundSortDir: 'asc' | 'desc' = 'desc';
   staffBranchFilter: number | null = null;
+  profileForm = {
+    staffName: this.currentUser()?.staff_name ?? '',
+    email: this.currentUser()?.email ?? ''
+  };
   contractCustomerSearch = '';
   chargeListCustomerSearch = '';
   rentCustomerSearch = '';
@@ -506,8 +519,23 @@ export class AppComponent implements OnInit {
   registerForm = {
     staffName: '',
     account: '',
+    email: '',
+    password: ''
+  };
+
+  forgotPasswordForm = {
+    identifier: ''
+  };
+
+  resetPasswordForm = {
+    token: '',
     password: '',
-    roleName: '一般秘書'
+    confirmPassword: ''
+  };
+
+  emailVerificationForm = {
+    identifier: '',
+    token: ''
   };
 
   newCustomerForm: CustomerForm = emptyCustomerForm();
@@ -602,6 +630,18 @@ export class AppComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    const searchParams = new URLSearchParams(window.location.search);
+    const verificationToken = searchParams.get('verificationToken');
+    const resetToken = searchParams.get('resetToken');
+    if (!this.currentUser() && verificationToken) {
+      this.emailVerificationForm.token = verificationToken;
+      this.authMode.set('verify');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (!this.currentUser() && resetToken) {
+      this.resetPasswordForm.token = resetToken;
+      this.authMode.set('reset');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
     this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.applyRoute(event.urlAfterRedirects);
@@ -612,7 +652,7 @@ export class AppComponent implements OnInit {
     } else {
       this.applyRoute(this.router.url);
     }
-    if (this.currentUser()) {
+    if (this.currentUser() && !this.isAccountPending()) {
       this.refresh();
     }
   }
@@ -741,17 +781,169 @@ export class AppComponent implements OnInit {
   }
 
   login(): void {
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
     this.api.login(this.loginForm).subscribe({
-      next: (user) => this.finishLogin(user),
-      error: () => this.error.set('登入失敗，請確認帳號密碼。')
+      next: (user) => {
+        this.authBusy.set(false);
+        this.finishLogin(user);
+      },
+      error: (response: HttpErrorResponse) => {
+        this.authBusy.set(false);
+        if (response.status === 403) {
+          this.emailVerificationForm.identifier = this.loginForm.account.trim();
+          this.authMode.set('verification-pending');
+          this.authNotice.set('請先完成 Email 驗證，再登入。');
+          return;
+        }
+        this.error.set('登入失敗，請確認帳號密碼。');
+      }
     });
   }
 
   register(): void {
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
     this.api.register(this.registerForm).subscribe({
-      next: (user) => this.finishLogin(user),
-      error: () => this.error.set('申請帳號失敗，請確認帳號是否重複或欄位未填。')
+      next: (response) => {
+        this.authBusy.set(false);
+        this.emailVerificationForm.identifier = this.registerForm.account;
+        this.registerForm.password = '';
+        this.authMode.set('verification-pending');
+        this.authNotice.set(response.message || '驗證連結已寄送至註冊信箱。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.error.set('申請帳號失敗，請確認帳號、工作 Email 是否重複或欄位未填。');
+      }
     });
+  }
+
+  openForgotPassword(): void {
+    this.clearAuthFeedback();
+    this.authMode.set('forgot');
+  }
+
+  openRegistration(): void {
+    this.clearAuthFeedback();
+    this.authMode.set('register');
+  }
+
+  returnToLogin(): void {
+    this.clearAuthFeedback();
+    this.authBusy.set(false);
+    this.authMode.set('login');
+  }
+
+  toggleLoginPassword(): void {
+    this.showLoginPassword.update((isVisible) => !isVisible);
+  }
+
+  toggleRegisterPassword(): void {
+    this.showRegisterPassword.update((isVisible) => !isVisible);
+  }
+
+  toggleResetPassword(): void {
+    this.showResetPassword.update((isVisible) => !isVisible);
+  }
+
+  toggleResetConfirmation(): void {
+    this.showResetConfirmation.update((isVisible) => !isVisible);
+  }
+
+  requestEmailVerification(): void {
+    const identifier = this.emailVerificationForm.identifier.trim();
+    if (!identifier) {
+      this.error.set('請輸入帳號或工作 Email。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.requestEmailVerification({ identifier }).subscribe({
+      next: (response) => {
+        this.authBusy.set(false);
+        this.authNotice.set(response.message || '驗證連結已寄送至註冊信箱。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.authNotice.set('驗證連結已寄送至註冊信箱。');
+      }
+    });
+  }
+
+  completeEmailVerification(): void {
+    if (!this.emailVerificationForm.token) {
+      this.error.set('驗證連結無效或已過期，請重新申請帳號或寄送驗證信。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.verifyEmail({ token: this.emailVerificationForm.token }).subscribe({
+      next: () => {
+        this.authBusy.set(false);
+        this.emailVerificationForm.token = '';
+        this.authMode.set('login');
+        this.authNotice.set('Email 驗證完成，帳號已送交主管審核。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.error.set('驗證連結無效或已過期，請重新寄送驗證信。');
+      }
+    });
+  }
+
+  requestPasswordReset(): void {
+    const identifier = this.forgotPasswordForm.identifier.trim();
+    if (!identifier) {
+      this.error.set('請輸入帳號或工作 Email。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.requestPasswordReset({ identifier }).subscribe({
+      next: (response) => {
+        this.authBusy.set(false);
+        this.authNotice.set(response.message || '重設連結已寄送至註冊信箱。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.authNotice.set('重設連結已寄送至註冊信箱。');
+      }
+    });
+  }
+
+  completePasswordReset(): void {
+    if (!this.resetPasswordForm.token) {
+      this.error.set('重設連結無效或已過期，請重新申請。');
+      return;
+    }
+    if (this.resetPasswordForm.password.length < 8) {
+      this.error.set('新密碼至少需要 8 個字元。');
+      return;
+    }
+    if (this.resetPasswordForm.password !== this.resetPasswordForm.confirmPassword) {
+      this.error.set('兩次輸入的新密碼不一致。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.resetPassword(this.resetPasswordForm).subscribe({
+      next: () => {
+        this.authBusy.set(false);
+        this.resetPasswordForm = { token: '', password: '', confirmPassword: '' };
+        this.authMode.set('login');
+        this.authNotice.set('密碼已更新，請使用新密碼登入。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.error.set('重設連結無效或已過期，請重新申請。');
+      }
+    });
+  }
+
+  private clearAuthFeedback(): void {
+    this.error.set('');
+    this.authNotice.set('');
   }
 
   logout(): void {
@@ -772,6 +964,9 @@ export class AppComponent implements OnInit {
     this.editingRefund.set(null);
     this.viewingRefund.set(null);
     this.staffRows.set([]);
+    this.myProfileChange.set(null);
+    this.pendingProfileChangeRows.set([]);
+    this.profileEditing.set(false);
     this.router.navigateByUrl('/home');
     this.error.set('');
     this.success.set('');
@@ -1398,6 +1593,10 @@ export class AppComponent implements OnInit {
 
   loadStaffOverview(): void {
     this.loadStaffSupportData();
+    this.loadMyProfileChange();
+    if (this.canEditStaff()) {
+      this.loadPendingProfileChanges();
+    }
     this.api.staff(this.staffBranchFilter).subscribe({
       next: (rows) => this.staffRows.set(rows),
       error: () => this.error.set('無法載入職員資料。')
@@ -1420,6 +1619,165 @@ export class AppComponent implements OnInit {
       },
       error: () => this.error.set('職員角色權限更新失敗。')
     });
+  }
+
+  isAccountPending(): boolean {
+    return this.currentUser()?.is_account_approved === false;
+  }
+
+  openProfileEditor(): void {
+    this.profileForm = {
+      staffName: this.currentUser()?.staff_name ?? '',
+      email: this.currentUser()?.email ?? ''
+    };
+    this.profileEditing.set(true);
+    this.error.set('');
+  }
+
+  cancelProfileEdit(): void {
+    this.profileEditing.set(false);
+    this.error.set('');
+  }
+
+  submitProfileChange(): void {
+    const staffId = this.currentStaffId();
+    const staffName = this.profileForm.staffName.trim();
+    const email = this.profileForm.email.trim();
+    if (!staffId || !staffName || !email) {
+      this.error.set('請完整填寫姓名與信箱。');
+      return;
+    }
+    this.profileBusy.set(true);
+    this.api.requestProfileChange(staffId, { requestedByStaffId: staffId, staffName, email }).subscribe({
+      next: (request) => {
+        this.profileBusy.set(false);
+        this.myProfileChange.set(request);
+        this.profileEditing.set(false);
+        this.error.set('');
+        this.showToast('資料異動申請已送出，等待主管審核。');
+        if (this.canEditStaff()) {
+          this.loadPendingProfileChanges();
+        }
+      },
+      error: (response: HttpErrorResponse) => {
+        this.profileBusy.set(false);
+        this.error.set(response.status === 409
+          ? '此信箱已由其他職員使用。'
+          : '資料異動申請失敗，請確認姓名與信箱格式。');
+      }
+    });
+  }
+
+  loadMyProfileChange(): void {
+    const staffId = this.currentUser()?.staff_id;
+    if (!staffId) {
+      this.myProfileChange.set(null);
+      return;
+    }
+    this.api.profileChangeRequests(staffId).subscribe({
+      next: (rows) => this.myProfileChange.set(rows[0] ?? null),
+      error: () => this.myProfileChange.set(null)
+    });
+  }
+
+  loadPendingProfileChanges(): void {
+    this.api.profileChangeRequests(undefined, true).subscribe({
+      next: (rows) => this.pendingProfileChangeRows.set(rows),
+      error: () => this.error.set('無法載入資料異動申請。')
+    });
+  }
+
+  profileChangeStatusLabel(row: Record<string, unknown> | null): string {
+    switch (row?.['status']) {
+      case 'APPROVED':
+        return '已核准';
+      case 'REJECTED':
+        return '未核准';
+      case 'SUPERSEDED':
+        return '已更新';
+      default:
+        return '待審核';
+    }
+  }
+
+  isMyPendingProfileChange(): boolean {
+    return this.myProfileChange()?.['status'] === 'PENDING';
+  }
+
+  canReviewProfileChange(row: Record<string, unknown>): boolean {
+    return Number(row['staff_id']) !== this.currentStaffId();
+  }
+
+  reviewProfileChange(row: Record<string, unknown>, approve: boolean): void {
+    if (!this.canEditStaff() || !this.canReviewProfileChange(row)) {
+      return;
+    }
+    const requestId = Number(row['staff_profile_change_request_id']);
+    const reviewedByStaffId = this.currentStaffId();
+    if (!requestId || !reviewedByStaffId) {
+      return;
+    }
+    const emailChanged = this.textValue(row['current_email']) !== this.textValue(row['requested_email']);
+    this.api.reviewProfileChange(requestId, { reviewedByStaffId, approve }).subscribe({
+      next: () => {
+        this.error.set('');
+        this.showToast(approve
+          ? emailChanged ? '資料異動已核准，驗證信已寄出。' : '資料異動已核准。'
+          : '資料異動申請已退回。');
+        this.loadPendingProfileChanges();
+        this.loadStaffOverview();
+      },
+      error: (response: HttpErrorResponse) => {
+        this.error.set(response.status === 409
+          ? '此申請已被處理，請重新整理。'
+          : '資料異動審核失敗，請重新整理後再試。');
+        this.loadPendingProfileChanges();
+      }
+    });
+  }
+
+  isPendingApproval(row: Record<string, unknown>): boolean {
+    return row['account_status'] === 'PENDING_APPROVAL';
+  }
+
+  accountStatusLabel(row: Record<string, unknown>): string {
+    switch (row['account_status']) {
+      case 'ACTIVE':
+        return '已開通';
+      case 'PENDING_APPROVAL':
+        return '待審核';
+      default:
+        return '待驗證';
+    }
+  }
+
+  approveStaffAccount(row: Record<string, unknown>): void {
+    if (!this.canEditStaff() || !this.isPendingApproval(row)) {
+      return;
+    }
+    const staffId = Number(row['staff_id']);
+    const approvedByStaffId = this.currentStaffId();
+    if (!staffId || !approvedByStaffId) {
+      return;
+    }
+    this.api.approveStaff(staffId, { approvedByStaffId }).subscribe({
+      next: () => {
+        this.error.set('');
+        this.showToast('帳號已核准開通，對方重新登入後即可使用系統。');
+        this.loadStaffOverview();
+      },
+      error: (response: HttpErrorResponse) => {
+        this.error.set(response.status === 409
+          ? '此帳號尚未完成 Email 驗證，或已完成開通。'
+          : '帳號開通失敗，請重新整理後再試。');
+        this.loadStaffOverview();
+      }
+    });
+  }
+
+  staffEmailValue(row: Record<string, unknown>): string {
+    const email = row['email'];
+    return typeof email === 'string' ? email : '';
   }
 
   loadContracts(): void {
@@ -2696,9 +3054,14 @@ export class AppComponent implements OnInit {
   private finishLogin(user: AuthUser): void {
     sessionStorage.setItem('cmsUser', JSON.stringify(user));
     this.currentUser.set(user);
+    this.profileForm = { staffName: user.staff_name, email: user.email ?? '' };
     this.authMode.set('login');
     this.error.set('');
     this.success.set('');
+    if (this.isAccountPending()) {
+      this.router.navigateByUrl('/home');
+      return;
+    }
     this.loadDashboard();
     this.applyRoute(this.router.url === '/' ? '/home' : this.router.url);
   }
@@ -2908,7 +3271,7 @@ export class AppComponent implements OnInit {
 
   private applyRoute(url: string): void {
     const path = url.split('?')[0].split('#')[0];
-    if (!this.currentUser()) {
+    if (!this.currentUser() || this.isAccountPending()) {
       return;
     }
     const customerMatch = path.match(/^\/customers\/(\d+)$/);

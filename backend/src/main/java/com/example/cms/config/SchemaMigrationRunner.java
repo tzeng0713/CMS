@@ -21,6 +21,10 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
     public void run(String... args) {
         migrateRoleNames();
         migrateStaffBranch();
+        migrateStaffEmail();
+        migrateStaffEmailVerification();
+        migrateStaffAccountApproval();
+        migrateStaffProfileChangeRequests();
         migrateCustomerRentalFields();
         migrateCustomerWorkflowFields();
         migrateCustomerRelationTables();
@@ -53,6 +57,50 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
             jdbc.update("UPDATE staff SET branch_id = 1 WHERE branch_id IS NULL");
             return null;
         });
+    }
+
+    private void migrateStaffEmail() {
+        addColumnIfMissing("staff", "email", "VARCHAR(254)");
+        addUniqueIndexIfMissing("staff", "idx_staff_email", "email");
+    }
+
+    private void migrateStaffEmailVerification() {
+        addColumnIfMissing("staff", "email_verified_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS email_verification_tokens (
+                  email_verification_token_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                  staff_id BIGINT NOT NULL,
+                  token_hash CHAR(64) NOT NULL,
+                  expires_at TIMESTAMP NOT NULL,
+                  used_at TIMESTAMP,
+                  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  CONSTRAINT fk_email_verification_tokens_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
+                )
+                """);
+    }
+
+    private void migrateStaffAccountApproval() {
+        // Existing staff must retain access after the feature is introduced. New self-service
+        // registrations explicitly set this value to NULL until a manager approves them.
+        addColumnIfMissing("staff", "account_approved_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+        addColumnIfMissing("staff", "account_approved_by", "BIGINT");
+    }
+
+    private void migrateStaffProfileChangeRequests() {
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS staff_profile_change_requests (
+                  staff_profile_change_request_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+                  staff_id BIGINT NOT NULL,
+                  requested_staff_name VARCHAR(80) NOT NULL,
+                  requested_email VARCHAR(254) NOT NULL,
+                  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+                  requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                  reviewed_at TIMESTAMP,
+                  reviewed_by BIGINT,
+                  CONSTRAINT fk_profile_change_requests_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id),
+                  CONSTRAINT fk_profile_change_requests_reviewer FOREIGN KEY (reviewed_by) REFERENCES staff(staff_id)
+                )
+                """);
     }
 
     private void migrateCustomerRentalFields() {
@@ -121,7 +169,8 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
 
     private void addColumnIfMissing(String tableName, String columnName, String definition) {
         jdbc.execute((ConnectionCallback<Void>) connection -> {
-            try (var columns = connection.getMetaData().getColumns(null, null, tableName, columnName)) {
+            try (var columns = connection.getMetaData().getColumns(
+                    metadataCatalog(connection), null, tableName, columnName)) {
                 if (columns.next()) {
                     return null;
                 }
@@ -368,7 +417,8 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
 
     private void addIndexIfMissing(String table, String indexName, String column) {
         jdbc.execute((ConnectionCallback<Void>) connection -> {
-            try (var indexes = connection.getMetaData().getIndexInfo(null, null, table, false, false)) {
+            try (var indexes = connection.getMetaData().getIndexInfo(
+                    metadataCatalog(connection), null, table, false, false)) {
                 while (indexes.next()) {
                     if (indexName.equalsIgnoreCase(indexes.getString("INDEX_NAME"))) {
                         return null;
@@ -376,6 +426,21 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
                 }
             }
             jdbc.execute("CREATE INDEX " + indexName + " ON " + table + "(" + column + ")");
+            return null;
+        });
+    }
+
+    private void addUniqueIndexIfMissing(String table, String indexName, String column) {
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            try (var indexes = connection.getMetaData().getIndexInfo(
+                    metadataCatalog(connection), null, table, false, false)) {
+                while (indexes.next()) {
+                    if (indexName.equalsIgnoreCase(indexes.getString("INDEX_NAME"))) {
+                        return null;
+                    }
+                }
+            }
+            jdbc.execute("CREATE UNIQUE INDEX " + indexName + " ON " + table + "(" + column + ")");
             return null;
         });
     }
@@ -388,6 +453,12 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         addColumnIfMissing("branches", "bank_account",      "VARCHAR(50)");
         addColumnIfMissing("branches", "bank_branch",       "VARCHAR(100)");
         addColumnIfMissing("branches", "bank_account_name", "VARCHAR(100)");
+    }
+
+    private String metadataCatalog(java.sql.Connection connection) throws java.sql.SQLException {
+        return connection.getMetaData().getDatabaseProductName().toLowerCase().contains("mysql")
+                ? connection.getCatalog()
+                : null;
     }
 
     private void migrateContractLeaseStatus() {

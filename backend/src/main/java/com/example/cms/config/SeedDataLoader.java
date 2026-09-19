@@ -73,9 +73,9 @@ public class SeedDataLoader implements CommandLineRunner {
 
     private void insertStaff(List<Map<String, Object>> rows) {
         rows.forEach(r -> jdbc.update(
-                "INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, password_hash) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, email, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 n(r, "staffId"), n(r, "rolePermissionId"), n(r, "branchId") == null ? 1L : n(r, "branchId"),
-                s(r, "staffName"), s(r, "account"), "{noop}password"));
+                s(r, "staffName"), s(r, "account"), s(r, "email"), "{noop}password"));
     }
 
     private void insertOffices(List<Map<String, Object>> rows) {

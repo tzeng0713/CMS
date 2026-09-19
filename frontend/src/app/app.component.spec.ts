@@ -33,6 +33,25 @@ describe('new customer flow', () => {
     expect(component.newCustomerForm.companyName).toBe('測試客戶有限公司');
   });
 
+  it('opens the password recovery form from login', () => {
+    component.openForgotPassword();
+
+    expect(component.authMode()).toBe('forgot');
+  });
+
+  it('blocks a password reset when the new passwords do not match', () => {
+    component.resetPasswordForm = {
+      token: 'reset-token',
+      password: 'new-password',
+      confirmPassword: 'different-password'
+    };
+
+    component.completePasswordReset();
+
+    expect(component.error()).toBe('兩次輸入的新密碼不一致。');
+    expect(component.authBusy()).toBeFalse();
+  });
+
   it('discards an unsaved customer flow and returns to the customer list after confirmation', () => {
     component.newCustomerForm.companyName = '測試客戶有限公司';
     component.newCustomerContractForm.rent = 12000;
@@ -356,6 +375,7 @@ describe('new customer flow', () => {
       staff_id: 1,
       staff_name: '系統主管',
       account: 'admin',
+      email: 'admin@cms.test',
       branch_id: null,
       branch_name: null,
       role_permission_id: 1,
@@ -423,6 +443,7 @@ function testUser(): AuthUser {
     staff_id: 1,
     staff_name: '測試主管',
     account: 'test',
+    email: 'test@cms.test',
     branch_id: null,
     branch_name: null,
     role_permission_id: 1,
