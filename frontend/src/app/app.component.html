@@ -2825,41 +2825,30 @@
           </div>
         </div>
 
-        <section class="staff-bonus-summary">
-          <div class="staff-bonus-summary-header">
-            <h3>各祕書可獲得獎金一覽</h3>
-            <p>依目前的規則類型／期間／分館篩選條件加總（不受祕書篩選與分頁影響）。</p>
-          </div>
-          <div class="empty-state" *ngIf="!staffBonusSummaryRows().length">目前沒有可統計的業績結算資料。</div>
-          <div class="kpis staff-bonus-kpis" *ngIf="staffBonusSummaryRows().length">
-            <article *ngFor="let item of staffBonusSummaryRows()">
-              <span>{{ item.staffName }}</span>
-              <strong>{{ money(item.total) }}</strong>
-              <small>{{ item.count }} 筆</small>
-            </article>
-          </div>
-        </section>
-
         <div class="content-tabs">
           <button type="button" [class.active]="performanceBonusTab() === 'business'" (click)="performanceBonusTab.set('business')">業績</button>
           <button type="button" [class.active]="performanceBonusTab() === 'performance'" (click)="performanceBonusTab.set('performance')">績效</button>
         </div>
 
         <ng-container *ngIf="performanceBonusTab() === 'business'">
+          <section class="current-period-bar">
+            <label>
+              目前檢視月份
+              <input type="month" name="businessCurrentMonth" [(ngModel)]="settleMonthlyYearMonth" (change)="onBusinessMonthChange()" />
+            </label>
+            <p>業績是按月結算，下方的結算觸發、滿租／登記加乘獎金、查詢清單都是這個月份的資料。</p>
+          </section>
+
           <div class="gold-card" *ngIf="canManageBonusRules()">
             <div class="panel-header">
               <div>
                 <h3>結算觸發</h3>
-                <p>規則一／二／三／四／六／八一次結算，可重複執行，已入帳的資料不會重複計算。</p>
+                <p>規則一／二／三／四／六／八一次結算，可重複執行，已入帳的資料不會重複計算。套用月份：{{ monthLabel(settleMonthlyYearMonth) }}</p>
               </div>
             </div>
             <div class="settle-actions">
               <div class="settle-action-item">
-                <p>規則一／二／三／八：辦公室出租、公司登記業績、同心、公司登記年繳（逐筆合約／收款觸發）；規則四／六：滿租獎金、登記加乘獎金（按月結算，套用下方月份）</p>
-                <label>
-                  月份
-                  <input type="month" name="settleMonthlyYearMonth" [(ngModel)]="settleMonthlyYearMonth" />
-                </label>
+                <p>規則一／二／三／八：辦公室出租、公司登記業績、同心、公司登記年繳（逐筆合約／收款觸發）；規則四／六：滿租獎金、登記加乘獎金（按月結算，套用上方「目前檢視月份」）</p>
                 <button type="button" [disabled]="settlingBusiness()" (click)="settleBusinessBonuses()">業績結算</button>
               </div>
             </div>
@@ -2906,19 +2895,11 @@
           </div>
 
           <section class="bonus-block-section">
-            <div class="bonus-block-filter">
-              <label>
-                查詢月份
-                <input type="month" name="bonusBlockMonth" [(ngModel)]="bonusBlockMonth"
-                       (change)="loadFullOccupancyBlock(); loadRegistrationMultiplierBlock()" />
-              </label>
-            </div>
-
             <div class="gold-card">
               <div class="panel-header">
                 <div>
                   <h3>滿租獎金（月結）</h3>
-                  <p>{{ monthLabel(bonusBlockMonth) }} 業績</p>
+                  <p>{{ monthLabel(settleMonthlyYearMonth) }} 業績</p>
                 </div>
               </div>
               <div class="empty-state" *ngIf="!fullOccupancyByBranch().length">此月份尚無滿租獎金結算資料。</div>
@@ -2946,7 +2927,7 @@
               <div class="panel-header">
                 <div>
                   <h3>登記加乘獎金（月結）</h3>
-                  <p>{{ monthLabel(bonusBlockMonth) }} 業績</p>
+                  <p>{{ monthLabel(settleMonthlyYearMonth) }} 業績</p>
                 </div>
               </div>
               <div class="empty-state" *ngIf="!registrationMultiplierByBranch().length">此月份尚無登記加乘獎金結算資料。</div>
@@ -2972,26 +2953,35 @@
             </div>
           </section>
 
-          <section class="filter-bar performance-bonus-filter-bar">
-            <label>
-              規則類型
-              <select name="performanceBonusFilterRuleType" [(ngModel)]="performanceBonusFilters.ruleType">
-                <option value="">全部</option>
-                <option *ngFor="let option of businessBonusRuleTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
-              </select>
-            </label>
-            <label>
-              期間
-              <div class="period-filter-group">
-                <select name="performanceBonusFilterYear" [(ngModel)]="performanceBonusFilterYear" [disabled]="!performanceBonusFilterUnit">
-                  <option *ngFor="let year of performanceBonusYearOptions" [ngValue]="year">{{ year }}年</option>
-                </select>
-                <select name="performanceBonusFilterUnit" [(ngModel)]="performanceBonusFilterUnit">
+          <section class="staff-bonus-summary">
+            <div class="staff-bonus-summary-header">
+              <h3>各祕書可獲得獎金一覽</h3>
+              <p>依下方的規則類型／期間／分館篩選條件加總（不受祕書篩選與分頁影響）。</p>
+            </div>
+            <div class="empty-state" *ngIf="!staffBonusSummaryRows().length">目前沒有可統計的業績結算資料。</div>
+            <div class="kpis staff-bonus-kpis" *ngIf="staffBonusSummaryRows().length">
+              <article *ngFor="let item of staffBonusSummaryRows()">
+                <span>{{ item.staffName }}</span>
+                <strong>{{ money(item.total) }}</strong>
+                <small>{{ item.count }} 筆</small>
+              </article>
+            </div>
+          </section>
+
+          <section class="filter-bar performance-bonus-filter-bar business-bonus-filter-bar">
+            <div class="rule-type-field">
+              <label>
+                規則類型
+                <select name="performanceBonusFilterRuleType" [(ngModel)]="performanceBonusFilters.ruleType">
                   <option value="">全部</option>
-                  <option *ngFor="let option of performanceBonusMonthOptions" [value]="option.value">{{ option.label }}</option>
+                  <option *ngFor="let option of businessBonusRuleTypeOptions" [ngValue]="option.value">{{ option.label }}</option>
                 </select>
-              </div>
-            </label>
+              </label>
+              <label class="checkbox-label compact-checkbox" title="否則只看目前檢視月份：{{ monthLabel(settleMonthlyYearMonth) }}">
+                <input type="checkbox" name="performanceBonusShowAllPeriods" [(ngModel)]="performanceBonusShowAllPeriods" (change)="searchPerformanceBonuses()" />
+                <span class="checkbox-text">顯示全部期間（否則只看 {{ monthLabel(settleMonthlyYearMonth) }}）</span>
+              </label>
+            </div>
             <label>
               分館
               <select name="performanceBonusFilterBranchId" [(ngModel)]="performanceBonusFilters.branchId">
@@ -3013,23 +3003,19 @@
 
           <div class="empty-state" *ngIf="!performanceBonusRows().length">目前沒有業績結算資料。</div>
           <div class="simple-table" *ngIf="performanceBonusRows().length">
-            <div class="simple-row header eight">
+            <div class="simple-row header six-bonus">
               <span>規則</span>
               <span>祕書</span>
               <span>分館 / 客戶</span>
               <span>期間</span>
-              <span>簽約數</span>
-              <span>解約數</span>
               <span class="amount-cell">金額</span>
               <span>備註</span>
             </div>
-            <div class="simple-row eight" *ngFor="let row of performanceBonusRows()">
+            <div class="simple-row six-bonus" *ngFor="let row of performanceBonusRows()">
               <span>{{ row.rule_name || bonusRuleTypeLabel(row.rule_type || '') }}</span>
               <span>{{ row.staff_name || '-' }}</span>
               <span>{{ row.branch_name || row.company_name || '-' }}</span>
               <span>{{ row.period || '-' }}</span>
-              <span>{{ row.signed_count ?? '-' }}</span>
-              <span>{{ row.cancelled_count ?? '-' }}</span>
               <span class="amount-cell">{{ money(row.bonus_amount) }}</span>
               <span class="stacked-field">{{ row.note || '-' }}</span>
             </div>
@@ -3052,28 +3038,31 @@
         </ng-container>
 
         <ng-container *ngIf="performanceBonusTab() === 'performance'">
+          <section class="current-period-bar">
+            <label>
+              目前檢視期間
+              <div class="period-filter-group">
+                <input type="number" name="performanceCurrentYear" [(ngModel)]="settlePeriodYear" (change)="onPerformancePeriodChange()" />
+                <select name="performanceCurrentQuarter" [(ngModel)]="settlePeriodQuarter" (change)="onPerformancePeriodChange()">
+                  <option [ngValue]="1">第一期（1～4月）</option>
+                  <option [ngValue]="2">第二期（5～8月）</option>
+                  <option [ngValue]="3">第三期（9～12月）</option>
+                </select>
+              </div>
+            </label>
+            <p>績效是每 4 個月結算一次，下方的結算觸發、分館績效獎金、查詢清單都是這個期間的資料。</p>
+          </section>
+
           <div class="gold-card" *ngIf="canManageBonusRules()">
             <div class="panel-header">
               <div>
                 <h3>結算觸發</h3>
-                <p>規則七：分館績效獎金（每 4 個月結算一次），可重複執行，已入帳的資料不會重複計算。</p>
+                <p>規則七：分館績效獎金（每 4 個月結算一次），可重複執行，已入帳的資料不會重複計算。套用期間：{{ quarterLabel(settlePeriodYear, settlePeriodQuarter) }}</p>
               </div>
             </div>
             <div class="settle-actions">
               <div class="settle-action-item">
-                <p>規則七：分館績效獎金（每 4 個月結算一次）</p>
-                <label>
-                  年度
-                  <input type="number" name="settlePeriodYear" [(ngModel)]="settlePeriodYear" />
-                </label>
-                <label>
-                  期別
-                  <select name="settlePeriodQuarter" [(ngModel)]="settlePeriodQuarter">
-                    <option [ngValue]="1">第一期（1～4月）</option>
-                    <option [ngValue]="2">第二期（5～8月）</option>
-                    <option [ngValue]="3">第三期（9～12月）</option>
-                  </select>
-                </label>
+                <p>規則七：分館績效獎金（每 4 個月結算一次，套用上方「目前檢視期間」）</p>
                 <button type="button" [disabled]="settlingPeriod()" (click)="settlePeriodBonuses()">期間結算</button>
               </div>
             </div>
@@ -3081,26 +3070,11 @@
           </div>
 
           <section class="bonus-block-section">
-            <div class="bonus-block-filter">
-              <label>
-                年度
-                <input type="number" name="bonusBlockPeriodYear" [(ngModel)]="bonusBlockPeriodYear" (change)="loadBranchPerformanceBlock()" />
-              </label>
-              <label>
-                期別
-                <select name="bonusBlockPeriodQuarter" [(ngModel)]="bonusBlockPeriodQuarter" (change)="loadBranchPerformanceBlock()">
-                  <option [ngValue]="1">第一期（1～4月）</option>
-                  <option [ngValue]="2">第二期（5～8月）</option>
-                  <option [ngValue]="3">第三期（9～12月）</option>
-                </select>
-              </label>
-            </div>
-
             <div class="gold-card">
               <div class="panel-header">
                 <div>
                   <h3>分館績效獎金（期間結）</h3>
-                  <p>{{ quarterLabel(bonusBlockPeriodYear, bonusBlockPeriodQuarter) }}</p>
+                  <p>{{ quarterLabel(settlePeriodYear, settlePeriodQuarter) }}</p>
                 </div>
               </div>
               <div class="empty-state" *ngIf="!branchPerformanceByBranch().length">此期間尚無分館績效獎金結算資料。</div>
@@ -3128,18 +3102,12 @@
           </section>
 
           <section class="filter-bar performance-bonus-filter-bar">
-            <label>
-              期間
-              <div class="period-filter-group">
-                <select name="efficiencyBonusFilterYear" [(ngModel)]="efficiencyBonusFilterYear" [disabled]="!efficiencyBonusFilterQuarter">
-                  <option *ngFor="let year of performanceBonusYearOptions" [ngValue]="year">{{ year }}年</option>
-                </select>
-                <select name="efficiencyBonusFilterQuarter" [(ngModel)]="efficiencyBonusFilterQuarter">
-                  <option value="">全部</option>
-                  <option *ngFor="let option of performanceBonusQuarterOptions" [value]="option.value">{{ option.label }}</option>
-                </select>
-              </div>
-            </label>
+            <div class="standalone-checkbox-field">
+              <label class="checkbox-label compact-checkbox" title="否則只看目前檢視期間：{{ quarterLabel(settlePeriodYear, settlePeriodQuarter) }}">
+                <input type="checkbox" name="efficiencyShowAllPeriods" [(ngModel)]="efficiencyShowAllPeriods" (change)="searchEfficiencyBonuses()" />
+                <span class="checkbox-text">顯示全部期間（否則只看 {{ quarterLabel(settlePeriodYear, settlePeriodQuarter) }}）</span>
+              </label>
+            </div>
             <label>
               分館
               <select name="efficiencyBonusFilterBranchId" [(ngModel)]="efficiencyBonusFilters.branchId">

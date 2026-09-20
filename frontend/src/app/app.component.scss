@@ -355,6 +355,42 @@ textarea:focus-visible {
   font-size: 30px;
 }
 
+.current-period-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 14px 20px;
+  border: 1px solid var(--brand-gold);
+  border-radius: 10px;
+  background: #fdf8ee;
+}
+
+.current-period-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 700;
+  color: var(--brand-ink);
+}
+
+.current-period-bar input,
+.current-period-bar select {
+  font-weight: 400;
+}
+
+.current-period-bar .period-filter-group {
+  flex-direction: row;
+}
+
+.current-period-bar p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
 .staff-bonus-summary {
   margin-bottom: 18px;
 }
@@ -1462,7 +1498,7 @@ textarea.field-invalid:focus {
 }
 
 .filter-bar.performance-bonus-filter-bar {
-  grid-template-columns: minmax(200px, 1fr) minmax(240px, 1.1fr) minmax(160px, 0.7fr) minmax(200px, 0.8fr) auto;
+  grid-template-columns: minmax(220px, 1fr) minmax(160px, 0.7fr) minmax(200px, 0.8fr) auto;
 }
 
 .period-filter-group {
@@ -1588,6 +1624,11 @@ textarea.field-invalid:focus {
 .simple-row.eight {
   grid-template-columns: minmax(160px, 1fr) minmax(110px, 0.7fr) minmax(150px, 1fr) minmax(110px, 0.6fr) minmax(80px, 0.4fr) minmax(80px, 0.4fr) minmax(110px, 0.6fr) minmax(200px, 1.2fr);
   min-width: 1100px;
+}
+
+.simple-row.six-bonus {
+  grid-template-columns: minmax(160px, 1fr) minmax(110px, 0.7fr) minmax(150px, 1fr) minmax(110px, 0.6fr) minmax(110px, 0.6fr) minmax(200px, 1.2fr);
+  min-width: 900px;
 }
 
 .customer-table {
@@ -2177,13 +2218,6 @@ $charge-list-slate: #6b6f76;
   margin-bottom: 16px;
 }
 
-.bonus-block-filter {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  align-items: end;
-}
-
 .bonus-branch-group {
   margin-bottom: 14px;
 }
@@ -2201,6 +2235,7 @@ $charge-list-slate: #6b6f76;
 .bonus-detail-table {
   width: 100%;
   border-collapse: collapse;
+  table-layout: fixed;
   font-size: 13px;
 }
 
@@ -2353,10 +2388,6 @@ $charge-list-slate: #6b6f76;
   border-top: 1px solid #eee8dc;
 }
 
-.gold-card .bonus-block-filter {
-  padding-left: 14px;
-}
-
 .bonus-pill {
   display: inline-block;
   padding: 3px 10px;
@@ -2465,11 +2496,70 @@ $charge-list-slate: #6b6f76;
   background: var(--brand-gold-strong);
 }
 
+.filter-bar.business-bonus-filter-bar {
+  padding-bottom: 42px;
+}
+
+.filter-bar.business-bonus-filter-bar .rule-type-field {
+  position: relative;
+  align-self: end;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.filter-bar.business-bonus-filter-bar .rule-type-field label.checkbox-label.compact-checkbox {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 6px;
+}
+
+.filter-bar.performance-bonus-filter-bar .standalone-checkbox-field {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.filter-bar.performance-bonus-filter-bar label.checkbox-label.compact-checkbox {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  min-height: 20px;
+  color: #475569;
+  font-size: 13px;
+  max-width: 100%;
+}
+
+.filter-bar.performance-bonus-filter-bar label.checkbox-label.compact-checkbox .checkbox-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.filter-bar.performance-bonus-filter-bar label.checkbox-label.compact-checkbox input {
+  flex: 0 0 16px;
+  width: 16px;
+  min-width: 0;
+  height: 16px;
+  padding: 0;
+}
+
+
 .simple-row.eight:hover {
   background: #fbf8f1;
 }
 
 .simple-row.header.eight {
+  background: var(--brand-gold-soft);
+  color: var(--brand-gold-strong);
+}
+
+.simple-row.six-bonus:hover {
+  background: #fbf8f1;
+}
+
+.simple-row.header.six-bonus {
   background: var(--brand-gold-soft);
   color: var(--brand-gold-strong);
 }

@@ -559,18 +559,9 @@ export class AppComponent implements OnInit, AfterViewInit {
   performanceBonusFilters: PerformanceBonusSearchFilters = {
     ruleType: '', period: '', branchId: null, staffId: null
   };
-  performanceBonusFilterYear = new Date().getFullYear();
-  performanceBonusFilterUnit = '';
-  readonly performanceBonusYearOptions = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 3 + i);
-  readonly performanceBonusMonthOptions = Array.from({ length: 12 }, (_, i) => ({
-    value: String(i + 1).padStart(2, '0'),
-    label: `${i + 1}月`
-  }));
-  readonly performanceBonusQuarterOptions: Array<{ value: string; label: string }> = [
-    { value: 'P1', label: '第一期（1～4月）' },
-    { value: 'P2', label: '第二期（5～8月）' },
-    { value: 'P3', label: '第三期（9～12月）' }
-  ];
+  // 業績頁籤的「目前檢視月份」統一用 settleMonthlyYearMonth，結算觸發／滿租登記卡片／這裡的清單查詢共用同一個值，
+  // 避免使用者要在同一頁重複選三次月份、結果卻對不上。這裡只保留「顯示全部期間」開關，供瀏覽歷史資料用。
+  performanceBonusShowAllPeriods = false;
   // 業績頁籤查詢用：規則類型下拉排除規則七（分館績效獎金已獨立在績效頁籤查詢）
   readonly businessBonusRuleTypeOptions = this.bonusRuleTypeOptions.filter((option) => option.value !== 'BRANCH_PERFORMANCE');
 
@@ -580,8 +571,8 @@ export class AppComponent implements OnInit, AfterViewInit {
   efficiencyBonusPage = signal(0);
   readonly efficiencyBonusPageSize = 20;
   efficiencyBonusFilters: { branchId: number | null; staffId: number | null } = { branchId: null, staffId: null };
-  efficiencyBonusFilterYear = new Date().getFullYear();
-  efficiencyBonusFilterQuarter: '' | 'P1' | 'P2' | 'P3' = '';
+  // 績效頁籤的「目前檢視期間」統一用 settlePeriodYear／settlePeriodQuarter（見下方），這裡只保留「顯示全部期間」開關。
+  efficiencyShowAllPeriods = false;
   efficiencyBonusTotalPages = computed(() => Math.max(1, Math.ceil(this.efficiencyBonusTotal() / this.efficiencyBonusPageSize)));
 
   settleMonthlyYearMonth = this.currentMonthValue();
@@ -594,9 +585,6 @@ export class AppComponent implements OnInit, AfterViewInit {
   performanceBonusTab = signal<'business' | 'performance'>('business');
 
   // ---------- 業績結算：滿租／登記加乘／分館績效 三固定區塊 ----------
-  bonusBlockMonth = this.currentMonthValue();
-  bonusBlockPeriodYear = new Date().getFullYear();
-  bonusBlockPeriodQuarter: 1 | 2 | 3 = 1;
   fullOccupancyRows = signal<PerformanceBonus[]>([]);
   registrationMultiplierRows = signal<PerformanceBonus[]>([]);
   branchPerformanceRows = signal<PerformanceBonus[]>([]);
@@ -944,9 +932,9 @@ export class AppComponent implements OnInit, AfterViewInit {
       case 'performance-bonuses':
         this.loadStaffSupportData();
         this.loadBonusRules();
-        this.loadPerformanceBonuses();
+        this.searchPerformanceBonuses();
         this.loadBonusRuleBlocks();
-        this.loadEfficiencyBonuses();
+        this.searchEfficiencyBonuses();
         break;
       case 'tax-bureau-notices':
         this.loadTaxBureauNoticePreview();
@@ -1972,7 +1960,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   loadEfficiencyBonuses(): void {
     const filters: PerformanceBonusSearchFilters = {
       ruleType: 'BRANCH_PERFORMANCE',
-      period: this.efficiencyBonusFilterQuarter ? `${this.efficiencyBonusFilterYear}-${this.efficiencyBonusFilterQuarter}` : '',
+      period: this.efficiencyShowAllPeriods ? '' : `${this.settlePeriodYear}-P${this.settlePeriodQuarter}`,
       branchId: this.efficiencyBonusFilters.branchId,
       staffId: this.efficiencyBonusFilters.staffId,
       page: this.efficiencyBonusPage(),
@@ -2004,6 +1992,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   private loadStaffBonusSummary(): void {
     const filters: PerformanceBonusSearchFilters = {
       ruleType: this.performanceBonusFilters.ruleType,
+      excludeRuleType: 'BRANCH_PERFORMANCE',
       period: this.performanceBonusFilters.period,
       branchId: this.performanceBonusFilters.branchId,
       page: 0,
@@ -2015,9 +2004,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   searchPerformanceBonuses(): void {
-    this.performanceBonusFilters.period = this.performanceBonusFilterUnit
-      ? `${this.performanceBonusFilterYear}-${this.performanceBonusFilterUnit}`
-      : '';
+    this.performanceBonusFilters.period = this.performanceBonusShowAllPeriods ? '' : this.settleMonthlyYearMonth;
     this.performanceBonusPage.set(0);
     this.loadPerformanceBonuses();
   }
@@ -2029,25 +2016,36 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   loadFullOccupancyBlock(): void {
-    this.api.performanceBonuses({ ruleType: 'FULL_OCCUPANCY', period: this.bonusBlockMonth, pageSize: 200 }).subscribe({
+    this.api.performanceBonuses({ ruleType: 'FULL_OCCUPANCY', period: this.settleMonthlyYearMonth, pageSize: 200 }).subscribe({
       next: (result) => this.fullOccupancyRows.set(result.content),
       error: () => this.error.set('無法載入滿租獎金資料。')
     });
   }
 
   loadRegistrationMultiplierBlock(): void {
-    this.api.performanceBonuses({ ruleType: 'REGISTRATION_MULTIPLIER', period: this.bonusBlockMonth, pageSize: 200 }).subscribe({
+    this.api.performanceBonuses({ ruleType: 'REGISTRATION_MULTIPLIER', period: this.settleMonthlyYearMonth, pageSize: 200 }).subscribe({
       next: (result) => this.registrationMultiplierRows.set(result.content),
       error: () => this.error.set('無法載入登記加乘獎金資料。')
     });
   }
 
   loadBranchPerformanceBlock(): void {
-    const period = `${this.bonusBlockPeriodYear}-P${this.bonusBlockPeriodQuarter}`;
+    const period = `${this.settlePeriodYear}-P${this.settlePeriodQuarter}`;
     this.api.performanceBonuses({ ruleType: 'BRANCH_PERFORMANCE', period, pageSize: 200 }).subscribe({
       next: (result) => this.branchPerformanceRows.set(result.content),
       error: () => this.error.set('無法載入分館績效獎金資料。')
     });
+  }
+
+  onBusinessMonthChange(): void {
+    this.loadFullOccupancyBlock();
+    this.loadRegistrationMultiplierBlock();
+    this.searchPerformanceBonuses();
+  }
+
+  onPerformancePeriodChange(): void {
+    this.loadBranchPerformanceBlock();
+    this.searchEfficiencyBonuses();
   }
 
   monthLabel(yearMonth: string): string {
@@ -2084,7 +2082,7 @@ export class AppComponent implements OnInit, AfterViewInit {
           ` ｜ ${monthly.period} 月結：滿租獎金新增 ${monthly.fullOccupancyCreatedCount} 筆、登記加乘獎金新增 ${monthly.registrationMultiplierCreatedCount} 筆` +
           (monthly.skippedBranches.length ? `；無祕書可入帳分館：${monthly.skippedBranches.join('、')}` : '')
         );
-        this.loadPerformanceBonuses();
+        this.searchPerformanceBonuses();
         this.loadFullOccupancyBlock();
         this.loadRegistrationMultiplierBlock();
       },
@@ -2108,9 +2106,8 @@ export class AppComponent implements OnInit, AfterViewInit {
           (result.skippedBranches.length ? `；無祕書可入帳分館：${result.skippedBranches.join('、')}` : '') +
           (result.unassignedContractCount ? `；無法判斷分館的合約：${result.unassignedContractCount} 筆` : '')
         );
-        this.loadPerformanceBonuses();
         this.loadBranchPerformanceBlock();
-        this.loadEfficiencyBonuses();
+        this.searchEfficiencyBonuses();
       },
       error: (err: HttpErrorResponse) => {
         this.settlingPeriod.set(false);
