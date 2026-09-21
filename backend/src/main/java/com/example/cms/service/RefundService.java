@@ -160,7 +160,6 @@ public class RefundService extends CmsJdbcSupport {
             if (current.get("charge_list_id") != null) {
                 markChargeListSettled(((Number) current.get("charge_list_id")).longValue(), staffId);
             }
-            markContractTerminated(((Number) current.get("contract_id")).longValue(), staffId);
             return refundDetail(id);
         }
 
@@ -336,13 +335,6 @@ public class RefundService extends CmsJdbcSupport {
         BigDecimal deposit = jdbc.queryForObject("SELECT deposit FROM contracts WHERE contract_id = ?",
                 BigDecimal.class, contractId);
         return zeroIfNull(deposit);
-    }
-
-    private void markContractTerminated(Long contractId, Long staffId) {
-        jdbc.update("""
-                UPDATE contracts SET lease_status = '已解約', updated_by = ?, updated_at = CURRENT_TIMESTAMP
-                WHERE contract_id = ?
-                """, staffId, contractId);
     }
 
     private String refundMessage(RefundBase refundBase, boolean overDeducted, BigDecimal computed, Long chargeListId) {
