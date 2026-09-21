@@ -2468,14 +2468,19 @@
             租約
             <select name="newRefundContract" [(ngModel)]="newRefundForm.contractId" required>
               <option [ngValue]="null">請選擇租約</option>
-              <option *ngFor="let contract of refundCustomer.contracts" [ngValue]="contract['contract_id']">
+              <option *ngFor="let contract of activeContracts(refundCustomer.contracts)" [ngValue]="contract['contract_id']">
                 {{ contract['office_no'] || '登記' }} / 押金 {{ money(contract['deposit']) }}
               </option>
             </select>
           </label>
           <label class="wide">
-            匯入收費清單編號（選填）
-            <input type="number" name="refundImportChargeListId" [(ngModel)]="refundImportChargeListId" />
+            匯入收費清單（選填）
+            <select name="refundImportChargeListId" [(ngModel)]="refundImportChargeListId">
+              <option [ngValue]="null">不匯入</option>
+              <option *ngFor="let chargeList of unsettledChargeLists(refundCustomer.chargeLists)" [ngValue]="chargeList['charge_list_id']">
+                #{{ chargeList['charge_list_id'] }} · {{ chargeList['fee_month'] || '退款差額' }} · {{ money(chargeList['total_amount']) }}
+              </option>
+            </select>
             <button type="button" class="ghost compact-button" (click)="importChargeListIntoRefund(newRefundForm)">
               帶入扣款金額
             </button>

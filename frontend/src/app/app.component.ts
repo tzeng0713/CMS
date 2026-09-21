@@ -3092,7 +3092,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       return;
     }
     this.api.customerLookup(term).subscribe({
-      next: (rows) => this.refundCustomerOptions.set(rows),
+      next: (rows) => this.refundCustomerOptions.set(rows.filter((row) => row.lease_status !== '已解約')),
       error: () => this.error.set('無法查詢客戶資料。')
     });
   }
@@ -3104,16 +3104,24 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.refundCustomerSearch = value.company_name;
         this.refundCustomerOptions.set([]);
         this.newRefundForm.customerId = value.customer_id;
-        const firstContract = value.contracts?.[0] as Record<string, unknown> | undefined;
+        const firstContract = this.activeContracts(value.contracts)[0];
         this.newRefundForm.contractId = firstContract ? Number(firstContract['contract_id']) : null;
       },
       error: () => this.error.set('無法載入客戶租約資料。')
     });
   }
 
+  activeContracts(contracts: Array<Record<string, unknown>> | undefined): Array<Record<string, unknown>> {
+    return (contracts ?? []).filter((contract) => String(contract['lease_status']) !== '已解約');
+  }
+
+  unsettledChargeLists(chargeLists: Array<Record<string, unknown>> | undefined): Array<Record<string, unknown>> {
+    return (chargeLists ?? []).filter((chargeList) => Number(chargeList['status']) !== 1);
+  }
+
   importChargeListIntoRefund(form: RefundForm): void {
     if (!this.refundImportChargeListId) {
-      this.error.set('請輸入收費清單編號。');
+      this.error.set('請選擇收費清單。');
       return;
     }
     this.api.importChargeListForRefund(this.refundImportChargeListId).subscribe({
