@@ -368,7 +368,9 @@ describe('new customer flow', () => {
       canEditAllBranches: true,
       canViewAllOffices: true,
       canManageBranch: true,
-      canReviewRefund: true
+      canReviewRefund: true,
+      canManageBonusRules: true,
+      canManageBackup: true
     } satisfies AuthUser);
     fixture.componentInstance.dashboard.set(dashboard);
 
@@ -435,7 +437,9 @@ function testUser(): AuthUser {
     canEditAllBranches: true,
     canViewAllOffices: true,
     canManageBranch: true,
-    canReviewRefund: true
+    canReviewRefund: true,
+    canManageBonusRules: true,
+    canManageBackup: true
   };
 }
 

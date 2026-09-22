@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild, computed, effect, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import html2canvas from 'html2canvas';
@@ -617,7 +617,24 @@ export class AppComponent implements OnInit, AfterViewInit {
   loading = signal(false);
   saving = signal(false);
   editingCustomer = signal(false);
-  error = signal('', { equal: () => false });
+  /**
+   * 每次呼叫 error.set(...) 都會同步觸發浮動 toast（即使訊息文字跟上次相同），
+   * 讓使用者不會因為錯誤重複出現而看不到提示。用一般的 signal() + effect() 監看
+   * 需要 Angular 注入環境（NG0203），但部分既有單元測試會直接 `new AppComponent(...)`
+   * 略過 DI，因此改用不依賴注入環境的包裝寫法。
+   */
+  private readonly errorSignal = signal('', { equal: () => false });
+  readonly error: { (): string; set(value: string): void } = Object.assign(
+    () => this.errorSignal(),
+    {
+      set: (value: string) => {
+        this.errorSignal.set(value);
+        if (value) {
+          this.showToast(value, 'error');
+        }
+      }
+    }
+  );
   success = signal('');
   toast = signal<Toast | null>(null);
   newCustomerFieldErrors = signal<Record<string, string>>({});
@@ -757,14 +774,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   salesTargetTotalPages = computed(() => Math.max(1, Math.ceil(this.salesTargetTotal() / this.salesTargetPageSize)));
   performanceBonusTotalPages = computed(() => Math.max(1, Math.ceil(this.performanceBonusTotal() / this.performanceBonusPageSize)));
 
-  constructor(private readonly api: CmsApiService, private readonly router: Router) {
-    effect(() => {
-      const message = this.error();
-      if (message) {
-        this.showToast(message, 'error');
-      }
-    }, { allowSignalWrites: true });
-  }
+  constructor(private readonly api: CmsApiService, private readonly router: Router) {}
 
   showToast(message: string, kind: Toast['kind'] = 'success'): void {
     this.toast.set({ message, kind });
