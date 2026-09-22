@@ -31,10 +31,10 @@
 
 | 欄位名稱 | 資料型別 | 必填 | 說明 |
 |----------|----------|------|------|
-| `payment_method` | VARCHAR(20) | | 退款方式：`匯款` / `現金` |
-| `bank_code` | VARCHAR(20) | | 收款銀行代碼（匯款時使用） |
-| `bank_account` | VARCHAR(50) | | 收款帳號（匯款時使用） |
-| `bank_account_name` | VARCHAR(100) | | 收款戶名（匯款時使用） |
+| `payment_method` | VARCHAR(20) | ✓ | 退款方式：`匯款` / `現金`。新增退款時即為必填（見 [refund-feature-spec.md](refund-feature-spec.md#41-金額計算新增修改時皆會重新計算)） |
+| `bank_code` | VARCHAR(20) | ✓ | 收款銀行代碼。新增退款時即為必填 |
+| `bank_account` | VARCHAR(50) | ✓ | 收款帳號。新增退款時即為必填 |
+| `bank_account_name` | VARCHAR(100) | ✓ | 收款戶名。新增退款時即為必填 |
 
 ## 人員與狀態
 
@@ -65,6 +65,6 @@
 | `updated_by` | BIGINT | | 最後修改人（FK → staff） |
 | `updated_at` | TIMESTAMP | | 最後修改時間（自動更新） |
 
-## 超額扣款的應收帳款
+## 超額扣款（計算結果為負數）
 
-退款扣款總額大於應退金額時，系統**不會**另外建表，而是自動在既有的 `charge_lists`（收費清單）表建立一筆未結清紀錄，並透過 `refunds.charge_list_id` 連結。完整規則見 [refund-feature-spec.md](refund-feature-spec.md#22-應收帳款共用-charge_lists不新增資料表)。
+退款金額計算結果為負數（欠款大於可退押金）時，系統在儲存當下（新增為草稿、送交審核、或修改金額欄位）直接擋下，**不會建立或更新這筆退款單**，也**不會**自動在 `charge_lists` 建立應收帳款；退款與收費清單流程完全脫鉤、互不關聯。完整規則見 [refund-feature-spec.md](refund-feature-spec.md#41-金額計算新增修改時皆會重新計算)。

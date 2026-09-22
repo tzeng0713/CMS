@@ -2237,6 +2237,10 @@
                   <dd>{{ detail.mid_term_termination ? '中途解約' : '合約到期解約' }}</dd>
                 </div>
                 <div>
+                  <dt>租約到期日（參考）</dt>
+                  <dd>{{ detail.contract_end_date_text || '-' }}</dd>
+                </div>
+                <div>
                   <dt>建立人 / 時間</dt>
                   <dd>{{ detail.created_by_name || '-' }} / {{ formatDateTime(detail.created_at) }}</dd>
                 </div>
@@ -2359,6 +2363,9 @@
                 [readonly]="editing.refund_status === '審核通過'"
               />
             </label>
+            <p class="hint" *ngIf="editing.contract_end_date_text">
+              租約到期日參考：{{ editing.contract_end_date_text }}（供核對是否為中途解約）
+            </p>
             <label class="checkbox-label">
               <input
                 type="checkbox"
@@ -2370,19 +2377,19 @@
             </label>
             <label>
               退款方式
-              <input type="text" name="editRefundPaymentMethod" [(ngModel)]="refundEditForm.paymentMethod" />
+              <input type="text" name="editRefundPaymentMethod" [(ngModel)]="refundEditForm.paymentMethod" required />
             </label>
             <label>
               收款銀行代碼
-              <input type="text" name="editRefundBankCode" [(ngModel)]="refundEditForm.bankCode" />
+              <input type="text" name="editRefundBankCode" [(ngModel)]="refundEditForm.bankCode" required />
             </label>
             <label>
               收款帳號
-              <input type="text" name="editRefundBankAccount" [(ngModel)]="refundEditForm.bankAccount" />
+              <input type="text" name="editRefundBankAccount" [(ngModel)]="refundEditForm.bankAccount" required />
             </label>
             <label>
               收款戶名
-              <input type="text" name="editRefundBankAccountName" [(ngModel)]="refundEditForm.bankAccountName" />
+              <input type="text" name="editRefundBankAccountName" [(ngModel)]="refundEditForm.bankAccountName" required />
             </label>
             <label *ngIf="editing.refund_status === '審核通過'">
               退款日期
@@ -2392,6 +2399,12 @@
               目前狀態（系統維護，不可修改）
               <input type="text" [value]="editing.refund_status" readonly />
             </label>
+            <p class="error wide" *ngIf="refundOverDeductedNotice() as shortfallNotice">
+              {{ shortfallNotice.error }}
+              <button type="button" class="ghost compact-button" (click)="goToChargeListForRefundShortfall()">
+                前往收費清單管理{{ shortfallNotice.chargeListId ? '（收費清單 #' + shortfallNotice.chargeListId + '）' : '' }}
+              </button>
+            </p>
             <div class="form-actions wide">
               <button type="submit" [disabled]="saving()">
                 {{ editing.refund_status === '審核通過' ? '確認退款完成' : '儲存修改' }}
@@ -2448,6 +2461,9 @@
               </option>
             </select>
           </label>
+          <p class="hint" *ngIf="selectedContractEndDate(refundCustomer.contracts, newRefundForm.contractId) as endDate">
+            租約到期日參考：{{ endDate }}（供核對是否為中途解約）
+          </p>
           <label class="wide">
             匯入收費清單（選填）
             <select name="refundImportChargeListId" [(ngModel)]="refundImportChargeListId">
@@ -2482,19 +2498,19 @@
           </label>
           <label>
             退款方式
-            <input type="text" name="newRefundPaymentMethod" [(ngModel)]="newRefundForm.paymentMethod" />
+            <input type="text" name="newRefundPaymentMethod" [(ngModel)]="newRefundForm.paymentMethod" required />
           </label>
           <label>
             收款銀行代碼
-            <input type="text" name="newRefundBankCode" [(ngModel)]="newRefundForm.bankCode" />
+            <input type="text" name="newRefundBankCode" [(ngModel)]="newRefundForm.bankCode" required />
           </label>
           <label>
             收款帳號
-            <input type="text" name="newRefundBankAccount" [(ngModel)]="newRefundForm.bankAccount" />
+            <input type="text" name="newRefundBankAccount" [(ngModel)]="newRefundForm.bankAccount" required />
           </label>
           <label>
             收款戶名
-            <input type="text" name="newRefundBankAccountName" [(ngModel)]="newRefundForm.bankAccountName" />
+            <input type="text" name="newRefundBankAccountName" [(ngModel)]="newRefundForm.bankAccountName" required />
           </label>
           <label>
             送出後狀態
@@ -2503,6 +2519,12 @@
               <option value="待審核">送交主管審核</option>
             </select>
           </label>
+          <p class="error wide" *ngIf="refundOverDeductedNotice() as shortfallNotice">
+            {{ shortfallNotice.error }}
+            <button type="button" class="ghost compact-button" (click)="goToChargeListForRefundShortfall()">
+              前往收費清單管理{{ shortfallNotice.chargeListId ? '（收費清單 #' + shortfallNotice.chargeListId + '）' : '' }}
+            </button>
+          </p>
           <div class="form-actions wide">
             <button type="submit" [disabled]="saving()">新增退款</button>
           </div>

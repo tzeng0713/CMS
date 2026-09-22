@@ -34,6 +34,7 @@ import {
   RefundPayload,
   RefundSearchFilters,
   RefundSummary,
+  RefundOverDeductedError,
   SalesTarget,
   SalesTargetPayload,
   SalesTargetSearchFilters,
@@ -491,6 +492,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   refundCustomerOptions = signal<CustomerSummary[]>([]);
   selectedRefundCustomer = signal<CustomerDetail | null>(null);
   refundImportChargeListId: number | null = null;
+  refundOverDeductedNotice = signal<RefundOverDeductedError | null>(null);
   taxNoticeYearMonth = this.currentMonthValue();
   taxNoticeType: TaxBureauNoticeType = 'BOTH';
   taxNoticeGroups = signal<TaxBureauNoticeGroup[]>([]);
@@ -986,6 +988,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.refundTotal.set(0);
     this.editingRefund.set(null);
     this.viewingRefund.set(null);
+    this.refundOverDeductedNotice.set(null);
     this.staffRows.set([]);
     this.router.navigateByUrl('/home');
     this.error.set('');
@@ -3115,6 +3118,18 @@ export class AppComponent implements OnInit, AfterViewInit {
     return (contracts ?? []).filter((contract) => String(contract['lease_status']) !== '已解約');
   }
 
+  selectedContractEndDate(
+    contracts: Array<Record<string, unknown>> | undefined,
+    contractId: number | null
+  ): string | null {
+    if (!contractId) {
+      return null;
+    }
+    const match = (contracts ?? []).find((contract) => Number(contract['contract_id']) === Number(contractId));
+    const endDate = match ? match['end_date_text'] : null;
+    return endDate ? String(endDate) : null;
+  }
+
   unsettledChargeLists(chargeLists: Array<Record<string, unknown>> | undefined): Array<Record<string, unknown>> {
     return (chargeLists ?? []).filter((chargeList) => Number(chargeList['status']) !== 1);
   }
@@ -3150,11 +3165,22 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.error.set('請填寫退款原因。');
       return;
     }
+    if (!this.refundPaymentInfoComplete(this.newRefundForm)) {
+      this.error.set('請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。');
+      return;
+    }
+    const newRefundShortfall = this.checkNewRefundOverDeducted();
+    if (newRefundShortfall) {
+      this.refundOverDeductedNotice.set(newRefundShortfall);
+      this.error.set(newRefundShortfall.error);
+      return;
+    }
     if (!window.confirm('確定要新增這筆退款資料嗎？')) {
       return;
     }
     this.newRefundForm.staffId = this.currentStaffId();
     this.saving.set(true);
+    this.refundOverDeductedNotice.set(null);
     this.api.createRefund(this.toRefundPayload(this.newRefundForm)).subscribe({
       next: (result) => {
         this.saving.set(false);
@@ -3168,12 +3194,129 @@ export class AppComponent implements OnInit, AfterViewInit {
       },
       error: (err: HttpErrorResponse) => {
         this.saving.set(false);
-        this.error.set(this.branchApiErrorMessage(err, '退款資料新增失敗，請確認必填欄位與金額是否正確。'));
+        this.handleRefundApiError(err, '退款資料新增失敗，請確認必填欄位與金額是否正確。');
       }
     });
   }
 
+  private refundPaymentInfoComplete(form: RefundForm): boolean {
+    return Boolean(
+      form.paymentMethod.trim() && form.bankCode.trim() && form.bankAccount.trim() && form.bankAccountName.trim()
+    );
+  }
+
+  /**
+   * 與後端 RefundService.refundBaseAmount()/requireNotOverDeducted() 相同的算法，
+   * 讓前端能在送出前（跳出確認視窗前）就提前算出是否會超額扣款，不用等 API 回傳才知道。
+   */
+  private computeRefundAmount(
+    deposit: number,
+    rent: number | null,
+    midTermTermination: boolean,
+    adjustmentAmount: number,
+    deductionTotal: number
+  ): number {
+    const base = midTermTermination && rent !== null && rent < deposit ? rent : deposit;
+    return base + (adjustmentAmount || 0) - (deductionTotal || 0);
+  }
+
+  private checkNewRefundOverDeducted(): RefundOverDeductedError | null {
+    const form = this.newRefundForm;
+    const contract = (this.selectedRefundCustomer()?.contracts ?? []).find(
+      (candidate) => Number(candidate['contract_id']) === Number(form.contractId)
+    );
+    if (!contract) {
+      return null;
+    }
+    const deposit = Number(contract['deposit'] ?? 0);
+    const rent = contract['rent'] === null || contract['rent'] === undefined ? null : Number(contract['rent']);
+    const computed = this.computeRefundAmount(deposit, rent, form.midTermTermination, form.adjustmentAmount, form.deductionTotal);
+    if (computed >= 0) {
+      return null;
+    }
+    return {
+      error: '欠款大於可退押金，請先確認收款金額',
+      chargeListId: form.chargeListId,
+      customerId: form.customerId,
+      contractId: form.contractId
+    };
+  }
+
+  private checkEditRefundOverDeducted(): RefundOverDeductedError | null {
+    const row = this.editingRefund();
+    const form = this.refundEditForm;
+    if (!row || row.contract_deposit === null || row.contract_deposit === undefined) {
+      return null;
+    }
+    const computed = this.computeRefundAmount(
+      Number(row.contract_deposit),
+      row.contract_rent === null || row.contract_rent === undefined ? null : Number(row.contract_rent),
+      form.midTermTermination,
+      form.adjustmentAmount,
+      form.deductionTotal
+    );
+    if (computed >= 0) {
+      return null;
+    }
+    return {
+      error: '欠款大於可退押金，請先確認收款金額',
+      chargeListId: form.chargeListId,
+      customerId: form.customerId,
+      contractId: form.contractId
+    };
+  }
+
+  private handleRefundApiError(err: HttpErrorResponse, fallback: string): void {
+    const shortfall = this.extractRefundOverDeducted(err);
+    if (shortfall) {
+      this.refundOverDeductedNotice.set(shortfall);
+      this.error.set(shortfall.error);
+      return;
+    }
+    this.refundOverDeductedNotice.set(null);
+    this.error.set(this.branchApiErrorMessage(err, fallback));
+  }
+
+  private extractRefundOverDeducted(err: HttpErrorResponse): RefundOverDeductedError | null {
+    const body = err?.error;
+    if (
+      body &&
+      typeof body === 'object' &&
+      typeof body.error === 'string' &&
+      ('chargeListId' in body || 'customerId' in body || 'contractId' in body)
+    ) {
+      return {
+        error: body.error,
+        chargeListId: body.chargeListId ?? null,
+        customerId: body.customerId ?? null,
+        contractId: body.contractId ?? null
+      };
+    }
+    return null;
+  }
+
+  goToChargeListForRefundShortfall(): void {
+    const notice = this.refundOverDeductedNotice();
+    if (!notice) {
+      return;
+    }
+    this.chargeListFilters = {
+      chargeListId: notice.chargeListId,
+      customerId: notice.customerId,
+      contractId: notice.contractId,
+      feeMonth: '',
+      status: null,
+      createdBy: null,
+      issuedFrom: '',
+      issuedTo: ''
+    };
+    this.chargeListPage.set(0);
+    this.refundOverDeductedNotice.set(null);
+    this.setView('charges');
+  }
+
   startEditRefund(row: RefundSummary): void {
+    this.refundOverDeductedNotice.set(null);
     this.editingRefund.set(row);
     this.refundEditForm = {
       customerId: row.customer_id,
@@ -3220,6 +3363,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       refundedAt: row.refunded_at ?? '',
       staffId: this.currentStaffId()
     });
+    this.refundOverDeductedNotice.set(null);
     this.api.updateRefund(row.refund_id, payload).subscribe({
       next: (result) => {
         this.error.set('');
@@ -3229,13 +3373,14 @@ export class AppComponent implements OnInit, AfterViewInit {
         }
         this.loadRefunds();
       },
-      error: (err: HttpErrorResponse) => this.error.set(this.branchApiErrorMessage(err, '送交審核失敗。'))
+      error: (err: HttpErrorResponse) => this.handleRefundApiError(err, '送交審核失敗。')
     });
   }
 
   cancelEditRefund(): void {
     this.editingRefund.set(null);
     this.refundEditForm = emptyRefundForm();
+    this.refundOverDeductedNotice.set(null);
   }
 
   saveRefundEdit(): void {
@@ -3243,11 +3388,22 @@ export class AppComponent implements OnInit, AfterViewInit {
     if (!row) {
       return;
     }
+    if (!this.refundPaymentInfoComplete(this.refundEditForm)) {
+      this.error.set('請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。');
+      return;
+    }
+    const editRefundShortfall = this.checkEditRefundOverDeducted();
+    if (editRefundShortfall) {
+      this.refundOverDeductedNotice.set(editRefundShortfall);
+      this.error.set(editRefundShortfall.error);
+      return;
+    }
     if (!window.confirm('確定要儲存這筆退款資料的修改嗎？')) {
       return;
     }
     this.refundEditForm.staffId = this.currentStaffId();
     this.saving.set(true);
+    this.refundOverDeductedNotice.set(null);
     this.api.updateRefund(row.refund_id, this.toRefundPayload(this.refundEditForm)).subscribe({
       next: (result) => {
         this.saving.set(false);
@@ -3258,7 +3414,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       },
       error: (err: HttpErrorResponse) => {
         this.saving.set(false);
-        this.error.set(this.branchApiErrorMessage(err, '退款資料更新失敗，請確認欄位是否正確。'));
+        this.handleRefundApiError(err, '退款資料更新失敗，請確認欄位是否正確。');
       }
     });
   }
