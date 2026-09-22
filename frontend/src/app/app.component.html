@@ -1637,12 +1637,8 @@
         </div>
 
         <section class="filter-bar charge-list-filter">
-          <label>
-            收費清單編號
-            <input type="number" name="chargeListFilterId" [(ngModel)]="chargeListFilters.chargeListId" />
-          </label>
           <label class="filter-customer-lookup">
-            客戶
+            客戶名稱
             <input
               type="search"
               name="chargeListFilterCustomer"
@@ -1662,8 +1658,8 @@
             </div>
           </label>
           <label>
-            租約編號
-            <input type="number" name="chargeListFilterContractId" [(ngModel)]="chargeListFilters.contractId" />
+            費用月份
+            <input type="month" name="chargeListFilterFeeMonth" [(ngModel)]="chargeListFilters.feeMonth" />
           </label>
           <label>
             單據狀態
@@ -1672,27 +1668,6 @@
               <option [ngValue]="1">已結清</option>
               <option [ngValue]="2">未結清</option>
             </select>
-          </label>
-          <label>
-            費用月份
-            <input type="month" name="chargeListFilterFeeMonth" [(ngModel)]="chargeListFilters.feeMonth" />
-          </label>
-          <label>
-            開單人
-            <select name="chargeListFilterCreatedBy" [(ngModel)]="chargeListFilters.createdBy">
-              <option [ngValue]="null">全部</option>
-              <option *ngFor="let staffMember of staffOptions()" [ngValue]="staffMember['staff_id']">
-                {{ staffMember['staff_name'] }}
-              </option>
-            </select>
-          </label>
-          <label>
-            開單日期（起）
-            <input type="date" name="chargeListFilterIssuedFrom" [(ngModel)]="chargeListFilters.issuedFrom" />
-          </label>
-          <label>
-            開單日期（迄）
-            <input type="date" name="chargeListFilterIssuedTo" [(ngModel)]="chargeListFilters.issuedTo" />
           </label>
           <div class="filter-actions">
             <button type="button" (click)="searchChargeLists()">搜尋</button>
