@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { HttpErrorResponse } from '@angular/common/http';
-import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild, computed, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild, computed, effect, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import html2canvas from 'html2canvas';
@@ -617,7 +617,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   loading = signal(false);
   saving = signal(false);
   editingCustomer = signal(false);
-  error = signal('');
+  error = signal('', { equal: () => false });
   success = signal('');
   toast = signal<Toast | null>(null);
   newCustomerFieldErrors = signal<Record<string, string>>({});
@@ -757,7 +757,14 @@ export class AppComponent implements OnInit, AfterViewInit {
   salesTargetTotalPages = computed(() => Math.max(1, Math.ceil(this.salesTargetTotal() / this.salesTargetPageSize)));
   performanceBonusTotalPages = computed(() => Math.max(1, Math.ceil(this.performanceBonusTotal() / this.performanceBonusPageSize)));
 
-  constructor(private readonly api: CmsApiService, private readonly router: Router) {}
+  constructor(private readonly api: CmsApiService, private readonly router: Router) {
+    effect(() => {
+      const message = this.error();
+      if (message) {
+        this.showToast(message, 'error');
+      }
+    }, { allowSignalWrites: true });
+  }
 
   showToast(message: string, kind: Toast['kind'] = 'success'): void {
     this.toast.set({ message, kind });
@@ -767,7 +774,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.toastTimeoutId = setTimeout(() => {
       this.toast.set(null);
       this.toastTimeoutId = null;
-    }, 3600);
+    }, kind === 'error' ? 5000 : 3600);
   }
 
   clearNewCustomerFieldError(field: string): void {

@@ -117,8 +117,6 @@
       <h1>{{ pageTitle() }}</h1>
     </section>
 
-    <p class="error" *ngIf="error()">{{ error() }}</p>
-
     <section class="home-view" *ngIf="activeView() === 'home' && dashboard() as d">
       <section class="kpis home-kpis" aria-label="客戶服務統計">
         <article>
