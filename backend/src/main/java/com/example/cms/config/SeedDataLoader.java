@@ -28,7 +28,7 @@ public class SeedDataLoader implements CommandLineRunner {
 
     @Override
     public void run(String... args) throws Exception {
-        if (!enabled || count("customers") > 0) {
+        if (!enabled) {
             return;
         }
         ClassPathResource resource = new ClassPathResource("data/seed-data.json");
@@ -37,6 +37,10 @@ public class SeedDataLoader implements CommandLineRunner {
         }
         try (InputStream in = resource.getInputStream()) {
             Map<String, Object> seed = objectMapper.readValue(in, new TypeReference<>() {});
+            if (count("customers") > 0) {
+                refreshDemoStaffWhenPresent(list(seed, "staff"));
+                return;
+            }
             insertBranches(list(seed, "branches"));
             insertRoles(list(seed, "roles"));
             insertStaff(list(seed, "staff"));
@@ -73,10 +77,33 @@ public class SeedDataLoader implements CommandLineRunner {
     }
 
     private void insertStaff(List<Map<String, Object>> rows) {
-        rows.forEach(r -> jdbc.update(
-                "INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, password_hash) VALUES (?, ?, ?, ?, ?, ?)",
-                n(r, "staffId"), n(r, "rolePermissionId"), n(r, "branchId") == null ? 1L : n(r, "branchId"),
-                s(r, "staffName"), s(r, "account"), "{noop}password"));
+        rows.forEach(this::insertStaff);
+    }
+
+    private void insertStaff(Map<String, Object> row) {
+        jdbc.update(
+                "INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, email, password_hash) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                n(row, "staffId"), n(row, "rolePermissionId"), n(row, "branchId") == null ? 1L : n(row, "branchId"),
+                s(row, "staffName"), s(row, "account"), s(row, "email"), "{noop}password");
+    }
+
+    private void refreshDemoStaffWhenPresent(List<Map<String, Object>> rows) {
+        Integer demoAccountCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM staff WHERE account IN ('manager', 'supervisor', 'staff')", Integer.class);
+        if (demoAccountCount == null || demoAccountCount != 3) {
+            return;
+        }
+        rows.forEach(row -> {
+            int updated = jdbc.update("""
+                    UPDATE staff
+                    SET role_permission_id = ?, branch_id = ?, staff_name = ?
+                    WHERE account = ?
+                    """, n(row, "rolePermissionId"), n(row, "branchId") == null ? 1L : n(row, "branchId"),
+                    s(row, "staffName"), s(row, "account"));
+            if (updated == 0) {
+                insertStaff(row);
+            }
+        });
     }
 
     private void insertOffices(List<Map<String, Object>> rows) {

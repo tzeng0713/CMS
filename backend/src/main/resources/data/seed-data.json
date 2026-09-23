@@ -29,22 +29,165 @@
   "staff": [
     {
       "staffId": 1,
-      "staffName": "系統主管",
+      "staffName": "何怡君",
       "account": "manager",
+      "email": "manager@cms.test",
       "rolePermissionId": 1,
       "branchId": 1
     },
     {
       "staffId": 2,
-      "staffName": "督導秘書",
+      "staffName": "陳柏宇",
       "account": "supervisor",
+      "email": "supervisor@cms.test",
       "rolePermissionId": 2,
       "branchId": 1
     },
     {
       "staffId": 3,
-      "staffName": "一般秘書",
+      "staffName": "林雅婷",
       "account": "staff",
+      "email": "staff@cms.test",
+      "rolePermissionId": 3,
+      "branchId": 2
+    },
+    {
+      "staffId": 4,
+      "staffName": "張雅雯",
+      "account": "demo.staff.04",
+      "rolePermissionId": 2,
+      "branchId": 1
+    },
+    {
+      "staffId": 5,
+      "staffName": "王冠宇",
+      "account": "demo.staff.05",
+      "rolePermissionId": 3,
+      "branchId": 1
+    },
+    {
+      "staffId": 6,
+      "staffName": "李思妤",
+      "account": "demo.staff.06",
+      "rolePermissionId": 3,
+      "branchId": 1
+    },
+    {
+      "staffId": 7,
+      "staffName": "黃子軒",
+      "account": "demo.staff.07",
+      "rolePermissionId": 3,
+      "branchId": 1
+    },
+    {
+      "staffId": 8,
+      "staffName": "吳佳蓉",
+      "account": "demo.staff.08",
+      "rolePermissionId": 2,
+      "branchId": 1
+    },
+    {
+      "staffId": 9,
+      "staffName": "劉承翰",
+      "account": "demo.staff.09",
+      "rolePermissionId": 3,
+      "branchId": 1
+    },
+    {
+      "staffId": 10,
+      "staffName": "蔡宜庭",
+      "account": "demo.staff.10",
+      "rolePermissionId": 3,
+      "branchId": 1
+    },
+    {
+      "staffId": 11,
+      "staffName": "楊博翔",
+      "account": "demo.staff.11",
+      "rolePermissionId": 3,
+      "branchId": 1
+    },
+    {
+      "staffId": 12,
+      "staffName": "許詩涵",
+      "account": "demo.staff.12",
+      "rolePermissionId": 2,
+      "branchId": 1
+    },
+    {
+      "staffId": 13,
+      "staffName": "鄭宇辰",
+      "account": "demo.staff.13",
+      "rolePermissionId": 3,
+      "branchId": 1
+    },
+    {
+      "staffId": 14,
+      "staffName": "林宛蓁",
+      "account": "demo.staff.14",
+      "rolePermissionId": 2,
+      "branchId": 2
+    },
+    {
+      "staffId": 15,
+      "staffName": "周俊廷",
+      "account": "demo.staff.15",
+      "rolePermissionId": 3,
+      "branchId": 2
+    },
+    {
+      "staffId": 16,
+      "staffName": "徐佩珊",
+      "account": "demo.staff.16",
+      "rolePermissionId": 3,
+      "branchId": 2
+    },
+    {
+      "staffId": 17,
+      "staffName": "蘇柏翰",
+      "account": "demo.staff.17",
+      "rolePermissionId": 3,
+      "branchId": 2
+    },
+    {
+      "staffId": 18,
+      "staffName": "盧怡安",
+      "account": "demo.staff.18",
+      "rolePermissionId": 2,
+      "branchId": 2
+    },
+    {
+      "staffId": 19,
+      "staffName": "曾冠霖",
+      "account": "demo.staff.19",
+      "rolePermissionId": 3,
+      "branchId": 2
+    },
+    {
+      "staffId": 20,
+      "staffName": "高雅琪",
+      "account": "demo.staff.20",
+      "rolePermissionId": 3,
+      "branchId": 2
+    },
+    {
+      "staffId": 21,
+      "staffName": "謝承恩",
+      "account": "demo.staff.21",
+      "rolePermissionId": 3,
+      "branchId": 2
+    },
+    {
+      "staffId": 22,
+      "staffName": "朱婉晴",
+      "account": "demo.staff.22",
+      "rolePermissionId": 2,
+      "branchId": 2
+    },
+    {
+      "staffId": 23,
+      "staffName": "葉昱廷",
+      "account": "demo.staff.23",
       "rolePermissionId": 3,
       "branchId": 2
     }

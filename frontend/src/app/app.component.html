@@ -1,56 +1,222 @@
-<section class="auth-page" *ngIf="!currentUser(); else appShell">
-  <section class="auth-card">
-    <div>
-      <span class="brand-mark">CMS</span>
-      <h1>客戶管理資訊系統</h1>
-      <p>請登入後使用客戶與租金作業。</p>
-    </div>
+<section class="auth-page" *ngIf="!currentUser(); else signedIn">
+  <section class="auth-card" [attr.aria-labelledby]="authMode() === 'login' ? 'auth-heading' : null">
+    <header class="auth-brand" [class.auth-brand-compact]="authMode() !== 'login'">
+      <img class="auth-logo" src="assets/LOGO1.jpg" alt="AFW Full Business Center" />
+      <ng-container *ngIf="authMode() === 'login'">
+        <span class="auth-eyebrow">Customer Operations</span>
+        <h1 id="auth-heading">客戶管理資訊系統</h1>
+        <p>請登入後使用客戶與租金作業。</p>
+      </ng-container>
+    </header>
 
-    <p class="error" *ngIf="error()">{{ error() }}</p>
+    <p class="auth-notice" *ngIf="authNotice()" role="status">{{ authNotice() }}</p>
+    <p class="error auth-error" *ngIf="error()" role="alert">{{ error() }}</p>
 
-    <form class="auth-form" *ngIf="authMode() === 'login'; else registerPanel" (ngSubmit)="login()">
-      <label>
+    <form class="auth-form" *ngIf="authMode() === 'login'" (ngSubmit)="login()">
+      <label for="loginAccount">
         帳號
-        <input name="loginAccount" [(ngModel)]="loginForm.account" autocomplete="username" required />
       </label>
-      <label>
+      <input
+        id="loginAccount"
+        name="loginAccount"
+        [(ngModel)]="loginForm.account"
+        autocomplete="username"
+        placeholder="請輸入帳號"
+        required
+      />
+
+      <label for="loginPassword">
         密碼
-        <input type="password" name="loginPassword" [(ngModel)]="loginForm.password" autocomplete="current-password" required />
       </label>
-      <div class="form-actions">
-        <button type="submit">登入</button>
-        <button type="button" class="ghost" (click)="authMode.set('register'); error.set('')">申請帳號</button>
+      <span class="auth-password-field">
+        <input
+          id="loginPassword"
+          [type]="loginPasswordVisible() ? 'text' : 'password'"
+          name="loginPassword"
+          [(ngModel)]="loginForm.password"
+          autocomplete="current-password"
+          placeholder="請輸入密碼"
+          required
+        />
+        <button
+          class="auth-password-toggle"
+          type="button"
+          [attr.aria-label]="loginPasswordVisible() ? '隱藏密碼' : '顯示密碼'"
+          [attr.aria-pressed]="loginPasswordVisible()"
+          (click)="toggleLoginPasswordVisibility()"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6S2.5 12 2.5 12Z" />
+            <circle cx="12" cy="12" r="2.5" />
+            <path *ngIf="loginPasswordVisible()" d="m4 4 16 16" />
+          </svg>
+        </button>
+      </span>
+
+      <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '登入中…' : '登入' }}</button>
+
+      <div class="auth-support-actions" aria-label="帳號協助">
+        <button type="button" class="auth-support-action" [disabled]="authBusy()" (click)="setAuthMode('register')">申請帳號</button>
+        <span aria-hidden="true"></span>
+        <button type="button" class="auth-support-action" [disabled]="authBusy()" (click)="setAuthMode('forgot')">忘記密碼</button>
       </div>
     </form>
 
-    <ng-template #registerPanel>
-      <form class="auth-form" (ngSubmit)="register()">
-        <label>
-          職員名稱
-          <input name="registerStaffName" [(ngModel)]="registerForm.staffName" required />
-        </label>
-        <label>
-          帳號
-          <input name="registerAccount" [(ngModel)]="registerForm.account" autocomplete="username" required />
-        </label>
-        <label>
-          密碼
-          <input type="password" name="registerPassword" [(ngModel)]="registerForm.password" autocomplete="new-password" required />
-        </label>
-        <label>
-          申請權限
-          <select name="registerRoleName" [(ngModel)]="registerForm.roleName">
-            <option *ngFor="let role of roleOptions" [ngValue]="role">{{ role }}</option>
-          </select>
-        </label>
-        <div class="form-actions">
-          <button type="submit">送出申請</button>
-          <button type="button" class="ghost" (click)="authMode.set('login'); error.set('')">返回登入</button>
+    <form class="auth-form" *ngIf="authMode() === 'register'" (ngSubmit)="register()" novalidate>
+        <div class="auth-panel-intro">
+          <h2>申請帳號</h2>
+          <p>完成 Email 驗證與主管審核後，即可使用系統。</p>
         </div>
-      </form>
-    </ng-template>
+
+        <label for="registerAccount">
+          帳號
+          <input
+            id="registerAccount"
+            name="registerAccount"
+            [(ngModel)]="registerForm.account"
+            (ngModelChange)="clearRegistrationFieldError('account')"
+            [class.field-invalid]="registrationFieldErrors()['account']"
+            [attr.aria-invalid]="registrationFieldErrors()['account'] ? 'true' : null"
+            [attr.aria-describedby]="registrationFieldErrors()['account'] ? 'registerAccountError' : null"
+            autocomplete="username"
+            required
+          />
+          <span id="registerAccountError" class="field-error" *ngIf="registrationFieldErrors()['account']" role="alert">
+            {{ registrationFieldErrors()['account'] }}
+          </span>
+        </label>
+
+        <label for="registerPassword">
+          密碼
+          <input
+            id="registerPassword"
+            type="password"
+            name="registerPassword"
+            [(ngModel)]="registerForm.password"
+            (ngModelChange)="clearRegistrationFieldError('password')"
+            [class.field-invalid]="registrationFieldErrors()['password']"
+            [attr.aria-invalid]="registrationFieldErrors()['password'] ? 'true' : null"
+            [attr.aria-describedby]="registrationFieldErrors()['password'] ? 'registerPasswordError' : null"
+            autocomplete="new-password"
+            minlength="8"
+            required
+          />
+          <span id="registerPasswordError" class="field-error" *ngIf="registrationFieldErrors()['password']" role="alert">
+            {{ registrationFieldErrors()['password'] }}
+          </span>
+        </label>
+
+        <label for="registerStaffName">
+          職員名稱
+          <input
+            id="registerStaffName"
+            name="registerStaffName"
+            [(ngModel)]="registerForm.staffName"
+            (ngModelChange)="clearRegistrationFieldError('staffName')"
+            [class.field-invalid]="registrationFieldErrors()['staffName']"
+            [attr.aria-invalid]="registrationFieldErrors()['staffName'] ? 'true' : null"
+            [attr.aria-describedby]="registrationFieldErrors()['staffName'] ? 'registerStaffNameError' : null"
+            required
+          />
+          <span id="registerStaffNameError" class="field-error" *ngIf="registrationFieldErrors()['staffName']" role="alert">
+            {{ registrationFieldErrors()['staffName'] }}
+          </span>
+        </label>
+
+        <label for="registerEmail">
+          信箱
+          <input
+            id="registerEmail"
+            type="email"
+            name="registerEmail"
+            [(ngModel)]="registerForm.email"
+            (ngModelChange)="clearRegistrationFieldError('email')"
+            [class.field-invalid]="registrationFieldErrors()['email']"
+            [attr.aria-invalid]="registrationFieldErrors()['email'] ? 'true' : null"
+            [attr.aria-describedby]="registrationFieldErrors()['email'] ? 'registerEmailError' : null"
+            autocomplete="email"
+            required
+          />
+          <span id="registerEmailError" class="field-error" *ngIf="registrationFieldErrors()['email']" role="alert">
+            {{ registrationFieldErrors()['email'] }}
+          </span>
+        </label>
+
+        <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '送出中…' : '送出申請' }}</button>
+        <button type="button" class="auth-back-action" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+    </form>
+
+    <form class="auth-form" *ngIf="authMode() === 'forgot'" (ngSubmit)="requestPasswordReset()">
+      <section class="auth-help-panel" aria-labelledby="password-help-heading">
+          <span class="auth-help-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M7.5 10.5a4.5 4.5 0 1 1 8.3 2.4L10.7 18H7v-3.7l5.1-5.1a1.6 1.6 0 0 1 2.3 2.3l-1.1 1.1" />
+              <path d="m6.5 18.5-2 2" />
+            </svg>
+          </span>
+          <h2 id="password-help-heading">忘記密碼？</h2>
+          <p>輸入帳號或信箱後，我們會寄送重設連結。</p>
+      </section>
+      <label for="passwordResetIdentifier">帳號或信箱</label>
+      <input id="passwordResetIdentifier" name="passwordResetIdentifier" [(ngModel)]="forgotPasswordForm.identifier" autocomplete="username" required />
+      <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '傳送中…' : '傳送重設連結' }}</button>
+      <button type="button" class="auth-back-action" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+    </form>
+
+    <form class="auth-form" *ngIf="authMode() === 'verification-pending'" (ngSubmit)="requestEmailVerification()">
+      <div class="auth-panel-intro"><h2>驗證你的 Email</h2><p>開啟信箱中的驗證連結；若尚未收到，可重新寄送。</p></div>
+      <label for="emailVerificationIdentifier">帳號或信箱</label>
+      <input id="emailVerificationIdentifier" name="emailVerificationIdentifier" [(ngModel)]="emailVerificationForm.identifier" autocomplete="username" required />
+      <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '傳送中…' : '重新寄送驗證信' }}</button>
+      <button type="button" class="auth-back-action" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+    </form>
+
+    <form class="auth-form" *ngIf="authMode() === 'verify'" (ngSubmit)="completeEmailVerification()">
+      <div class="auth-panel-intro"><h2>完成 Email 驗證</h2><p>驗證後會送交主管開通；此連結只能使用一次。</p></div>
+      <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '驗證中…' : '完成驗證' }}</button>
+      <button type="button" class="auth-back-action" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+    </form>
+
+    <form class="auth-form" *ngIf="authMode() === 'reset'" (ngSubmit)="completePasswordReset()">
+      <div class="auth-panel-intro"><h2>設定新密碼</h2><p>請使用至少 8 個字元、未曾使用過的安全密碼。</p></div>
+      <label for="resetPassword">新密碼</label>
+      <input id="resetPassword" [type]="showResetPassword() ? 'text' : 'password'" name="resetPassword" [(ngModel)]="resetPasswordForm.password" autocomplete="new-password" minlength="8" required />
+      <label for="resetPasswordConfirmation">確認新密碼</label>
+      <input id="resetPasswordConfirmation" [type]="showResetConfirmation() ? 'text' : 'password'" name="resetPasswordConfirmation" [(ngModel)]="resetPasswordForm.confirmPassword" autocomplete="new-password" minlength="8" required />
+      <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '更新中…' : '更新密碼' }}</button>
+      <button type="button" class="auth-back-action" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
+    </form>
   </section>
 </section>
+
+<ng-template #signedIn>
+  <section class="approval-pending-page" *ngIf="isAccountPending(); else appShell" aria-labelledby="approval-pending-title">
+    <article class="approval-pending-card" *ngIf="currentUser() as user">
+      <div class="approval-pending-symbol" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M12 3.2 19 6v5.1c0 4.3-2.8 8.2-7 9.7-4.2-1.5-7-5.4-7-9.7V6l7-2.8Z"></path><path d="m9.4 12 1.7 1.7 3.7-3.8"></path></svg>
+      </div>
+      <p class="approval-pending-kicker">帳號審核中</p>
+      <h1 id="approval-pending-title">已完成登入，等待主管開通</h1>
+      <p class="approval-pending-copy">
+        {{ user.staff_name }}，我們已確認你的 Email。為保護客戶與租約資料，你的帳號尚未開通任何系統功能。
+      </p>
+
+      <ol class="approval-progress" aria-label="帳號開通進度">
+        <li class="complete"><span>1</span><div><strong>已送出申請</strong><small>帳號資料已建立</small></div></li>
+        <li class="complete"><span>2</span><div><strong>Email 已驗證</strong><small>已確認可聯繫的工作信箱</small></div></li>
+        <li class="current"><span>3</span><div><strong>等待主管開通</strong><small>核准後，請登出再重新登入</small></div></li>
+      </ol>
+
+      <div class="approval-pending-account">
+        <span>申請帳號</span>
+        <strong>{{ user.account }}</strong>
+      </div>
+      <div class="approval-pending-actions">
+        <button type="button" (click)="logout()">登出</button>
+      </div>
+    </article>
+  </section>
+</ng-template>
 
 <ng-template #appShell>
 <div class="shell" [class.sidebar-open]="sidebarOpen()" [class.sidebar-collapsed]="!sidebarOpen()">
@@ -59,6 +225,7 @@
       class="toast"
       *ngIf="toast() as currentToast"
       [class.toast-error]="currentToast.kind === 'error'"
+      [class.toast-leaving]="toastLeaving()"
       role="status"
     >
       {{ currentToast.message }}
@@ -93,7 +260,11 @@
     </nav>
   </aside>
 
-  <main [class.home-page]="activeView() === 'home'" [class.customer-new-main]="activeView() === 'customer-new'">
+  <main
+    [class.home-page]="activeView() === 'home'"
+    [class.customer-new-main]="activeView() === 'customer-new'"
+    [class.customer-detail-main]="activeView() === 'customer-detail'"
+  >
     <header class="topbar topbar-surface">
       <button
         type="button"
@@ -115,6 +286,7 @@
     <section class="page-heading">
       <p>{{ pageSubtitle() }}</p>
       <h1>{{ pageTitle() }}</h1>
+      <p class="page-description" *ngIf="pageDescription()">{{ pageDescription() }}</p>
     </section>
 
     <p class="error" *ngIf="error()">{{ error() }}</p>
@@ -253,7 +425,7 @@
                 <input
                   type="search"
                   name="customerFilterCompanyName"
-                  placeholder="請輸入公司名稱（至少 2 個字）"
+                  placeholder="請輸入公司名稱"
                   [(ngModel)]="customerFilters.companyName"
                 />
                 <svg aria-hidden="true" viewBox="0 0 24 24">
@@ -367,7 +539,7 @@
             <span>承租項目</span>
             <span>租約狀態</span>
             <span>辦公室</span>
-            <span>查看</span>
+            <span>動作</span>
           </div>
           <div class="simple-row customer-row" *ngFor="let customer of customers()" [class.selected]="selectedCustomerId() === customer.customer_id">
             <span class="customer-company-name">{{ customer.company_name }}</span>
@@ -390,23 +562,27 @@
       </section>
     </section>
 
-    <section class="single-view" *ngIf="activeView() === 'customer-detail'">
-      <section class="detail" *ngIf="selectedCustomer() as c">
-        <section class="panel">
-          <div class="panel-header">
-            <div>
-              <button type="button" class="ghost compact-button back-button" (click)="backToCustomerList()">返回列表</button>
-              <h2>{{ c.company_name }}</h2>
-              <p>負責人 {{ c.owner_name || '-' }} / {{ c.branch_name || '未指定分館' }} / 房號 {{ c.office_no || '-' }}</p>
-            </div>
-            <div class="header-actions">
-              <span class="status">{{ displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status)) }}</span>
-              <button type="button" class="ghost" *ngIf="!editingCustomer()" (click)="startEditCustomer()">修改</button>
-            </div>
+    <section class="single-view customer-detail-view" *ngIf="activeView() === 'customer-detail'">
+      <section class="customer-detail-page" *ngIf="selectedCustomer() as c">
+        <header class="customer-detail-header">
+          <div class="customer-detail-heading">
+            <button type="button" class="ghost compact-button back-button" (click)="backToCustomerList()">返回列表</button>
+            <p class="customer-detail-eyebrow">Customer Profile</p>
+            <h2>{{ c.company_name }}</h2>
+            <p class="customer-detail-summary">負責人 {{ c.owner_name || '-' }} / {{ c.branch_name || '未指定分館' }} / 房號 {{ c.office_no || '-' }}</p>
           </div>
+          <div class="header-actions customer-detail-header-actions">
+            <span class="status">{{ displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status)) }}</span>
+            <button type="button" class="ghost" *ngIf="!editingCustomer()" (click)="startEditCustomer()">修改</button>
+          </div>
+        </header>
 
-          <form class="customer-form" *ngIf="editingCustomer(); else customerReadOnly" (ngSubmit)="saveCustomerEdit()">
-            <label>
+        <div class="customer-detail-content">
+          <form class="customer-detail-edit-form" *ngIf="editingCustomer(); else customerReadOnly" (ngSubmit)="saveCustomerEdit()">
+            <section class="customer-form-section">
+              <h3>基本資料</h3>
+              <div class="customer-new-grid">
+                <label>
               公司名稱
               <input
                 #editCompanyNameInput
@@ -445,22 +621,28 @@
               <input name="editOwnerName" [(ngModel)]="customerEditForm.ownerName" />
             </label>
             <label>
-              負責人生日
-              <input type="date" name="editOwnerBirthday" [(ngModel)]="customerEditForm.ownerBirthday" />
-            </label>
-            <label>
               聯絡人
               <input name="editContactPerson" [(ngModel)]="customerEditForm.contactPerson" />
             </label>
-            <label>
-              聯絡人生日
-              <input type="date" name="editContactBirthday" [(ngModel)]="customerEditForm.contactBirthday" />
-            </label>
-            <label>
+            <label class="wide">
               電話
               <input name="editPhone" [(ngModel)]="customerEditForm.phone" />
             </label>
-            <label>
+              </div>
+            </section>
+
+            <section class="customer-form-section customer-form-section-muted">
+              <h3>其他資料</h3>
+              <div class="customer-new-grid customer-new-grid-three">
+                <label>
+                  負責人生日
+                  <input type="date" name="editOwnerBirthday" [(ngModel)]="customerEditForm.ownerBirthday" />
+                </label>
+                <label>
+                  聯絡人生日
+                  <input type="date" name="editContactBirthday" [(ngModel)]="customerEditForm.contactBirthday" />
+                </label>
+                <label>
               轉寄地址
               <input name="editForwardingAddress" [(ngModel)]="customerEditForm.forwardingAddress" />
             </label>
@@ -476,7 +658,7 @@
               帳戶資訊
               <input name="editAccountInfo" [(ngModel)]="customerEditForm.accountInfo" />
             </label>
-            <label class="checkbox-label">
+            <label class="checkbox-label wide">
               <input type="checkbox" name="editIsAgent" [(ngModel)]="customerEditForm.isAgent" />
               代辦
             </label>
@@ -484,31 +666,44 @@
               備註
               <textarea name="editNotes" rows="3" [(ngModel)]="customerEditForm.notes"></textarea>
             </label>
-            <div class="form-actions wide">
+              </div>
+            </section>
+            <footer class="customer-detail-actions">
               <button type="submit" [disabled]="saving()">儲存修改</button>
               <button type="button" class="ghost" (click)="cancelEditCustomer()">取消</button>
-            </div>
+            </footer>
           </form>
 
           <ng-template #customerReadOnly>
-            <div class="info-grid">
-              <div><span>負責人</span><strong>{{ c.owner_name || '-' }}</strong></div>
-              <div><span>統一編號</span><strong>{{ c.tax_id || '-' }}</strong></div>
-              <div><span>承租項目</span><strong>{{ c.rental_item || c.registration_type || '-' }}</strong></div>
-              <div><span>承租狀態</span><strong>{{ displayRentalStatus(c.rental_status) }}</strong></div>
-              <div><span>負責人生日</span><strong>{{ c.owner_birthday || '-' }}</strong></div>
-              <div><span>聯絡人</span><strong>{{ c.contact_person || '-' }}</strong></div>
-              <div><span>聯絡人生日</span><strong>{{ c.contact_birthday || '-' }}</strong></div>
-              <div><span>電話</span><strong>{{ c.phone || '-' }}</strong></div>
-              <div><span>轉寄地址</span><strong>{{ c.forwarding_address || '-' }}</strong></div>
-              <div><span>零用金</span><strong>{{ money(c.petty_cash) }}</strong></div>
-              <div><span>會計師資訊</span><strong>{{ c.accountant_info || c.referrer || '-' }}</strong></div>
-              <div><span>帳戶資訊</span><strong>{{ c.account_info || '-' }}</strong></div>
-              <div><span>代辦</span><strong>{{ c.is_agent ? '是' : '否' }}</strong></div>
-              <div><span>備註</span><strong>{{ c.notes || '-' }}</strong></div>
+            <div class="customer-detail-readonly">
+              <section class="customer-form-section">
+                <h3>基本資料</h3>
+                <div class="customer-detail-grid">
+                  <div><span>公司名稱</span><strong>{{ c.company_name || '-' }}</strong></div>
+                  <div><span>統一編號</span><strong>{{ c.tax_id || '-' }}</strong></div>
+                  <div><span>承租項目</span><strong>{{ c.rental_item || c.registration_type || '-' }}</strong></div>
+                  <div><span>承租狀態</span><strong>{{ displayRentalStatus(c.rental_status) }}</strong></div>
+                  <div><span>負責人</span><strong>{{ c.owner_name || '-' }}</strong></div>
+                  <div><span>聯絡人</span><strong>{{ c.contact_person || '-' }}</strong></div>
+                  <div class="wide"><span>電話</span><strong>{{ c.phone || '-' }}</strong></div>
+                </div>
+              </section>
+
+              <section class="customer-form-section customer-form-section-muted">
+                <h3>其他資料</h3>
+                <div class="customer-detail-grid customer-detail-grid-three">
+                  <div><span>負責人生日</span><strong>{{ c.owner_birthday || '-' }}</strong></div>
+                  <div><span>聯絡人生日</span><strong>{{ c.contact_birthday || '-' }}</strong></div>
+                  <div><span>轉寄地址</span><strong>{{ c.forwarding_address || '-' }}</strong></div>
+                  <div><span>零用金</span><strong>{{ money(c.petty_cash) }}</strong></div>
+                  <div><span>會計師資訊</span><strong>{{ c.accountant_info || c.referrer || '-' }}</strong></div>
+                  <div><span>帳戶資訊</span><strong>{{ c.account_info || '-' }}</strong></div>
+                  <div class="wide"><span>代辦</span><strong>{{ c.is_agent ? '是' : '否' }}</strong></div>
+                  <div class="wide"><span>備註</span><strong>{{ c.notes || '-' }}</strong></div>
+                </div>
+              </section>
             </div>
           </ng-template>
-        </section>
 
         <section class="panel" *ngIf="relatedCompanies().length">
           <h3>相關公司</h3>
@@ -586,6 +781,7 @@
             </div>
           </div>
         </section>
+        </div>
       </section>
     </section>
 
@@ -593,6 +789,7 @@
       <section class="customer-new-page">
         <header class="customer-new-header">
           <div class="customer-new-heading">
+            <p class="customer-new-eyebrow">New Customer</p>
             <h2>新增客戶</h2>
             <ol class="customer-new-stepper" aria-label="新增客戶步驟">
               <li [class.active]="customerNewStep() === 1" [class.complete]="customerNewStep() === 2">
@@ -790,10 +987,14 @@
                     <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
                   </select>
                 </label>
-                <label class="wide">
-                  租約圖片
-                  <input type="file" name="newCustomerContractImage" accept="image/*,.pdf" (change)="onNewCustomerLeaseImage($event)" />
-                </label>
+                <div class="wide file-upload-field">
+                  <span class="file-upload-label">租約圖片</span>
+                  <input id="newCustomerContractImage" class="file-upload-input" type="file" name="newCustomerContractImage" accept="image/*,.pdf" (change)="onNewCustomerLeaseImage($event)" />
+                  <div class="file-upload-control">
+                    <label class="file-upload-button" for="newCustomerContractImage">選擇檔案</label>
+                    <span class="file-upload-name" aria-live="polite">{{ newCustomerLeaseImage?.name || '尚未選擇檔案' }}</span>
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -821,10 +1022,6 @@
           </section>
 
           <footer class="customer-new-actions">
-            <div class="customer-new-actions-left">
-              <button type="button" class="ghost" (click)="cancelNewCustomer()">取消</button>
-              <button type="button" class="draft-button" disabled title="草稿功能尚未開放">儲存草稿</button>
-            </div>
             <div class="customer-new-actions-right">
               <button type="button" class="ghost" *ngIf="customerNewStep() === 2" (click)="goToNewCustomerStep(1)">上一步：客戶資料</button>
               <button type="button" class="next-step-button" *ngIf="customerNewStep() === 1" (click)="goToNewCustomerStep(2)">
@@ -871,14 +1068,13 @@
           </div>
         </form>
 
-        <div class="rent-edit-panel" *ngIf="editingContract() as editing">
+        <div class="rent-edit-panel contract-edit-panel" *ngIf="editingContract() as editing">
           <div class="panel-header">
             <div>
-              <h3>修改租約</h3>
-              <p>{{ value(editing, 'company_name') }}</p>
+              <h3>{{ value(editing, 'company_name') }}</h3>
             </div>
           </div>
-          <form class="customer-form" (ngSubmit)="saveContractEdit()">
+          <form class="customer-form contract-edit-form" (ngSubmit)="saveContractEdit()">
             <div class="info-grid wide">
               <div><span>辦公室</span><strong>{{ value(editing, 'office_no') }}</strong></div>
               <div><span>付款週期</span><strong>{{ value(editing, 'payment_months') }}</strong></div>
@@ -888,15 +1084,17 @@
               <div><span>租金</span><strong>{{ money(editing['rent']) }}</strong></div>
               <div><span>押金</span><strong>{{ money(editing['deposit']) }}</strong></div>
             </div>
-            <label>
-              租約狀態
-              <select name="editContractLeaseStatus" [(ngModel)]="contractEditForm.leaseStatus">
-                <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
-              </select>
-            </label>
-            <div class="form-actions wide">
-              <button type="submit" [disabled]="saving()">儲存修改</button>
-              <button type="button" class="ghost" (click)="cancelEditContract()">取消</button>
+            <div class="contract-edit-footer wide">
+              <label class="contract-edit-status">
+                租約狀態
+                <select name="editContractLeaseStatus" [(ngModel)]="contractEditForm.leaseStatus">
+                  <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
+                </select>
+              </label>
+              <div class="form-actions">
+                <button type="submit" [disabled]="saving()">儲存修改</button>
+                <button type="button" class="ghost" (click)="cancelEditContract()">取消</button>
+              </div>
             </div>
           </form>
         </div>
@@ -958,28 +1156,42 @@
 
     <section class="single-view" *ngIf="activeView() === 'contract-new'">
       <section class="panel">
-        <div class="panel-header">
-          <div>
-            <h2>續約租約</h2>
-            <p>選擇客戶後會帶入最新租約資料，請填寫本次續約的日期與變動內容。</p>
-          </div>
-        </div>
-
-        <div class="lookup">
+        <div class="lookup contract-customer-combobox">
           <label>
             公司名稱
-            <input
-              type="search"
-              name="contractCustomerSearch"
-              placeholder="輸入公司名稱"
-              [(ngModel)]="contractCustomerSearch"
-              (ngModelChange)="lookupContractCustomers()"
-            />
+            <div class="contract-customer-input-wrap">
+              <input
+                #contractCustomerSearchInput
+                type="search"
+                name="contractCustomerSearch"
+                placeholder="輸入或選擇公司名稱"
+                role="combobox"
+                aria-autocomplete="list"
+                aria-controls="contract-customer-options"
+                [attr.aria-expanded]="contractCustomerDropdownOpen()"
+                [(ngModel)]="contractCustomerSearch"
+                (focus)="openContractCustomerDropdown()"
+                (ngModelChange)="onContractCustomerSearchChanged()"
+                [class.field-invalid]="newContractFieldErrors()['companyName']"
+                [attr.aria-invalid]="newContractFieldErrors()['companyName'] ? 'true' : null"
+              />
+              <button
+                type="button"
+                class="contract-customer-dropdown-trigger"
+                [attr.aria-label]="contractCustomerDropdownOpen() ? '收合客戶選單' : '展開客戶選單'"
+                [attr.aria-expanded]="contractCustomerDropdownOpen()"
+                (click)="toggleContractCustomerDropdown()"
+              >
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"></path></svg>
+              </button>
+            </div>
+            <span class="field-error" *ngIf="newContractFieldErrors()['companyName']">
+              {{ newContractFieldErrors()['companyName'] }}
+            </span>
           </label>
-          <div class="lookup-list" *ngIf="contractCustomerOptions().length">
+          <div id="contract-customer-options" class="lookup-list" *ngIf="contractCustomerDropdownOpen() && contractCustomerOptions().length">
             <button type="button" *ngFor="let option of contractCustomerOptions()" (click)="selectContractCustomer(option)">
               <strong>{{ option.company_name }}</strong>
-              <span>負責人 {{ option.owner_name || '-' }}</span>
             </button>
           </div>
         </div>
@@ -1070,8 +1282,8 @@
               <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
             </select>
           </label>
-          <div class="form-actions wide">
-            <button type="submit" [disabled]="saving()">續約租約</button>
+          <div class="form-actions wide contract-form-actions">
+            <button type="submit" class="customer-search-submit" [disabled]="saving()">確認</button>
           </div>
         </form>
       </section>
@@ -1220,76 +1432,105 @@
     </section>
 
     <section class="single-view" *ngIf="activeView() === 'rent-new'">
-      <section class="panel">
-        <div class="panel-header">
+      <section class="panel rent-payment-import-panel">
+        <div class="panel-header rent-payment-import-header">
           <div>
-            <h2>新增對帳</h2>
-            <p>輸入公司名稱後選擇客戶與合約。</p>
+            <h2>匯入 Excel</h2>
+            <p>上傳 Excel 後先檢核每筆資料，確認無誤再一次新增對帳。</p>
           </div>
         </div>
 
-        <div class="lookup">
-          <label>
-            公司名稱
-            <input
-              type="search"
-              name="rentCustomerSearch"
-              placeholder="輸入公司名稱"
-              [(ngModel)]="rentCustomerSearch"
-              (ngModelChange)="lookupRentCustomers()"
-            />
-          </label>
-          <div class="lookup-list" *ngIf="rentCustomerOptions().length">
-            <button type="button" *ngFor="let option of rentCustomerOptions()" (click)="selectRentCustomer(option)">
-              <strong>{{ option.company_name }}</strong>
-              <span>{{ option.owner_name || '-' }} / {{ option.office_no || '-' }}</span>
-            </button>
+        <div class="file-upload-field rent-payment-import-upload">
+          <input
+            id="rentPaymentImportFile"
+            class="file-upload-input"
+            type="file"
+            name="rentPaymentImportFile"
+            accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            [disabled]="rentPaymentImporting() || saving()"
+            (change)="onRentPaymentImportFileSelected($event)"
+          />
+          <div class="file-upload-control">
+            <label class="file-upload-button" for="rentPaymentImportFile">
+              {{ rentPaymentImporting() ? '檢核中…' : '上傳檔案' }}
+            </label>
+            <span class="file-upload-name" aria-live="polite">
+              {{ rentPaymentImportPreview()?.fileName || '請選擇 .xlsx 檔案' }}
+            </span>
           </div>
         </div>
 
-        <section class="selected-customer" *ngIf="selectedRentCustomer() as rentCustomer">
-          <strong>{{ rentCustomer.company_name }}</strong>
-          <span>負責人 {{ rentCustomer.owner_name || '-' }} / 房號 {{ rentCustomer.office_no || '-' }} / 租金 {{ money(rentCustomer.rent) }}</span>
-        </section>
-
-        <form class="customer-form" (ngSubmit)="saveRentPayment()">
-          <label>
-            租金月份
-            <input
-              type="month"
-              name="paymentMonth"
-              [(ngModel)]="rentPaymentMonth"
-              (ngModelChange)="updateRentPaymentMonth($event)"
-            />
-          </label>
-          <label>
-            繳款日期
-            <input type="date" name="paymentDateText" [(ngModel)]="rentForm.paymentDateText" />
-          </label>
-          <label>
-            費用起日
-            <input type="date" name="feeStartDateText" [(ngModel)]="rentForm.feeStartDateText" />
-          </label>
-          <label>
-            費用迄日
-            <input type="date" name="feeEndDateText" [(ngModel)]="rentForm.feeEndDateText" />
-          </label>
-          <label>
-            金額
-            <input type="number" name="amount" [(ngModel)]="rentForm.amount" />
-          </label>
-          <label>
-            收據號碼
-            <input type="text" name="receiptNo" [(ngModel)]="rentForm.receiptNo" />
-          </label>
-          <label class="wide">
-            備註
-            <textarea name="rentNote" rows="3" [(ngModel)]="rentForm.note"></textarea>
-          </label>
-          <div class="form-actions wide">
-            <button type="submit">新增對帳</button>
+        <ng-container *ngIf="rentPaymentImportPreview() as preview">
+          <div class="rent-payment-import-summary" aria-live="polite">
+            <span>共 <strong>{{ preview.totalRows }}</strong> 筆</span>
+            <span>可新增 <strong>{{ preview.validRows }}</strong> 筆</span>
+            <span class="import-error-count" *ngIf="preview.errorRows">需修正 <strong>{{ preview.errorRows }}</strong> 筆</span>
           </div>
-        </form>
+
+          <section class="rent-payment-import-preview">
+            <div class="customer-results-toolbar reconciliation-results-toolbar">
+              <p>匯入預覽</p>
+              <div class="customer-results-actions" *ngIf="preview.totalRows > rentPaymentImportPageSize">
+                <div class="customer-page-summary" aria-label="匯入預覽分頁">
+                  <button
+                    type="button"
+                    class="ghost compact-button pager-icon"
+                    aria-label="上一頁"
+                    [disabled]="rentPaymentImportPage() === 0"
+                    (click)="changeRentPaymentImportPage(-1)"
+                  ><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"></path></svg></button>
+                  <span>第 {{ rentPaymentImportPage() + 1 }} 頁，共 {{ rentPaymentImportTotalPages() }} 頁</span>
+                  <button
+                    type="button"
+                    class="ghost compact-button pager-icon"
+                    aria-label="下一頁"
+                    [disabled]="rentPaymentImportPage() + 1 >= rentPaymentImportTotalPages()"
+                    (click)="changeRentPaymentImportPage(1)"
+                  ><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"></path></svg></button>
+                </div>
+              </div>
+            </div>
+
+            <div class="simple-table customer-results-table rent-payment-import-table">
+              <div class="simple-row header customer-row rent-payment-import-row">
+                <span>列號</span>
+                <span>公司名稱</span>
+                <span>租金月份</span>
+                <span>繳款日期</span>
+                <span>金額</span>
+                <span>收據號碼</span>
+                <span>備註</span>
+                <span>檢核結果</span>
+              </div>
+              <div class="simple-row customer-row rent-payment-import-row" *ngFor="let row of rentPaymentImportPageRows()">
+                <span>{{ row.rowNumber }}</span>
+                <span>{{ row.companyName || '-' }}</span>
+                <span>{{ row.paymentMonth || '-' }}</span>
+                <span>{{ row.paymentDateText || '-' }}</span>
+                <span>{{ row.amount ? money(row.amount) : '-' }}</span>
+                <span>{{ row.receiptNo || '-' }}</span>
+                <span>{{ row.note || '-' }}</span>
+                <span class="rent-payment-import-status" [class.invalid]="!row.valid">
+                  <span class="import-status-dot" aria-hidden="true"></span>
+                  {{ row.valid ? '可新增' : row.errors.join('、') }}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <div class="rent-payment-import-actions">
+            <button type="button" class="ghost" [disabled]="rentPaymentImporting() || saving()" (click)="clearRentPaymentImport()">清除本次資料</button>
+            <div class="rent-payment-import-confirm">
+              <span class="import-submit-hint" *ngIf="preview.errorRows">請先修正 {{ preview.errorRows }} 筆資料</span>
+              <button
+                type="button"
+                class="customer-search-submit"
+                [disabled]="saving() || rentPaymentImporting() || preview.errorRows > 0 || preview.validRows === 0"
+                (click)="confirmRentPaymentImport()"
+              >{{ saving() ? '新增中…' : '新增 ' + preview.validRows + ' 筆對帳' }}</button>
+            </div>
+          </div>
+        </ng-container>
       </section>
     </section>
 
@@ -1581,32 +1822,126 @@
     </section>
 
     <section class="single-view" *ngIf="activeView() === 'staff-overview'">
-      <section class="panel">
+      <section class="panel my-profile-panel">
         <div class="panel-header">
           <div>
-            <h2>職員總覽</h2>
-            <p>依分館查詢職員資料；只有主管可以修改角色權限。</p>
+            <h2>我的資料</h2>
+            <p>姓名與信箱異動需送主管審核。</p>
           </div>
-          <label class="inline-filter">
-            分館
-            <select name="staffBranchFilter" [(ngModel)]="staffBranchFilter" (ngModelChange)="loadStaffOverview()">
-              <option [ngValue]="null">全部分館</option>
-              <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">
-                {{ branch.branch_name }}
-              </option>
-            </select>
-          </label>
+          <button *ngIf="!profileEditing()" type="button" class="ghost compact-button" (click)="openProfileEditor()">更新資料</button>
         </div>
 
-        <div class="simple-table">
+        <div class="profile-summary" *ngIf="!profileEditing(); else profileEditForm">
+          <div><span>姓名</span><strong>{{ currentUser()?.staff_name }}</strong></div>
+          <div><span>信箱</span><strong>{{ currentUser()?.email || '尚未設定' }}</strong></div>
+          <div><span>帳號</span><strong>{{ currentUser()?.account }}</strong></div>
+          <div><span>角色</span><strong>{{ currentUser()?.role_name }}</strong></div>
+        </div>
+        <div class="profile-request-notice" *ngIf="myProfileChange() as request">
+          <span class="approval-status" [class.waiting]="isMyPendingProfileChange()" [class.active]="request['status'] === 'APPROVED'">
+            <i aria-hidden="true"></i>{{ profileChangeStatusLabel(request) }}
+          </span>
+          <span *ngIf="isMyPendingProfileChange()">資料異動已送出，等待主管審核。</span>
+          <span *ngIf="request['status'] === 'APPROVED'">最近一次資料異動已核准。</span>
+          <span *ngIf="request['status'] === 'REJECTED'">最近一次資料異動未獲核准。</span>
+        </div>
+        <ng-template #profileEditForm>
+          <form class="profile-edit-form" (ngSubmit)="submitProfileChange()">
+            <label>姓名<input name="profileStaffName" [(ngModel)]="profileForm.staffName" maxlength="80" required /></label>
+            <label>信箱<input name="profileEmail" type="email" [(ngModel)]="profileForm.email" maxlength="254" autocomplete="email" required /></label>
+            <div class="profile-locked-fields">
+              <span>帳號<strong>{{ currentUser()?.account }}</strong></span>
+              <span>角色<strong>{{ currentUser()?.role_name }}</strong></span>
+            </div>
+            <div class="form-actions profile-actions">
+              <button type="button" class="ghost" (click)="cancelProfileEdit()">取消</button>
+              <button type="submit" [disabled]="profileBusy()">{{ profileBusy() ? '送出中…' : '送出審核' }}</button>
+            </div>
+          </form>
+        </ng-template>
+      </section>
+
+      <section class="panel profile-review-panel" *ngIf="canEditStaff() && pendingProfileChangeRows().length">
+        <div class="panel-header">
+          <div>
+            <h2>資料異動待審</h2>
+            <p>核准信箱異動後，系統會寄送驗證信。</p>
+          </div>
+        </div>
+        <div class="profile-review-list">
+          <article class="profile-review-card" *ngFor="let row of pendingProfileChangeRows()">
+            <div>
+              <strong>{{ value(row, 'current_staff_name') }}</strong>
+              <span>{{ value(row, 'account') }}</span>
+            </div>
+            <dl>
+              <div><dt>姓名</dt><dd>{{ value(row, 'current_staff_name') }} → {{ value(row, 'requested_staff_name') }}</dd></div>
+              <div><dt>信箱</dt><dd>{{ value(row, 'current_email') }} → {{ value(row, 'requested_email') }}</dd></div>
+            </dl>
+            <div class="profile-review-actions" *ngIf="canReviewProfileChange(row); else ownProfileChange">
+              <button type="button" class="ghost compact-button" (click)="reviewProfileChange(row, false)">退回</button>
+              <button type="button" class="approval-action" (click)="reviewProfileChange(row, true)">核准</button>
+            </div>
+            <ng-template #ownProfileChange><span class="self-review-note">需由其他主管審核</span></ng-template>
+          </article>
+        </div>
+      </section>
+
+      <section class="panel customer-search-panel staff-search-panel">
+        <form class="customer-search-form compact-search-form staff-filter-form">
+          <div class="compact-search-grid staff-filter-grid">
+            <label class="customer-company-query">
+              分館
+              <select name="staffBranchFilter" [(ngModel)]="staffBranchFilter" (ngModelChange)="changeStaffBranch()">
+                <option [ngValue]="null">全部分館</option>
+                <option *ngFor="let branch of branches()" [ngValue]="branch.branch_id">
+                  {{ branch.branch_name }}
+                </option>
+              </select>
+            </label>
+          </div>
+        </form>
+
+        <div class="customer-results-toolbar staff-results-toolbar">
+          <p class="customer-result-count" aria-live="polite">查詢結果：共 {{ staffTotal() }} 筆</p>
+          <div class="customer-results-actions">
+            <label class="customer-page-size">
+              <span>每頁顯示</span>
+              <select
+                name="staffPageSize"
+                aria-label="每頁顯示筆數"
+                [ngModel]="staffPageSize()"
+                (ngModelChange)="changeStaffPageSize($event)"
+              >
+                <option [ngValue]="10">10 筆</option>
+                <option [ngValue]="20">20 筆</option>
+                <option [ngValue]="50">50 筆</option>
+              </select>
+            </label>
+            <div class="customer-page-summary" aria-label="職員搜尋結果分頁">
+              <button type="button" class="ghost compact-button pager-icon" aria-label="上一頁" [disabled]="staffPage() === 0" (click)="changeStaffPage(-1)">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"></path></svg>
+              </button>
+              <span>第 {{ staffPage() + 1 }} 頁，共 {{ staffTotalPages() }} 頁</span>
+              <button type="button" class="ghost compact-button pager-icon" aria-label="下一頁" [disabled]="staffPage() + 1 >= staffTotalPages()" (click)="changeStaffPage(1)">
+                <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m10 6 6 6-6 6"></path></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="simple-table customer-results-table staff-results-table staff-directory-table" *ngIf="staffRows().length; else noStaff">
           <div class="simple-row header staff-row">
             <span>分館</span>
             <span>職員名稱</span>
+            <span>信箱</span>
             <span>角色權限</span>
+            <span>帳號狀態</span>
           </div>
           <div class="simple-row staff-row" *ngFor="let row of staffRows()">
             <span>{{ value(row, 'branch_name') }}</span>
             <span>{{ value(row, 'staff_name') }}</span>
+            <span class="staff-email">{{ staffEmailValue(row) || '尚未設定' }}</span>
             <span *ngIf="canEditStaff(); else roleReadOnly">
               <select
                 class="compact-select"
@@ -1622,8 +1957,27 @@
             <ng-template #roleReadOnly>
               <span>{{ value(row, 'role_name') }}</span>
             </ng-template>
+            <span class="approval-status-cell">
+              <span
+                class="approval-status"
+                [class.active]="row['account_status'] === 'ACTIVE'"
+                [class.waiting]="row['account_status'] === 'PENDING_APPROVAL'"
+                [class.unverified]="row['account_status'] === 'EMAIL_UNVERIFIED'"
+              >
+                <i aria-hidden="true"></i>{{ accountStatusLabel(row) }}
+              </span>
+              <button
+                *ngIf="canEditStaff() && isPendingApproval(row)"
+                type="button"
+                class="approval-action"
+                (click)="approveStaffAccount(row)"
+              >核准開通</button>
+            </span>
           </div>
         </div>
+        <ng-template #noStaff>
+          <p class="empty-state customer-results-empty">目前沒有符合條件的職員資料。</p>
+        </ng-template>
       </section>
     </section>
 

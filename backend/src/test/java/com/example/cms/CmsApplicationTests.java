@@ -1,11 +1,17 @@
 package com.example.cms;
 
+import com.example.cms.config.SchemaMigrationRunner;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.poi.ss.usermodel.Row;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.mock.web.MockMultipartFile;
@@ -15,18 +21,26 @@ import org.springframework.test.web.servlet.MvcResult;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Map;
 
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -614,9 +628,17 @@ class CmsApplicationTests {
                 .andExpect(jsonPath("$.owner_birthday", is("1990-03-04")))
                 .andExpect(jsonPath("$.referrer", is("Ref Two")));
 
-        mvc.perform(get("/api/customers/lookup").param("search", "TEST002"))
+        mvc.perform(get("/api/customers/lookup").param("search", "Edited Customer"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].company_name", is("Edited Customer Co")));
+
+        mvc.perform(get("/api/customers/lookup").param("search", "TEST002"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
+
+        mvc.perform(get("/api/customers/lookup").param("search", "Owner Two"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(0)));
     }
 
     @Test
@@ -695,10 +717,137 @@ class CmsApplicationTests {
     }
 
     @Test
-    void staffCanLoginAndRegister() throws Exception {
+    void rentPaymentExcelImportPreviewsEachRowBeforeWriting() throws Exception {
+        long customerId = insertDashboardCustomer("Excel Preview Co", "1980-01-01");
+        insertDashboardContractWithTerms(customerId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31),
+                "辦公室", 1, 12000, "綁約中");
+
+        MockMultipartFile workbook = rentPaymentWorkbook(List.of(
+                new String[] { "公司名稱", "租金月份", "繳款日期", "費用起日", "費用迄日", "金額", "收據號碼", "備註" },
+                new String[] { "Excel Preview Co", "2026-09", "2026-09-05", "2026-09-01", "2026-09-30", "12000", "RCPT-001", "九月租金" },
+                new String[] { "不存在的客戶", "2026-09", "2026-09-05", "", "", "8000", "RCPT-002", "" }
+        ));
+
+        mvc.perform(multipart("/api/rent-payments/import-preview").file(workbook))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fileName", is("rent-payment-import.xlsx")))
+                .andExpect(jsonPath("$.totalRows", is(2)))
+                .andExpect(jsonPath("$.validRows", is(1)))
+                .andExpect(jsonPath("$.errorRows", is(1)))
+                .andExpect(jsonPath("$.rows[0].rowNumber", is(2)))
+                .andExpect(jsonPath("$.rows[0].valid", is(true)))
+                .andExpect(jsonPath("$.rows[0].paymentMonth", is("2026-09")))
+                .andExpect(jsonPath("$.rows[1].valid", is(false)))
+                .andExpect(jsonPath("$.rows[1].errors", hasItem("找不到客戶")));
+    }
+
+    @Test
+    void rentPaymentExcelImportReportsMissingHeadersAndDuplicateRows() throws Exception {
+        MockMultipartFile missingHeaderWorkbook = rentPaymentWorkbook(List.of(
+                new String[] { "公司名稱", "租金月份", "繳款日期", "金額" },
+                new String[] { "任意公司", "2026-09", "2026-09-05", "12000" }
+        ));
+
+        mvc.perform(multipart("/api/rent-payments/import-preview").file(missingHeaderWorkbook))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("缺少必要欄位：費用起日、費用迄日、收據號碼、備註")));
+
+        long customerId = insertDashboardCustomer("Excel Duplicate Co", "1980-01-01");
+        insertDashboardContractWithTerms(customerId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31),
+                "辦公室", 1, 12000, "綁約中");
+        MockMultipartFile duplicateWorkbook = rentPaymentWorkbook(List.of(
+                new String[] { "公司名稱", "租金月份", "繳款日期", "費用起日", "費用迄日", "金額", "收據號碼", "備註" },
+                new String[] { "Excel Duplicate Co", "2026-09", "2026-09-05", "", "", "12000", "RCPT-003", "" },
+                new String[] { "Excel Duplicate Co", "2026-09", "2026-09-05", "", "", "12000", "RCPT-003", "" }
+        ));
+
+        mvc.perform(multipart("/api/rent-payments/import-preview").file(duplicateWorkbook))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.validRows", is(1)))
+                .andExpect(jsonPath("$.errorRows", is(1)))
+                .andExpect(jsonPath("$.rows[1].errors", hasItem("Excel 內有重複的對帳資料")));
+    }
+
+    @Test
+    void rentPaymentExcelImportRevalidatesAndWritesAllRowsAtomically() throws Exception {
+        long customerId = insertDashboardCustomer("Excel Atomic Co", "1980-01-01");
+        insertDashboardContractWithTerms(customerId, LocalDate.of(2026, 1, 1), LocalDate.of(2026, 12, 31),
+                "辦公室", 1, 12000, "綁約中");
+        int before = jdbc.queryForObject("SELECT COUNT(*) FROM rent_payments", Integer.class);
+
+        String invalidPayload = """
+                {
+                  "updatedBy": 1,
+                  "rows": [
+                    {
+                      "rowNumber": 2,
+                      "companyName": "Excel Atomic Co",
+                      "paymentMonth": "2026-09",
+                      "paymentDateText": "2026-09-05",
+                      "feeStartDateText": "2026-09-01",
+                      "feeEndDateText": "2026-09-30",
+                      "amount": "12000",
+                      "receiptNo": "RCPT-004",
+                      "note": ""
+                    },
+                    {
+                      "rowNumber": 3,
+                      "companyName": "不存在的客戶",
+                      "paymentMonth": "2026-09",
+                      "paymentDateText": "2026-09-05",
+                      "feeStartDateText": "",
+                      "feeEndDateText": "",
+                      "amount": "8000",
+                      "receiptNo": "RCPT-005",
+                      "note": ""
+                    }
+                  ]
+                }
+                """;
+
+        mvc.perform(post("/api/rent-payments/import")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(invalidPayload))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("第 3 列：找不到客戶")));
+
+        int afterRejectedImport = jdbc.queryForObject("SELECT COUNT(*) FROM rent_payments", Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(before, afterRejectedImport);
+
+        String validPayload = """
+                {
+                  "updatedBy": 1,
+                  "rows": [
+                    {
+                      "rowNumber": 2,
+                      "companyName": "Excel Atomic Co",
+                      "paymentMonth": "2026-09",
+                      "paymentDateText": "2026-09-05",
+                      "feeStartDateText": "2026-09-01",
+                      "feeEndDateText": "2026-09-30",
+                      "amount": "12000",
+                      "receiptNo": "RCPT-004",
+                      "note": ""
+                    }
+                  ]
+                }
+                """;
+
+        mvc.perform(post("/api/rent-payments/import")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validPayload))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.createdCount", is(1)));
+
+        int afterValidImport = jdbc.queryForObject("SELECT COUNT(*) FROM rent_payments", Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(before + 1, afterValidImport);
+    }
+
+    @Test
+    void staffCanRegisterButMustVerifyEmailBeforeLoggingIn() throws Exception {
         mvc.perform(post("/api/auth/login")
                         .contentType("application/json")
-                        .content("""
+                .content("""
                                 {
                                   "account": "manager",
                                   "password": "password"
@@ -717,15 +866,254 @@ class CmsApplicationTests {
                                   "staffName": "Test Secretary",
                                   "account": "test.secretary",
                                   "password": "secret123",
-                                  "roleName": "一般秘書"
+                                  "email": "test.secretary@cms.test"
                                 }
                                 """))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.message", is("驗證連結已寄送至註冊信箱。")));
+
+        Integer unverified = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM staff
+                WHERE account = 'test.secretary'
+                  AND email_verified_at IS NULL
+                  AND account_approved_at IS NULL
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, unverified);
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"test.secretary\",\"password\":\"secret123\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void registrationReturnsErrorsForTheSpecificInvalidField() throws Exception {
+        mvc.perform(post("/api/auth/register")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "staffName": "Field Error Tester",
+                                  "account": "manager",
+                                  "password": "secret123",
+                                  "email": "field-error-account@cms.test"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.fieldErrors.account", is("此帳號已被使用，請改用其他帳號。")));
+
+        mvc.perform(post("/api/auth/register")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "staffName": "Field Error Tester",
+                                  "account": "field-error-email",
+                                  "password": "secret123",
+                                  "email": "manager@cms.test"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.fieldErrors.email", is("此信箱已被使用，請改用其他信箱。")));
+
+        mvc.perform(post("/api/auth/register")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "staffName": "Field Error Tester",
+                                  "account": "field-error-password",
+                                  "password": "short",
+                                  "email": "field-error-password@cms.test"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.fieldErrors.password", is("密碼至少需要 8 個字元。")));
+    }
+
+    @Test
+    void verifiedSelfRegisteredAccountWaitsForManagerApproval() throws Exception {
+        long staffId = insertPasswordResetStaff("pending-approval", "pending-approval@cms.test", "verify-password");
+        jdbc.update("UPDATE staff SET account_approved_at = NULL, account_approved_by = NULL WHERE staff_id = ?", staffId);
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"pending-approval\",\"password\":\"verify-password\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.staff_name", is("Test Secretary")))
-                .andExpect(jsonPath("$.role_name", is("一般秘書")))
-                .andExpect(jsonPath("$.canCreateRent", is(false)))
-                .andExpect(jsonPath("$.canEditRent", is(false)))
-                .andExpect(jsonPath("$.canEditStaff", is(false)));
+                .andExpect(jsonPath("$.account_status", is("PENDING_APPROVAL")))
+                .andExpect(jsonPath("$.is_account_approved", is(false)))
+                .andExpect(jsonPath("$.canCreateOffice", is(false)));
+
+        mvc.perform(get("/api/staff"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content[0].account", is("pending-approval")))
+                .andExpect(jsonPath("$.content[0].account_status", is("PENDING_APPROVAL")));
+
+        mvc.perform(patch("/api/staff/{id}/approval", staffId)
+                        .contentType("application/json")
+                        .content("{\"approvedByStaffId\":1}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.account_status", is("ACTIVE")))
+                .andExpect(jsonPath("$.account_approved_by", is(1)));
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"pending-approval\",\"password\":\"verify-password\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.account_status", is("ACTIVE")))
+                .andExpect(jsonPath("$.is_account_approved", is(true)))
+                .andExpect(jsonPath("$.canCreateOffice", is(true)));
+    }
+
+    @Test
+    void staffProfileChangesRequireReviewAndReverifyAnUpdatedEmail() throws Exception {
+        long staffId = insertPasswordResetStaff("profile-change", "profile-change@cms.test", "profile-password");
+
+        mvc.perform(post("/api/staff/{id}/profile-change-requests", staffId)
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "requestedByStaffId": %d,
+                                  "staffName": "Updated Profile",
+                                  "email": "updated-profile@cms.test"
+                                }
+                                """.formatted(staffId)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status", is("PENDING")))
+                .andExpect(jsonPath("$.requested_staff_name", is("Updated Profile")));
+
+        String emailBeforeApproval = jdbc.queryForObject("SELECT email FROM staff WHERE staff_id = ?", String.class, staffId);
+        org.junit.jupiter.api.Assertions.assertEquals("profile-change@cms.test", emailBeforeApproval);
+
+        mvc.perform(put("/api/staff/{id}", staffId)
+                        .contentType("application/json")
+                        .content("{\"rolePermissionId\":3,\"email\":\"not-allowed@cms.test\"}"))
+                .andExpect(status().isBadRequest());
+
+        Long requestId = jdbc.queryForObject("""
+                SELECT MAX(staff_profile_change_request_id)
+                FROM staff_profile_change_requests WHERE staff_id = ?
+                """, Long.class, staffId);
+        mvc.perform(patch("/api/staff/profile-change-requests/{requestId}", requestId)
+                        .contentType("application/json")
+                        .content("{\"reviewedByStaffId\":1,\"approve\":true}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status", is("APPROVED")));
+
+        Map<String, Object> staff = jdbc.queryForMap("""
+                SELECT staff_name, email, email_verified_at
+                FROM staff WHERE staff_id = ?
+                """, staffId);
+        org.junit.jupiter.api.Assertions.assertEquals("Updated Profile", staff.get("staff_name"));
+        org.junit.jupiter.api.Assertions.assertEquals("updated-profile@cms.test", staff.get("email"));
+        org.junit.jupiter.api.Assertions.assertNull(staff.get("email_verified_at"));
+    }
+
+    @Test
+    void emailVerificationActivatesAccountOnce() throws Exception {
+        long staffId = insertPasswordResetStaff("verify-once", "verify-once@cms.test", "verify-password");
+        jdbc.update("UPDATE staff SET email_verified_at = NULL WHERE staff_id = ?", staffId);
+        insertEmailVerificationToken(staffId, "email-verification-token", Instant.now().plusSeconds(600));
+
+        mvc.perform(post("/api/auth/email-verifications")
+                        .contentType("application/json")
+                        .content("{\"token\":\"email-verification-token\"}"))
+                .andExpect(status().isNoContent());
+
+        Integer verified = jdbc.queryForObject("SELECT COUNT(*) FROM staff WHERE staff_id = ? AND email_verified_at IS NOT NULL",
+                Integer.class, staffId);
+        org.junit.jupiter.api.Assertions.assertEquals(1, verified);
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"verify-once\",\"password\":\"verify-password\"}"))
+                .andExpect(status().isOk());
+
+        mvc.perform(post("/api/auth/email-verifications")
+                        .contentType("application/json")
+                        .content("{\"token\":\"email-verification-token\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void passwordResetRequestsAlwaysReturnAccepted() throws Exception {
+        Integer tokensBefore = jdbc.queryForObject("SELECT COUNT(*) FROM password_reset_tokens", Integer.class);
+        mvc.perform(post("/api/auth/password-reset-requests")
+                        .contentType("application/json")
+                        .content("{\"identifier\":\"manager\"}"))
+                .andExpect(status().isAccepted());
+
+        Integer tokensAfterKnownAccount = jdbc.queryForObject("SELECT COUNT(*) FROM password_reset_tokens", Integer.class);
+        String storedHash = jdbc.queryForObject("""
+                SELECT token_hash FROM password_reset_tokens
+                WHERE staff_id = 1 ORDER BY password_reset_token_id DESC LIMIT 1
+                """, String.class);
+        org.junit.jupiter.api.Assertions.assertEquals(tokensBefore + 1, tokensAfterKnownAccount);
+        org.junit.jupiter.api.Assertions.assertEquals(64, storedHash.length());
+
+        mvc.perform(post("/api/auth/password-reset-requests")
+                        .contentType("application/json")
+                        .content("{\"identifier\":\"unknown-account\"}"))
+                .andExpect(status().isAccepted());
+
+        Integer tokensAfterUnknownAccount = jdbc.queryForObject("SELECT COUNT(*) FROM password_reset_tokens", Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(tokensAfterKnownAccount, tokensAfterUnknownAccount);
+    }
+
+    @Test
+    void passwordResetChangesPasswordOnceAndRejectsReplay() throws Exception {
+        long staffId = insertPasswordResetStaff("reset-once", "reset-once@cms.test", "old-reset-password");
+        String rawToken = "known-single-use-token";
+        insertPasswordResetToken(staffId, rawToken, Instant.now().plusSeconds(600));
+
+        mvc.perform(post("/api/auth/password-resets")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "token": "known-single-use-token",
+                                  "password": "new-reset-password",
+                                  "confirmPassword": "new-reset-password"
+                                }
+                                """))
+                .andExpect(status().isNoContent());
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"reset-once\",\"password\":\"old-reset-password\"}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"reset-once\",\"password\":\"new-reset-password\"}"))
+                .andExpect(status().isOk());
+        mvc.perform(post("/api/auth/password-resets")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "token": "known-single-use-token",
+                                  "password": "another-password",
+                                  "confirmPassword": "another-password"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void passwordResetRejectsExpiredTokensWithoutChangingPassword() throws Exception {
+        long staffId = insertPasswordResetStaff("reset-expired", "reset-expired@cms.test", "still-the-password");
+        insertPasswordResetToken(staffId, "expired-token", Instant.now().minusSeconds(60));
+
+        mvc.perform(post("/api/auth/password-resets")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "token": "expired-token",
+                                  "password": "new-reset-password",
+                                  "confirmPassword": "new-reset-password"
+                                }
+                                """))
+                .andExpect(status().isBadRequest());
+
+        mvc.perform(post("/api/auth/login")
+                        .contentType("application/json")
+                        .content("{\"account\":\"reset-expired\",\"password\":\"still-the-password\"}"))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -944,11 +1332,35 @@ class CmsApplicationTests {
     }
 
     @Test
-    void staffCanBeFilteredAndRoleUpdated() throws Exception {
-        mvc.perform(get("/api/staff").param("branchId", "1"))
+    void staffCanBePagedFilteredAndRoleUpdated() throws Exception {
+        jdbc.update("DELETE FROM email_verification_tokens WHERE staff_id IN (SELECT staff_id FROM staff WHERE account = 'test.secretary')");
+        jdbc.update("DELETE FROM password_reset_tokens WHERE staff_id IN (SELECT staff_id FROM staff WHERE account = 'test.secretary')");
+        jdbc.update("DELETE FROM staff_profile_change_requests WHERE staff_id IN (SELECT staff_id FROM staff WHERE account = 'test.secretary')");
+        jdbc.update("DELETE FROM staff WHERE account = 'test.secretary'");
+        Integer branchStaffTotal = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM staff WHERE branch_id = 1", Integer.class);
+        int firstPageCount = Math.min(10, branchStaffTotal);
+        int secondPageCount = Math.min(10, Math.max(0, branchStaffTotal - 10));
+
+        mvc.perform(get("/api/staff")
+                        .param("branchId", "1")
+                        .param("page", "0")
+                        .param("pageSize", "10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].branch_name").exists())
-                .andExpect(jsonPath("$[0].role_name").exists());
+                .andExpect(jsonPath("$.content.length()", is(firstPageCount)))
+                .andExpect(jsonPath("$.totalElements", is(branchStaffTotal)))
+                .andExpect(jsonPath("$.page", is(0)))
+                .andExpect(jsonPath("$.pageSize", is(10)))
+                .andExpect(jsonPath("$.content[0].branch_name").exists())
+                .andExpect(jsonPath("$.content[0].role_name").exists());
+
+        mvc.perform(get("/api/staff")
+                        .param("branchId", "1")
+                        .param("page", "1")
+                        .param("pageSize", "10"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()", is(secondPageCount)))
+                .andExpect(jsonPath("$.totalElements", is(branchStaffTotal)));
 
         mvc.perform(put("/api/staff/3")
                         .contentType("application/json")
@@ -959,8 +1371,65 @@ class CmsApplicationTests {
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.staff_id", is(3)))
+                .andExpect(jsonPath("$.email", is("staff@cms.test")))
                 .andExpect(jsonPath("$.role_permission_id", is(2)))
                 .andExpect(jsonPath("$.role_name", is("督導秘書")));
+    }
+
+    @Test
+    void schemaMigrationAddsStaffEmailAndIndexToAnExistingStaffTable() {
+        DriverManagerDataSource legacyDataSource = new DriverManagerDataSource(
+                "jdbc:h2:mem:staff_email_migration;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
+                "sa", "");
+        new ResourceDatabasePopulator(new ClassPathResource("schema.sql")).execute(legacyDataSource);
+        JdbcTemplate legacyJdbc = new JdbcTemplate(legacyDataSource);
+        legacyJdbc.execute("DROP INDEX IF EXISTS idx_staff_email");
+        legacyJdbc.execute("DROP TABLE IF EXISTS email_verification_tokens");
+        legacyJdbc.execute("DROP TABLE IF EXISTS staff_profile_change_requests");
+        legacyJdbc.execute("ALTER TABLE staff DROP COLUMN account_approved_at");
+        legacyJdbc.execute("ALTER TABLE staff DROP COLUMN email_verified_at");
+        legacyJdbc.execute("ALTER TABLE staff DROP COLUMN email");
+
+        new SchemaMigrationRunner(legacyJdbc).run();
+
+        Integer emailColumn = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE LOWER(TABLE_NAME) = 'staff' AND LOWER(COLUMN_NAME) = 'email'
+                """, Integer.class);
+        Integer emailIndex = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.INDEXES
+                WHERE LOWER(INDEX_NAME) = 'idx_staff_email'
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, emailColumn);
+        org.junit.jupiter.api.Assertions.assertEquals(1, emailIndex);
+        Integer verificationColumn = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE LOWER(TABLE_NAME) = 'staff' AND LOWER(COLUMN_NAME) = 'email_verified_at'
+                """, Integer.class);
+        Integer verificationTable = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_NAME) = 'email_verification_tokens'
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, verificationColumn);
+        org.junit.jupiter.api.Assertions.assertEquals(1, verificationTable);
+        Integer approvalColumn = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+                WHERE LOWER(TABLE_NAME) = 'staff' AND LOWER(COLUMN_NAME) = 'account_approved_at'
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, approvalColumn);
+        Integer profileChangeRequestsTable = legacyJdbc.queryForObject("""
+                SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES
+                WHERE LOWER(TABLE_NAME) = 'staff_profile_change_requests'
+                """, Integer.class);
+        org.junit.jupiter.api.Assertions.assertEquals(1, profileChangeRequestsTable);
+    }
+
+    @Test
+    void staffEmailCannotBeMaintainedDirectly() throws Exception {
+        mvc.perform(put("/api/staff/1")
+                        .contentType("application/json")
+                        .content("{\"rolePermissionId\":1,\"email\":\"manager@cms.test\"}"))
+                .andExpect(status().isBadRequest());
     }
 
     private long insertDashboardCustomer(String companyName, String ownerBirthday) {
@@ -972,6 +1441,38 @@ class CmsApplicationTests {
                 ) VALUES (?, ?, 0, '登記', 1, ?, ?, ?, '0900000000', '登記', 1)
                 """, customerId, companyName, companyName + " Owner", ownerBirthday, companyName + " Contact");
         return customerId;
+    }
+
+    private long insertPasswordResetStaff(String account, String email, String password) {
+        Long staffId = jdbc.queryForObject("SELECT COALESCE(MAX(staff_id), 0) + 1 FROM staff", Long.class);
+        jdbc.update("""
+                INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, email, password_hash)
+                VALUES (?, 3, 1, ?, ?, ?, ?)
+                """, staffId, account, account, email, "{noop}" + password);
+        return staffId;
+    }
+
+    private void insertPasswordResetToken(long staffId, String rawToken, Instant expiresAt) {
+        jdbc.update("""
+                INSERT INTO password_reset_tokens (staff_id, token_hash, expires_at)
+                VALUES (?, ?, ?)
+                """, staffId, sha256(rawToken), java.sql.Timestamp.from(expiresAt));
+    }
+
+    private void insertEmailVerificationToken(long staffId, String rawToken, Instant expiresAt) {
+        jdbc.update("""
+                INSERT INTO email_verification_tokens (staff_id, token_hash, expires_at)
+                VALUES (?, ?, ?)
+                """, staffId, sha256(rawToken), java.sql.Timestamp.from(expiresAt));
+    }
+
+    private String sha256(String value) {
+        try {
+            return java.util.HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException(e);
+        }
     }
 
     private void insertDashboardContract(long customerId, LocalDate endDate, String leaseStatus) {
@@ -1010,5 +1511,24 @@ class CmsApplicationTests {
                 """, paymentId, customerId, contractId,
                 feeStartDate.getYear() * 100 + feeStartDate.getMonthValue(),
                 feeStartDate.toString(), feeStartDate.toString(), feeEndDate.toString());
+    }
+
+    private MockMultipartFile rentPaymentWorkbook(List<String[]> values) throws IOException {
+        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream output = new ByteArrayOutputStream()) {
+            var sheet = workbook.createSheet("對帳資料");
+            for (int rowIndex = 0; rowIndex < values.size(); rowIndex++) {
+                Row row = sheet.createRow(rowIndex);
+                String[] cells = values.get(rowIndex);
+                for (int cellIndex = 0; cellIndex < cells.length; cellIndex++) {
+                    row.createCell(cellIndex).setCellValue(cells[cellIndex]);
+                }
+            }
+            workbook.write(output);
+            return new MockMultipartFile(
+                    "file",
+                    "rent-payment-import.xlsx",
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    output.toByteArray());
+        }
     }
 }

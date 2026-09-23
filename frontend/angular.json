@@ -42,6 +42,17 @@
               "optimization": false,
               "extractLicenses": false,
               "sourceMap": true
+            },
+            "test-backend": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.test-backend.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "development"
@@ -54,6 +65,9 @@
             },
             "development": {
               "buildTarget": "cms-frontend:build:development"
+            },
+            "test-backend": {
+              "buildTarget": "cms-frontend:build:test-backend"
             }
           },
           "defaultConfiguration": "development"

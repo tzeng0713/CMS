@@ -13,6 +13,17 @@ spring:
     init:
       mode: always
       encoding: UTF-8
+  mail:
+    host: ${CMS_SMTP_HOST:}
+    port: ${CMS_SMTP_PORT:587}
+    username: ${CMS_SMTP_USERNAME:}
+    password: ${CMS_SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${CMS_SMTP_AUTH:true}
+          starttls:
+            enable: ${CMS_SMTP_STARTTLS:true}
 
 cms:
   seed:
@@ -20,6 +31,12 @@ cms:
   backup:
     google-service-account-json: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_JSON:}
     drive-folder-id: ${GOOGLE_DRIVE_BACKUP_FOLDER_ID:}
+  password-reset:
+    app-base-url: ${CMS_APP_BASE_URL:http://localhost:4200}
+    from: ${CMS_PASSWORD_RESET_FROM:no-reply@cms.local}
+    token-ttl-minutes: ${CMS_PASSWORD_RESET_TOKEN_TTL_MINUTES:30}
+  email-verification:
+    token-ttl-minutes: ${CMS_EMAIL_VERIFICATION_TOKEN_TTL_MINUTES:1440}
 
 management:
   endpoints:

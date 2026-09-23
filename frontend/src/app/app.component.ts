@@ -30,6 +30,7 @@ import {
   PerformanceBonus,
   PerformanceBonusSearchFilters,
   RoleSummary,
+  RentPaymentImportPreview,
   RentPaymentPayload,
   RefundPayload,
   RefundSearchFilters,
@@ -116,6 +117,8 @@ function summarizeByStaff(rows: PerformanceBonus[]): StaffBonusSummaryRow[] {
   }
   return Array.from(totals.values()).sort((a, b) => b.total - a.total);
 }
+type RegistrationField = 'account' | 'password' | 'staffName' | 'email';
+type RegistrationFieldErrors = Partial<Record<RegistrationField, string>>;
 
 interface NavItem {
   key: ViewKey;
@@ -334,7 +337,6 @@ export class AppComponent implements OnInit, AfterViewInit {
   readonly chargeListBankInfo = CHARGE_LIST_BANK_INFO;
   readonly chargeListBankAccountName = CHARGE_LIST_BANK_ACCOUNT_NAME;
   readonly chargeListBankAccountNumber = CHARGE_LIST_BANK_ACCOUNT_NUMBER;
-  readonly roleOptions = ['主管', '督導秘書', '一般秘書'];
   readonly statusOptions = [
     { value: 0, label: '租賃中' },
     { value: 1, label: '解約中' },
@@ -439,7 +441,13 @@ export class AppComponent implements OnInit, AfterViewInit {
   });
 
   currentUser = signal<AuthUser | null>(this.loadStoredUser());
-  authMode = signal<'login' | 'register'>('login');
+  authMode = signal<'login' | 'register' | 'verification-pending' | 'verify' | 'forgot' | 'reset'>('login');
+  authBusy = signal(false);
+  authNotice = signal('');
+  loginPasswordVisible = signal(false);
+  showRegisterPassword = signal(false);
+  showResetPassword = signal(false);
+  showResetConfirmation = signal(false);
   activeView = signal<ViewKey>('home');
   isNarrowViewport = signal(this.isNarrowWindow());
   desktopSidebarCollapsed = signal(this.loadStoredSidebarCollapsed());
@@ -463,6 +471,13 @@ export class AppComponent implements OnInit, AfterViewInit {
   roles = signal<RoleSummary[]>([]);
   staffOptions = signal<Array<Record<string, unknown>>>([]);
   staffRows = signal<Array<Record<string, unknown>>>([]);
+  myProfileChange = signal<Record<string, unknown> | null>(null);
+  pendingProfileChangeRows = signal<Array<Record<string, unknown>>>([]);
+  profileEditing = signal(false);
+  profileBusy = signal(false);
+  staffTotal = signal(0);
+  staffPage = signal(0);
+  staffPageSize = signal(20);
   contractTotal = signal(0);
   contractPage = signal(0);
   contractPageSize = signal(20);
@@ -470,6 +485,10 @@ export class AppComponent implements OnInit, AfterViewInit {
   rentPaymentTotal = signal(0);
   rentPaymentPage = signal(0);
   rentPaymentPageSize = signal(20);
+  rentPaymentImportPreview = signal<RentPaymentImportPreview | null>(null);
+  rentPaymentImportPage = signal(0);
+  readonly rentPaymentImportPageSize = 20;
+  rentPaymentImporting = signal(false);
   chargeListRows = signal<ChargeListSummary[]>([]);
   chargeListTotal = signal(0);
   chargeListPage = signal(0);
@@ -618,9 +637,14 @@ export class AppComponent implements OnInit, AfterViewInit {
   error = signal('');
   success = signal('');
   toast = signal<Toast | null>(null);
+  toastLeaving = signal(false);
   newCustomerFieldErrors = signal<Record<string, string>>({});
   customerEditFieldErrors = signal<Record<string, string>>({});
+  newContractFieldErrors = signal<Record<string, string>>({});
+  registrationFieldErrors = signal<RegistrationFieldErrors>({});
+  contractCustomerDropdownOpen = signal(false);
   private toastTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private toastExitTimeoutId: ReturnType<typeof setTimeout> | null = null;
   search = '';
   rentPaymentFilters: RentPaymentSearchFilters = {
     companyName: '',
@@ -672,6 +696,10 @@ export class AppComponent implements OnInit, AfterViewInit {
   refundSortBy = 'createdAt';
   refundSortDir: 'asc' | 'desc' = 'desc';
   staffBranchFilter: number | null = null;
+  profileForm = {
+    staffName: this.currentUser()?.staff_name ?? '',
+    email: this.currentUser()?.email ?? ''
+  };
   contractCustomerSearch = '';
   chargeListCustomerSearch = '';
   rentCustomerSearch = '';
@@ -686,8 +714,23 @@ export class AppComponent implements OnInit, AfterViewInit {
   registerForm = {
     staffName: '',
     account: '',
+    email: '',
+    password: ''
+  };
+
+  forgotPasswordForm = {
+    identifier: ''
+  };
+
+  resetPasswordForm = {
+    token: '',
     password: '',
-    roleName: '一般秘書'
+    confirmPassword: ''
+  };
+
+  emailVerificationForm = {
+    identifier: '',
+    token: ''
   };
 
   newCustomerForm: CustomerForm = emptyCustomerForm();
@@ -724,6 +767,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   @ViewChild('chargeListPrintArea') chargeListPrintArea?: ElementRef<HTMLDivElement>;
   @ViewChild('newCompanyNameInput') newCompanyNameInput?: ElementRef<HTMLInputElement>;
   @ViewChild('editCompanyNameInput') editCompanyNameInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('contractCustomerSearchInput') contractCustomerSearchInput?: ElementRef<HTMLInputElement>;
 
   selectedCustomerId = computed(() => this.selectedCustomer()?.customer_id ?? null);
   sameOwnerCompanies = computed(() => this.selectedCustomer()?.sameOwnerCompanies ?? []);
@@ -732,8 +776,11 @@ export class AppComponent implements OnInit, AfterViewInit {
     const titles: Partial<Record<ViewKey, string>> = {
       home: '客戶與租金作業總覽',
       'customer-search': '查詢客戶',
+      'contract-new': '續約租約',
       'contract-search': '查詢租約',
+      'rent-new': '新增對帳',
       'rent-search': '查詢對帳',
+      'staff-overview': '職員總覽',
       'data-backup': '資料備份'
     };
     return titles[this.activeView()] ?? 'AFW 商務中心';
@@ -742,14 +789,37 @@ export class AppComponent implements OnInit, AfterViewInit {
     const subtitles: Partial<Record<ViewKey, string>> = {
       home: 'Customer Operations',
       'customer-search': 'Customer Search',
+      'contract-new': 'Renew Contract',
       'contract-search': 'Contract Search',
-      'rent-search': 'Reconciliation Search'
+      'rent-new': 'New Reconciliation',
+      'rent-search': 'Reconciliation Search',
+      'staff-overview': 'Staff Management'
     };
     return subtitles[this.activeView()] ?? 'AFW Business Center';
   });
+  pageDescription = computed(() => {
+    const descriptions: Partial<Record<ViewKey, string>> = {
+      'contract-new': '選擇客戶後會帶入最新租約資料，請填寫本次續約的日期與變動內容。',
+      'rent-new': '匯入 Excel 後先檢核每筆對帳資料，確認無誤再一次新增。'
+    };
+    return descriptions[this.activeView()] ?? '';
+  });
   customerTotalPages = computed(() => Math.max(1, Math.ceil(this.customerTotal() / this.customerPageSize())));
+  staffTotalPages = computed(() => Math.max(1, Math.ceil(this.staffTotal() / this.staffPageSize())));
   contractTotalPages = computed(() => Math.max(1, Math.ceil(this.contractTotal() / this.contractPageSize())));
   rentPaymentTotalPages = computed(() => Math.max(1, Math.ceil(this.rentPaymentTotal() / this.rentPaymentPageSize())));
+  rentPaymentImportTotalPages = computed(() => {
+    const totalRows = this.rentPaymentImportPreview()?.totalRows ?? 0;
+    return Math.max(1, Math.ceil(totalRows / this.rentPaymentImportPageSize));
+  });
+  rentPaymentImportPageRows = computed(() => {
+    const preview = this.rentPaymentImportPreview();
+    if (!preview) {
+      return [];
+    }
+    const start = this.rentPaymentImportPage() * this.rentPaymentImportPageSize;
+    return preview.rows.slice(start, start + this.rentPaymentImportPageSize);
+  });
   chargeListTotalPages = computed(() => Math.max(1, Math.ceil(this.chargeListTotal() / this.chargeListPageSize)));
   refundTotalPages = computed(() => Math.max(1, Math.ceil(this.refundTotal() / this.refundPageSize)));
   salesTargetTotalPages = computed(() => Math.max(1, Math.ceil(this.salesTargetTotal() / this.salesTargetPageSize)));
@@ -758,19 +828,33 @@ export class AppComponent implements OnInit, AfterViewInit {
   constructor(private readonly api: CmsApiService, private readonly router: Router) {}
 
   showToast(message: string, kind: Toast['kind'] = 'success'): void {
-    this.toast.set({ message, kind });
     if (this.toastTimeoutId !== null) {
       clearTimeout(this.toastTimeoutId);
     }
+    if (this.toastExitTimeoutId !== null) {
+      clearTimeout(this.toastExitTimeoutId);
+    }
+    this.toastLeaving.set(false);
+    this.toast.set({ message, kind });
     this.toastTimeoutId = setTimeout(() => {
-      this.toast.set(null);
+      this.toastLeaving.set(true);
       this.toastTimeoutId = null;
-    }, 3600);
+      this.toastExitTimeoutId = setTimeout(() => {
+        this.toast.set(null);
+        this.toastLeaving.set(false);
+        this.toastExitTimeoutId = null;
+      }, 200);
+    }, 3400);
   }
 
   clearNewCustomerFieldError(field: string): void {
     const { [field]: _removed, ...remaining } = this.newCustomerFieldErrors();
     this.newCustomerFieldErrors.set(remaining);
+  }
+
+  clearNewContractFieldError(field: string): void {
+    const { [field]: _removed, ...remaining } = this.newContractFieldErrors();
+    this.newContractFieldErrors.set(remaining);
   }
 
   clearCustomerEditFieldError(field: string): void {
@@ -786,12 +870,29 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   ngOnInit(): void {
+    const searchParams = new URLSearchParams(window.location.search);
+    const verificationToken = searchParams.get('verificationToken');
+    const resetToken = searchParams.get('resetToken');
+    if (!this.currentUser() && verificationToken) {
+      this.emailVerificationForm.token = verificationToken;
+      this.authMode.set('verify');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    } else if (!this.currentUser() && resetToken) {
+      this.resetPasswordForm.token = resetToken;
+      this.authMode.set('reset');
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
     this.router.events.subscribe((event) => {
       if (event instanceof NavigationEnd) {
         this.applyRoute(event.urlAfterRedirects);
       }
     });
-    if (this.currentUser()) {
+    if (this.router.url === '/') {
+      this.router.navigateByUrl('/home');
+    } else {
+      this.applyRoute(this.router.url);
+    }
+    if (this.currentUser() && !this.isAccountPending()) {
       this.refresh();
     }
   }
@@ -857,13 +958,30 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   @HostListener('document:keydown.escape')
   onEscapeKey(): void {
+    this.closeContractCustomerDropdown();
     this.closeSidebarAfterNavigation();
   }
 
+  @HostListener('document:click', ['$event.target'])
+  onDocumentClick(target: EventTarget | null): void {
+    const element = target as Element | null;
+    if (!element?.closest('.contract-customer-combobox')) {
+      this.closeContractCustomerDropdown();
+    }
+  }
+
   private activateView(view: ViewKey): void {
+    const enteringNewCustomerPage = view === 'customer-new' && this.activeView() !== 'customer-new';
+    const enteringRentPaymentImportPage = view === 'rent-new' && this.activeView() !== 'rent-new';
     this.activeView.set(view);
     this.error.set('');
     this.success.set('');
+    if (enteringNewCustomerPage) {
+      this.newCustomerFieldErrors.set({});
+    }
+    if (enteringRentPaymentImportPage) {
+      this.clearRentPaymentImport();
+    }
     this.loadActiveViewData();
   }
 
@@ -896,7 +1014,6 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.loadRentPayments();
         break;
       case 'rent-new':
-        this.loadRentFromRoute();
         break;
       case 'office-search':
         this.loadOfficeRows();
@@ -956,17 +1073,249 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   login(): void {
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
     this.api.login(this.loginForm).subscribe({
-      next: (user) => this.finishLogin(user),
-      error: () => this.error.set('登入失敗，請確認帳號密碼。')
+      next: (user) => {
+        this.authBusy.set(false);
+        this.finishLogin(user);
+      },
+      error: (response: HttpErrorResponse) => {
+        this.authBusy.set(false);
+        if (response.status === 403) {
+          this.emailVerificationForm.identifier = this.loginForm.account.trim();
+          this.authMode.set('verification-pending');
+          this.authNotice.set('請先完成 Email 驗證，再登入。');
+          return;
+        }
+        this.error.set('登入失敗，請確認帳號密碼。');
+      }
     });
   }
 
+  setAuthMode(mode: 'login' | 'register' | 'verification-pending' | 'forgot'): void {
+    this.authMode.set(mode);
+    this.loginPasswordVisible.set(false);
+    this.registrationFieldErrors.set({});
+    this.clearAuthFeedback();
+  }
+
+  toggleLoginPasswordVisibility(): void {
+    this.loginPasswordVisible.update((visible) => !visible);
+  }
+
   register(): void {
-    this.api.register(this.registerForm).subscribe({
-      next: (user) => this.finishLogin(user),
-      error: () => this.error.set('申請帳號失敗，請確認帳號是否重複或欄位未填。')
+    this.clearAuthFeedback();
+    const validationErrors = this.validateRegistrationForm();
+    this.registrationFieldErrors.set(validationErrors);
+    if (Object.keys(validationErrors).length > 0) {
+      this.focusFirstRegistrationError(validationErrors);
+      return;
+    }
+
+    const payload = {
+      account: this.registerForm.account.trim(),
+      password: this.registerForm.password,
+      staffName: this.registerForm.staffName.trim(),
+      email: this.registerForm.email.trim()
+    };
+    this.authBusy.set(true);
+    this.api.register(payload).subscribe({
+      next: (response) => {
+        this.authBusy.set(false);
+        this.registrationFieldErrors.set({});
+        this.emailVerificationForm.identifier = payload.account;
+        this.registerForm.password = '';
+        this.authMode.set('verification-pending');
+        this.authNotice.set(response.message || '驗證連結已寄送至註冊信箱。');
+      },
+      error: (response: HttpErrorResponse) => {
+        this.authBusy.set(false);
+        const fieldErrors = this.registrationErrorsFromResponse(response);
+        if (Object.keys(fieldErrors).length > 0) {
+          this.registrationFieldErrors.set(fieldErrors);
+          this.focusFirstRegistrationError(fieldErrors);
+          return;
+        }
+        this.error.set('申請帳號暫時無法送出，請稍後再試。');
+      }
     });
+  }
+
+  clearRegistrationFieldError(field: RegistrationField): void {
+    const { [field]: _removed, ...remaining } = this.registrationFieldErrors();
+    this.registrationFieldErrors.set(remaining);
+  }
+
+  private validateRegistrationForm(): RegistrationFieldErrors {
+    const errors: RegistrationFieldErrors = {};
+    if (!this.registerForm.account.trim()) {
+      errors.account = '請輸入帳號。';
+    }
+    if (!this.registerForm.password) {
+      errors.password = '請輸入密碼。';
+    } else if (this.registerForm.password.length < 8) {
+      errors.password = '密碼至少需要 8 個字元。';
+    }
+    if (!this.registerForm.staffName.trim()) {
+      errors.staffName = '請輸入職員名稱。';
+    }
+    const email = this.registerForm.email.trim();
+    if (!email) {
+      errors.email = '請輸入信箱。';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.email = '請輸入有效的信箱格式。';
+    }
+    return errors;
+  }
+
+  private registrationErrorsFromResponse(response: HttpErrorResponse): RegistrationFieldErrors {
+    const fieldErrors = response.error?.fieldErrors as Record<string, unknown> | undefined;
+    const errors: RegistrationFieldErrors = {};
+    if (typeof fieldErrors?.['account'] === 'string') errors.account = fieldErrors['account'];
+    if (typeof fieldErrors?.['password'] === 'string') errors.password = fieldErrors['password'];
+    if (typeof fieldErrors?.['staffName'] === 'string') errors.staffName = fieldErrors['staffName'];
+    if (typeof fieldErrors?.['email'] === 'string') errors.email = fieldErrors['email'];
+    return errors;
+  }
+
+  private focusFirstRegistrationError(errors: RegistrationFieldErrors): void {
+    const fieldIds: Record<RegistrationField, string> = {
+      account: 'registerAccount',
+      password: 'registerPassword',
+      staffName: 'registerStaffName',
+      email: 'registerEmail'
+    };
+    const firstInvalidField = (Object.keys(fieldIds) as RegistrationField[])
+      .find((field) => Boolean(errors[field]));
+    if (firstInvalidField) {
+      setTimeout(() => document.getElementById(fieldIds[firstInvalidField])?.focus(), 0);
+    }
+  }
+
+  openForgotPassword(): void {
+    this.clearAuthFeedback();
+    this.authMode.set('forgot');
+  }
+
+  openRegistration(): void {
+    this.clearAuthFeedback();
+    this.registrationFieldErrors.set({});
+    this.authMode.set('register');
+  }
+
+  returnToLogin(): void {
+    this.clearAuthFeedback();
+    this.registrationFieldErrors.set({});
+    this.authBusy.set(false);
+    this.authMode.set('login');
+  }
+
+  toggleRegisterPassword(): void {
+    this.showRegisterPassword.update((isVisible) => !isVisible);
+  }
+
+  toggleResetPassword(): void {
+    this.showResetPassword.update((isVisible) => !isVisible);
+  }
+
+  toggleResetConfirmation(): void {
+    this.showResetConfirmation.update((isVisible) => !isVisible);
+  }
+
+  requestEmailVerification(): void {
+    const identifier = this.emailVerificationForm.identifier.trim();
+    if (!identifier) {
+      this.error.set('請輸入帳號或工作 Email。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.requestEmailVerification({ identifier }).subscribe({
+      next: (response) => {
+        this.authBusy.set(false);
+        this.authNotice.set(response.message || '驗證連結已寄送至註冊信箱。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.authNotice.set('驗證連結已寄送至註冊信箱。');
+      }
+    });
+  }
+
+  completeEmailVerification(): void {
+    if (!this.emailVerificationForm.token) {
+      this.error.set('驗證連結無效或已過期，請重新申請帳號或寄送驗證信。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.verifyEmail({ token: this.emailVerificationForm.token }).subscribe({
+      next: () => {
+        this.authBusy.set(false);
+        this.emailVerificationForm.token = '';
+        this.authMode.set('login');
+        this.authNotice.set('Email 驗證完成，帳號已送交主管審核。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.error.set('驗證連結無效或已過期，請重新寄送驗證信。');
+      }
+    });
+  }
+
+  requestPasswordReset(): void {
+    const identifier = this.forgotPasswordForm.identifier.trim();
+    if (!identifier) {
+      this.error.set('請輸入帳號或工作 Email。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.requestPasswordReset({ identifier }).subscribe({
+      next: (response) => {
+        this.authBusy.set(false);
+        this.authNotice.set(response.message || '重設連結已寄送至註冊信箱。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.authNotice.set('重設連結已寄送至註冊信箱。');
+      }
+    });
+  }
+
+  completePasswordReset(): void {
+    if (!this.resetPasswordForm.token) {
+      this.error.set('重設連結無效或已過期，請重新申請。');
+      return;
+    }
+    if (this.resetPasswordForm.password.length < 8) {
+      this.error.set('新密碼至少需要 8 個字元。');
+      return;
+    }
+    if (this.resetPasswordForm.password !== this.resetPasswordForm.confirmPassword) {
+      this.error.set('兩次輸入的新密碼不一致。');
+      return;
+    }
+    this.clearAuthFeedback();
+    this.authBusy.set(true);
+    this.api.resetPassword(this.resetPasswordForm).subscribe({
+      next: () => {
+        this.authBusy.set(false);
+        this.resetPasswordForm = { token: '', password: '', confirmPassword: '' };
+        this.authMode.set('login');
+        this.authNotice.set('密碼已更新，請使用新密碼登入。');
+      },
+      error: () => {
+        this.authBusy.set(false);
+        this.error.set('重設連結無效或已過期，請重新申請。');
+      }
+    });
+  }
+
+  private clearAuthFeedback(): void {
+    this.error.set('');
+    this.authNotice.set('');
   }
 
   logout(): void {
@@ -987,6 +1336,9 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.editingRefund.set(null);
     this.viewingRefund.set(null);
     this.staffRows.set([]);
+    this.myProfileChange.set(null);
+    this.pendingProfileChangeRows.set([]);
+    this.profileEditing.set(false);
     this.router.navigateByUrl('/home');
     this.error.set('');
     this.success.set('');
@@ -1624,10 +1976,48 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   loadStaffOverview(): void {
     this.loadStaffSupportData();
-    this.api.staff(this.staffBranchFilter).subscribe({
-      next: (rows) => this.staffRows.set(rows),
+    this.loadMyProfileChange();
+    if (this.canEditStaff()) {
+      this.loadPendingProfileChanges();
+    }
+    this.api.staff(this.staffBranchFilter, this.staffPage(), this.staffPageSize()).subscribe({
+      next: (result) => {
+        this.staffRows.set(result.content);
+        this.staffTotal.set(result.totalElements);
+        this.staffPage.set(result.page);
+      },
       error: () => this.error.set('無法載入職員資料。')
     });
+  }
+
+  private requireNewContractCompanyName(): void {
+    this.newContractFieldErrors.set({ companyName: '公司名稱為必填。' });
+    this.error.set('');
+    setTimeout(() => this.contractCustomerSearchInput?.nativeElement.focus(), 0);
+  }
+
+  changeStaffBranch(): void {
+    this.staffPage.set(0);
+    this.loadStaffOverview();
+  }
+
+  changeStaffPageSize(size: number): void {
+    const pageSize = Number(size);
+    if (![10, 20, 50].includes(pageSize) || pageSize === this.staffPageSize()) {
+      return;
+    }
+    this.staffPageSize.set(pageSize);
+    this.staffPage.set(0);
+    this.loadStaffOverview();
+  }
+
+  changeStaffPage(delta: number): void {
+    const next = this.staffPage() + delta;
+    if (next < 0 || next >= this.staffTotalPages()) {
+      return;
+    }
+    this.staffPage.set(next);
+    this.loadStaffOverview();
   }
 
   updateStaffRole(row: Record<string, unknown>, rolePermissionId: number): void {
@@ -1857,6 +2247,121 @@ export class AppComponent implements OnInit, AfterViewInit {
       error: (err: HttpErrorResponse) => {
         this.saving.set(false);
         this.error.set(this.branchApiErrorMessage(err, '業績獎金規則新增失敗。'));
+      }
+    });
+  }
+
+  isAccountPending(): boolean {
+    return this.currentUser()?.is_account_approved === false;
+  }
+
+  openProfileEditor(): void {
+    this.profileForm = {
+      staffName: this.currentUser()?.staff_name ?? '',
+      email: this.currentUser()?.email ?? ''
+    };
+    this.profileEditing.set(true);
+    this.error.set('');
+  }
+
+  cancelProfileEdit(): void {
+    this.profileEditing.set(false);
+    this.error.set('');
+  }
+
+  submitProfileChange(): void {
+    const staffId = this.currentStaffId();
+    const staffName = this.profileForm.staffName.trim();
+    const email = this.profileForm.email.trim();
+    if (!staffId || !staffName || !email) {
+      this.error.set('請完整填寫姓名與信箱。');
+      return;
+    }
+    this.profileBusy.set(true);
+    this.api.requestProfileChange(staffId, { requestedByStaffId: staffId, staffName, email }).subscribe({
+      next: (request) => {
+        this.profileBusy.set(false);
+        this.myProfileChange.set(request);
+        this.profileEditing.set(false);
+        this.error.set('');
+        this.showToast('資料異動申請已送出，等待主管審核。');
+        if (this.canEditStaff()) {
+          this.loadPendingProfileChanges();
+        }
+      },
+      error: (response: HttpErrorResponse) => {
+        this.profileBusy.set(false);
+        this.error.set(response.status === 409
+          ? '此信箱已由其他職員使用。'
+          : '資料異動申請失敗，請確認姓名與信箱格式。');
+      }
+    });
+  }
+
+  loadMyProfileChange(): void {
+    const staffId = this.currentUser()?.staff_id;
+    if (!staffId) {
+      this.myProfileChange.set(null);
+      return;
+    }
+    this.api.profileChangeRequests(staffId).subscribe({
+      next: (rows) => this.myProfileChange.set(rows[0] ?? null),
+      error: () => this.myProfileChange.set(null)
+    });
+  }
+
+  loadPendingProfileChanges(): void {
+    this.api.profileChangeRequests(undefined, true).subscribe({
+      next: (rows) => this.pendingProfileChangeRows.set(rows),
+      error: () => this.error.set('無法載入資料異動申請。')
+    });
+  }
+
+  profileChangeStatusLabel(row: Record<string, unknown> | null): string {
+    switch (row?.['status']) {
+      case 'APPROVED':
+        return '已核准';
+      case 'REJECTED':
+        return '未核准';
+      case 'SUPERSEDED':
+        return '已更新';
+      default:
+        return '待審核';
+    }
+  }
+
+  isMyPendingProfileChange(): boolean {
+    return this.myProfileChange()?.['status'] === 'PENDING';
+  }
+
+  canReviewProfileChange(row: Record<string, unknown>): boolean {
+    return Number(row['staff_id']) !== this.currentStaffId();
+  }
+
+  reviewProfileChange(row: Record<string, unknown>, approve: boolean): void {
+    if (!this.canEditStaff() || !this.canReviewProfileChange(row)) {
+      return;
+    }
+    const requestId = Number(row['staff_profile_change_request_id']);
+    const reviewedByStaffId = this.currentStaffId();
+    if (!requestId || !reviewedByStaffId) {
+      return;
+    }
+    const emailChanged = this.textValue(row['current_email']) !== this.textValue(row['requested_email']);
+    this.api.reviewProfileChange(requestId, { reviewedByStaffId, approve }).subscribe({
+      next: () => {
+        this.error.set('');
+        this.showToast(approve
+          ? emailChanged ? '資料異動已核准，驗證信已寄出。' : '資料異動已核准。'
+          : '資料異動申請已退回。');
+        this.loadPendingProfileChanges();
+        this.loadStaffOverview();
+      },
+      error: (response: HttpErrorResponse) => {
+        this.error.set(response.status === 409
+          ? '此申請已被處理，請重新整理。'
+          : '資料異動審核失敗，請重新整理後再試。');
+        this.loadPendingProfileChanges();
       }
     });
   }
@@ -2146,6 +2651,49 @@ export class AppComponent implements OnInit, AfterViewInit {
     });
   }
 
+  isPendingApproval(row: Record<string, unknown>): boolean {
+    return row['account_status'] === 'PENDING_APPROVAL';
+  }
+
+  accountStatusLabel(row: Record<string, unknown>): string {
+    switch (row['account_status']) {
+      case 'ACTIVE':
+        return '已開通';
+      case 'PENDING_APPROVAL':
+        return '待審核';
+      default:
+        return '待驗證';
+    }
+  }
+
+  approveStaffAccount(row: Record<string, unknown>): void {
+    if (!this.canEditStaff() || !this.isPendingApproval(row)) {
+      return;
+    }
+    const staffId = Number(row['staff_id']);
+    const approvedByStaffId = this.currentStaffId();
+    if (!staffId || !approvedByStaffId) {
+      return;
+    }
+    this.api.approveStaff(staffId, { approvedByStaffId }).subscribe({
+      next: () => {
+        this.error.set('');
+        this.showToast('帳號已核准開通，對方重新登入後即可使用系統。');
+        this.loadStaffOverview();
+      },
+      error: (response: HttpErrorResponse) => {
+        this.error.set(response.status === 409
+          ? '此帳號尚未完成 Email 驗證，或已完成開通。'
+          : '帳號開通失敗，請重新整理後再試。');
+        this.loadStaffOverview();
+      }
+    });
+  }
+
+  staffEmailValue(row: Record<string, unknown>): string {
+    const email = row['email'];
+    return typeof email === 'string' ? email : '';
+  }
   loadContracts(): void {
     this.loading.set(true);
     this.api.contracts(this.contractFilters, this.contractPage(), this.contractPageSize()).subscribe({
@@ -2200,19 +2748,41 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   lookupContractCustomers(): void {
     const term = this.contractCustomerSearch.trim();
-    if (!term) {
-      this.contractCustomerOptions.set([]);
-      return;
-    }
     this.api.customerLookup(term).subscribe({
       next: (rows) => this.contractCustomerOptions.set(rows),
       error: () => this.error.set('無法查詢客戶資料。')
     });
   }
 
+  onContractCustomerSearchChanged(): void {
+    this.clearNewContractFieldError('companyName');
+    this.newContractForm = { ...this.newContractForm, customerId: null };
+    this.contractCustomerDropdownOpen.set(true);
+    this.lookupContractCustomers();
+  }
+
+  openContractCustomerDropdown(): void {
+    this.contractCustomerDropdownOpen.set(true);
+    this.lookupContractCustomers();
+  }
+
+  toggleContractCustomerDropdown(): void {
+    if (this.contractCustomerDropdownOpen()) {
+      this.closeContractCustomerDropdown();
+      return;
+    }
+    this.openContractCustomerDropdown();
+  }
+
+  closeContractCustomerDropdown(): void {
+    this.contractCustomerDropdownOpen.set(false);
+  }
+
   selectContractCustomer(customer: CustomerSummary): void {
     this.contractCustomerSearch = customer.company_name;
     this.contractCustomerOptions.set([]);
+    this.contractCustomerDropdownOpen.set(false);
+    this.clearNewContractFieldError('companyName');
     this.newContractFirstPaymentAmount = null;
     this.newContractFirstPaymentDateText = '';
     this.newContractForm = {
@@ -2269,6 +2839,15 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   createContract(): void {
+    if (!this.contractCustomerSearch.trim()) {
+      this.requireNewContractCompanyName();
+      return;
+    }
+    this.clearNewContractFieldError('companyName');
+    if (!this.newContractForm.customerId) {
+      this.error.set('請先選擇客戶。');
+      return;
+    }
     if (!this.hasValidNewContractPayment()) {
       return;
     }
@@ -2326,6 +2905,8 @@ export class AppComponent implements OnInit, AfterViewInit {
           this.newContractFirstPaymentDateText = '';
           this.contractCustomerSearch = '';
           this.contractCustomerOptions.set([]);
+          this.contractCustomerDropdownOpen.set(false);
+          this.newContractFieldErrors.set({});
           this.setView('contract-search');
         }
         this.loadDashboard();
@@ -2474,6 +3055,73 @@ export class AppComponent implements OnInit, AfterViewInit {
   updateRentPaymentMonth(value: string): void {
     this.rentPaymentMonth = value;
     this.rentForm.paymentMonth = this.monthNumberFromInput(value);
+  }
+
+  onRentPaymentImportFileSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0] ?? null;
+    input.value = '';
+    if (!file) {
+      return;
+    }
+    this.previewRentPaymentImport(file);
+  }
+
+  previewRentPaymentImport(file: File): void {
+    this.rentPaymentImporting.set(true);
+    this.error.set('');
+    this.api.previewRentPaymentImport(file).subscribe({
+      next: (preview) => {
+        this.rentPaymentImportPreview.set(preview);
+        this.rentPaymentImportPage.set(0);
+        this.rentPaymentImporting.set(false);
+      },
+      error: (err: HttpErrorResponse) => {
+        this.rentPaymentImporting.set(false);
+        this.error.set(this.branchApiErrorMessage(err, 'Excel 匯入檢核失敗。'));
+      }
+    });
+  }
+
+  clearRentPaymentImport(): void {
+    this.rentPaymentImportPreview.set(null);
+    this.rentPaymentImportPage.set(0);
+    this.rentPaymentImporting.set(false);
+    this.error.set('');
+  }
+
+  changeRentPaymentImportPage(delta: number): void {
+    const nextPage = this.rentPaymentImportPage() + delta;
+    if (nextPage < 0 || nextPage >= this.rentPaymentImportTotalPages()) {
+      return;
+    }
+    this.rentPaymentImportPage.set(nextPage);
+  }
+
+  confirmRentPaymentImport(): void {
+    const preview = this.rentPaymentImportPreview();
+    if (!preview || preview.errorRows > 0 || !preview.validRows) {
+      return;
+    }
+    this.saving.set(true);
+    this.error.set('');
+    this.api.importRentPayments({
+      rows: preview.rows,
+      updatedBy: this.currentStaffId()
+    }).subscribe({
+      next: (result) => {
+        this.saving.set(false);
+        this.clearRentPaymentImport();
+        this.showToast(`已新增 ${result.createdCount} 筆對帳資料。`);
+        this.setView('rent-search');
+        this.loadDashboard();
+        this.loadRentPayments();
+      },
+      error: (err: HttpErrorResponse) => {
+        this.saving.set(false);
+        this.error.set(this.branchApiErrorMessage(err, '新增對帳資料失敗。'));
+      }
+    });
   }
 
   loadRentPayments(): void {
@@ -3482,9 +4130,14 @@ export class AppComponent implements OnInit, AfterViewInit {
   private finishLogin(user: AuthUser): void {
     sessionStorage.setItem('cmsUser', JSON.stringify(user));
     this.currentUser.set(user);
+    this.profileForm = { staffName: user.staff_name, email: user.email ?? '' };
     this.authMode.set('login');
     this.error.set('');
     this.success.set('');
+    if (this.isAccountPending()) {
+      this.router.navigateByUrl('/home');
+      return;
+    }
     this.loadDashboard();
     this.applyRoute(this.router.url === '/' ? '/home' : this.router.url);
   }
@@ -3710,7 +4363,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   private applyRoute(url: string): void {
     const path = url.split('?')[0].split('#')[0];
-    if (!this.currentUser()) {
+    if (!this.currentUser() || this.isAccountPending()) {
       return;
     }
     const customerMatch = path.match(/^\/customers\/(\d+)$/);
