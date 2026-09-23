@@ -1326,14 +1326,13 @@
           </div>
         </form>
 
-        <div class="rent-edit-panel" *ngIf="editingRentPayment() as editing">
+        <div class="rent-edit-panel contract-edit-panel rent-payment-edit-panel" *ngIf="editingRentPayment() as editing" aria-labelledby="rent-payment-edit-title">
           <div class="panel-header">
             <div>
-              <h3>修改對帳</h3>
-              <p>{{ value(editing, 'company_name') }} / {{ formatPaymentMonth(editing['payment_month']) }}</p>
+              <h3 id="rent-payment-edit-title">{{ value(editing, 'company_name') }}</h3>
             </div>
           </div>
-          <form class="customer-form" (ngSubmit)="saveRentPaymentEdit()">
+          <form class="customer-form rent-payment-edit-form" (ngSubmit)="saveRentPaymentEdit()">
             <label>
               租金月份
               <input
@@ -1367,9 +1366,9 @@
               備註
               <textarea name="editRentNote" rows="3" [(ngModel)]="rentEditForm.note"></textarea>
             </label>
-            <div class="form-actions wide">
-              <button type="submit" [disabled]="saving()">儲存修改</button>
-              <button type="button" class="ghost" (click)="cancelEditRentPayment()">取消</button>
+            <div class="form-actions wide rent-payment-edit-actions">
+              <button type="submit" class="customer-search-submit" [disabled]="saving()">{{ saving() ? '儲存中…' : '儲存修改' }}</button>
+              <button type="button" class="ghost customer-clear-button" [disabled]="saving()" (click)="cancelEditRentPayment()">取消</button>
             </div>
           </form>
         </div>

@@ -799,8 +799,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   });
   pageDescription = computed(() => {
     const descriptions: Partial<Record<ViewKey, string>> = {
-      'contract-new': '選擇客戶後會帶入最新租約資料，請填寫本次續約的日期與變動內容。',
-      'rent-new': '匯入 Excel 後先檢核每筆對帳資料，確認無誤再一次新增。'
+      'contract-new': '選擇客戶後會帶入最新租約資料，請填寫本次續約的日期與變動內容。'
     };
     return descriptions[this.activeView()] ?? '';
   });

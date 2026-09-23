@@ -223,6 +223,25 @@ describe('new customer flow', () => {
     fixture.destroy();
   });
 
+  it('uses a stable centered layout for every authentication screen', () => {
+    const fixture = TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [provideRouter([]), { provide: CmsApiService, useValue: {} }]
+    }).createComponent(AppComponent);
+    const view = fixture.componentInstance;
+    view.currentUser.set(null);
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    const authPage = page.querySelector<HTMLElement>('.auth-page');
+    const authCard = page.querySelector<HTMLElement>('.auth-card');
+
+    expect(getComputedStyle(authPage!).getPropertyValue('scrollbar-gutter')).toBe('stable both-edges');
+    expect(getComputedStyle(authCard!).justifySelf).toBe('center');
+    expect(getComputedStyle(authCard!).alignSelf).toBe('center');
+    fixture.destroy();
+  });
+
   it('renders a field-level registration error below the invalid input', () => {
     const fixture = TestBed.configureTestingModule({
       imports: [AppComponent],
@@ -834,6 +853,41 @@ describe('new customer flow', () => {
     expect(editPanel?.classList.contains('contract-edit-panel')).toBeTrue();
     expect(editPanel?.querySelector('h3')?.textContent?.trim()).toBe('青禾品牌設計有限公司');
     expect(editPanel?.querySelector('.panel-header p')).toBeNull();
+    expect(getComputedStyle(editPanel!).marginTop).toBe('24px');
+    expect(getComputedStyle(editPanel!).backgroundColor).toBe('rgb(255, 255, 255)');
+    expect(getComputedStyle(editPanel!).boxShadow).toBe('none');
+    fixture.destroy();
+  });
+
+  it('presents rent payment editing in a spaced neutral surface', () => {
+    const fixture = TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [
+        provideRouter([{ path: 'home', component: AppComponent }]),
+        {
+          provide: CmsApiService,
+          useValue: {
+            dashboard: () => of(testDashboard()),
+            rentPayments: () => of({ content: [], totalElements: 0, page: 0, pageSize: 20 })
+          }
+        }
+      ]
+    }).createComponent(AppComponent);
+    const view = fixture.componentInstance;
+    view.currentUser.set(testUser());
+    view.activeView.set('rent-search');
+    view.editingRentPayment.set({
+      rent_payment_id: 18,
+      company_name: '日心傢飾設計有限公司',
+      payment_month: 6,
+      payment_date_text: '2026-06-19'
+    });
+    fixture.detectChanges();
+
+    const editPanel = (fixture.nativeElement as HTMLElement).querySelector<HTMLElement>('.rent-payment-edit-panel');
+    expect(editPanel).not.toBeNull();
+    expect(editPanel?.classList.contains('contract-edit-panel')).toBeTrue();
+    expect(editPanel?.querySelector('.panel-header h3')?.textContent?.trim()).toBe('日心傢飾設計有限公司');
     expect(getComputedStyle(editPanel!).marginTop).toBe('24px');
     expect(getComputedStyle(editPanel!).backgroundColor).toBe('rgb(255, 255, 255)');
     expect(getComputedStyle(editPanel!).boxShadow).toBe('none');
