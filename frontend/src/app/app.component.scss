@@ -1309,6 +1309,15 @@ textarea {
   min-width: 260px;
 }
 
+.bank-code-lookup {
+  position: relative;
+}
+
+.bank-code-lookup .lookup-list {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
 input[readonly],
 select:disabled,
 input:disabled {
@@ -1888,6 +1897,12 @@ select.field-invalid:focus,
 textarea.field-invalid:focus {
   border-color: #dc2626;
   outline-color: rgba(220, 38, 38, 0.24);
+}
+
+.required-mark {
+  margin-left: 2px;
+  color: #dc2626;
+  font-weight: 700;
 }
 
 .success {

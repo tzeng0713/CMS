@@ -2676,12 +2676,13 @@
               <input type="text" [value]="editing.contract_id" readonly />
             </label>
             <label>
-              退款原因
+              <span>退款原因<span class="required-mark" *ngIf="editing.refund_status !== '審核通過'">*</span></span>
               <input
                 type="text"
                 name="editRefundReason"
                 [(ngModel)]="refundEditForm.refundReason"
                 [readonly]="editing.refund_status === '審核通過'"
+                [class.field-invalid]="refundEditFieldErrors()['refundReason']"
               />
             </label>
             <label>
@@ -2727,20 +2728,53 @@
               中途解約（可退押金上限為一個月租金；未勾選視為合約到期解約）
             </label>
             <label>
-              退款方式
-              <input type="text" name="editRefundPaymentMethod" [(ngModel)]="refundEditForm.paymentMethod" required />
+              <span>退款方式<span class="required-mark">*</span></span>
+              <input
+                type="text"
+                name="editRefundPaymentMethod"
+                [(ngModel)]="refundEditForm.paymentMethod"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['paymentMethod']"
+              />
+            </label>
+            <label class="bank-code-lookup">
+              <span>收款銀行代碼<span class="required-mark">*</span></span>
+              <input
+                type="search"
+                name="editRefundBankCode"
+                placeholder="輸入代碼或銀行名稱搜尋"
+                [(ngModel)]="refundEditBankCodeSearch"
+                (ngModelChange)="lookupRefundEditBankCode()"
+                (focus)="lookupRefundEditBankCode()"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['bankCode']"
+              />
+              <div class="lookup-list" *ngIf="refundEditBankCodeOptions().length">
+                <button type="button" *ngFor="let option of refundEditBankCodeOptions()" (click)="selectRefundEditBankCode(option)">
+                  <strong>{{ option.code }}</strong>
+                  <span>{{ option.name }}</span>
+                </button>
+              </div>
             </label>
             <label>
-              收款銀行代碼
-              <input type="text" name="editRefundBankCode" [(ngModel)]="refundEditForm.bankCode" required />
+              <span>收款帳號<span class="required-mark">*</span></span>
+              <input
+                type="text"
+                name="editRefundBankAccount"
+                [(ngModel)]="refundEditForm.bankAccount"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['bankAccount']"
+              />
             </label>
             <label>
-              收款帳號
-              <input type="text" name="editRefundBankAccount" [(ngModel)]="refundEditForm.bankAccount" required />
-            </label>
-            <label>
-              收款戶名
-              <input type="text" name="editRefundBankAccountName" [(ngModel)]="refundEditForm.bankAccountName" required />
+              <span>收款戶名<span class="required-mark">*</span></span>
+              <input
+                type="text"
+                name="editRefundBankAccountName"
+                [(ngModel)]="refundEditForm.bankAccountName"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['bankAccountName']"
+              />
             </label>
             <label *ngIf="editing.refund_status === '審核通過'">
               退款日期
@@ -2804,6 +2838,10 @@
           *ngIf="selectedRefundCustomer() as refundCustomer"
         >
           <label>
+            公司名稱（不可修改）
+            <input type="text" [value]="refundCustomer.company_name" readonly />
+          </label>
+          <label>
             租約
             <select name="newRefundContract" [(ngModel)]="newRefundForm.contractId" required>
               <option [ngValue]="null">請選擇租約</option>
@@ -2828,8 +2866,14 @@
             </button>
           </label>
           <label>
-            退款原因
-            <input type="text" name="newRefundReason" [(ngModel)]="newRefundForm.refundReason" required />
+            <span>退款原因<span class="required-mark">*</span></span>
+            <input
+              type="text"
+              name="newRefundReason"
+              [(ngModel)]="newRefundForm.refundReason"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['refundReason']"
+            />
           </label>
           <label>
             調整金額（可正可負）
@@ -2848,20 +2892,53 @@
             中途解約（可退押金上限為一個月租金；未勾選視為合約到期解約）
           </label>
           <label>
-            退款方式
-            <input type="text" name="newRefundPaymentMethod" [(ngModel)]="newRefundForm.paymentMethod" required />
+            <span>退款方式<span class="required-mark">*</span></span>
+            <input
+              type="text"
+              name="newRefundPaymentMethod"
+              [(ngModel)]="newRefundForm.paymentMethod"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['paymentMethod']"
+            />
+          </label>
+          <label class="bank-code-lookup">
+            <span>收款銀行代碼<span class="required-mark">*</span></span>
+            <input
+              type="search"
+              name="newRefundBankCode"
+              placeholder="輸入代碼或銀行名稱搜尋"
+              [(ngModel)]="newRefundBankCodeSearch"
+              (ngModelChange)="lookupNewRefundBankCode()"
+              (focus)="lookupNewRefundBankCode()"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['bankCode']"
+            />
+            <div class="lookup-list" *ngIf="newRefundBankCodeOptions().length">
+              <button type="button" *ngFor="let option of newRefundBankCodeOptions()" (click)="selectNewRefundBankCode(option)">
+                <strong>{{ option.code }}</strong>
+                <span>{{ option.name }}</span>
+              </button>
+            </div>
           </label>
           <label>
-            收款銀行代碼
-            <input type="text" name="newRefundBankCode" [(ngModel)]="newRefundForm.bankCode" required />
+            <span>收款帳號<span class="required-mark">*</span></span>
+            <input
+              type="text"
+              name="newRefundBankAccount"
+              [(ngModel)]="newRefundForm.bankAccount"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['bankAccount']"
+            />
           </label>
           <label>
-            收款帳號
-            <input type="text" name="newRefundBankAccount" [(ngModel)]="newRefundForm.bankAccount" required />
-          </label>
-          <label>
-            收款戶名
-            <input type="text" name="newRefundBankAccountName" [(ngModel)]="newRefundForm.bankAccountName" required />
+            <span>收款戶名<span class="required-mark">*</span></span>
+            <input
+              type="text"
+              name="newRefundBankAccountName"
+              [(ngModel)]="newRefundForm.bankAccountName"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['bankAccountName']"
+            />
           </label>
           <label>
             送出後狀態

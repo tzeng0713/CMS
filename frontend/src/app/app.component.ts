@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import html2canvas from 'html2canvas';
 import { forkJoin } from 'rxjs';
+import { BANK_CODES, BankCode } from './core/bank-codes';
 import {
   CmsApiService,
   AuthUser,
@@ -512,6 +513,12 @@ export class AppComponent implements OnInit, AfterViewInit {
   selectedRefundCustomer = signal<CustomerDetail | null>(null);
   refundImportChargeListId: number | null = null;
   refundOverDeductedNotice = signal<RefundOverDeductedError | null>(null);
+  newRefundFieldErrors = signal<Record<string, boolean>>({});
+  refundEditFieldErrors = signal<Record<string, boolean>>({});
+  newRefundBankCodeSearch = '';
+  newRefundBankCodeOptions = signal<BankCode[]>([]);
+  refundEditBankCodeSearch = '';
+  refundEditBankCodeOptions = signal<BankCode[]>([]);
   taxNoticeYearMonth = this.currentMonthValue();
   taxNoticeType: TaxBureauNoticeType = 'BOTH';
   taxNoticeGroups = signal<TaxBureauNoticeGroup[]>([]);
@@ -3825,12 +3832,14 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.error.set('請先搜尋並選擇客戶與租約。');
       return;
     }
-    if (!this.newRefundForm.refundReason.trim()) {
-      this.error.set('請填寫退款原因。');
-      return;
-    }
-    if (!this.refundPaymentInfoComplete(this.newRefundForm)) {
-      this.error.set('請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。');
+    const newRefundMissingFields = this.requiredRefundFieldErrors(this.newRefundForm);
+    this.newRefundFieldErrors.set(newRefundMissingFields);
+    if (Object.keys(newRefundMissingFields).length) {
+      this.error.set(
+        newRefundMissingFields['refundReason']
+          ? '請填寫退款原因。'
+          : '請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。'
+      );
       return;
     }
     const newRefundShortfall = this.checkNewRefundOverDeducted();
@@ -3851,6 +3860,9 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.error.set('');
         this.success.set(result.message ?? '退款資料已新增。');
         this.newRefundForm = emptyRefundForm();
+        this.newRefundFieldErrors.set({});
+        this.newRefundBankCodeSearch = '';
+        this.newRefundBankCodeOptions.set([]);
         this.refundCustomerSearch = '';
         this.selectedRefundCustomer.set(null);
         this.refundImportChargeListId = null;
@@ -3863,10 +3875,53 @@ export class AppComponent implements OnInit, AfterViewInit {
     });
   }
 
-  private refundPaymentInfoComplete(form: RefundForm): boolean {
-    return Boolean(
-      form.paymentMethod.trim() && form.bankCode.trim() && form.bankAccount.trim() && form.bankAccountName.trim()
+  private requiredRefundFieldErrors(form: RefundForm): Record<string, boolean> {
+    const errors: Record<string, boolean> = {};
+    if (!form.refundReason.trim()) errors['refundReason'] = true;
+    if (!form.paymentMethod.trim()) errors['paymentMethod'] = true;
+    if (!form.bankCode.trim()) errors['bankCode'] = true;
+    if (!form.bankAccount.trim()) errors['bankAccount'] = true;
+    if (!form.bankAccountName.trim()) errors['bankAccountName'] = true;
+    return errors;
+  }
+
+  bankCodeMatches(term: string): BankCode[] {
+    const query = term.trim();
+    if (!query) {
+      return BANK_CODES;
+    }
+    const lower = query.toLowerCase();
+    return BANK_CODES.filter(
+      (bank) => bank.code.includes(query) || bank.name.includes(query) || bank.name.toLowerCase().includes(lower)
     );
+  }
+
+  bankCodeDisplayText(code: string): string {
+    if (!code) {
+      return '';
+    }
+    const match = BANK_CODES.find((bank) => bank.code === code);
+    return match ? `${match.code} ${match.name}` : code;
+  }
+
+  lookupNewRefundBankCode(): void {
+    this.newRefundBankCodeOptions.set(this.bankCodeMatches(this.newRefundBankCodeSearch));
+  }
+
+  selectNewRefundBankCode(option: BankCode): void {
+    this.newRefundForm.bankCode = option.code;
+    this.newRefundBankCodeSearch = `${option.code} ${option.name}`;
+    this.newRefundBankCodeOptions.set([]);
+  }
+
+  lookupRefundEditBankCode(): void {
+    this.refundEditBankCodeOptions.set(this.bankCodeMatches(this.refundEditBankCodeSearch));
+  }
+
+  selectRefundEditBankCode(option: BankCode): void {
+    this.refundEditForm.bankCode = option.code;
+    this.refundEditBankCodeSearch = `${option.code} ${option.name}`;
+    this.refundEditBankCodeOptions.set([]);
   }
 
   /**
@@ -3981,6 +4036,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   startEditRefund(row: RefundSummary): void {
     this.refundOverDeductedNotice.set(null);
+    this.refundEditFieldErrors.set({});
     this.editingRefund.set(row);
     this.refundEditForm = {
       customerId: row.customer_id,
@@ -3999,6 +4055,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       refundedAt: row.refunded_at ?? '',
       staffId: this.currentStaffId()
     };
+    this.refundEditBankCodeSearch = this.bankCodeDisplayText(row.bank_code ?? '');
+    this.refundEditBankCodeOptions.set([]);
   }
 
   markRefunded(row: RefundSummary): void {
@@ -4045,6 +4103,9 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.editingRefund.set(null);
     this.refundEditForm = emptyRefundForm();
     this.refundOverDeductedNotice.set(null);
+    this.refundEditFieldErrors.set({});
+    this.refundEditBankCodeSearch = '';
+    this.refundEditBankCodeOptions.set([]);
   }
 
   saveRefundEdit(): void {
@@ -4052,8 +4113,14 @@ export class AppComponent implements OnInit, AfterViewInit {
     if (!row) {
       return;
     }
-    if (!this.refundPaymentInfoComplete(this.refundEditForm)) {
-      this.error.set('請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。');
+    const editRefundMissingFields = this.requiredRefundFieldErrors(this.refundEditForm);
+    this.refundEditFieldErrors.set(editRefundMissingFields);
+    if (Object.keys(editRefundMissingFields).length) {
+      this.error.set(
+        editRefundMissingFields['refundReason']
+          ? '請填寫退款原因。'
+          : '請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。'
+      );
       return;
     }
     const editRefundShortfall = this.checkEditRefundOverDeducted();
