@@ -261,6 +261,7 @@ export interface BranchPayload {
   bankAccount?: string;
   bankBranch?: string;
   bankAccountName?: string;
+  staffId?: number;
 }
 
 export interface RoleSummary {

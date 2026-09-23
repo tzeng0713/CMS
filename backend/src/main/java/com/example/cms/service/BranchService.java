@@ -2,8 +2,11 @@ package com.example.cms.service;
 
 import com.example.cms.dto.BranchRequest;
 import com.example.cms.service.support.CmsJdbcSupport;
+import org.springframework.dao.EmptyResultDataAccessException;
+import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
@@ -20,6 +23,7 @@ public class BranchService extends CmsJdbcSupport {
     }
 
     public Map<String, Object> createBranch(BranchRequest request) {
+        requireManager(request.staffId());
         BranchRequest normalized = validate(request);
         Long id = nextId("branches", "branch_id");
         jdbc.update("""
@@ -33,6 +37,7 @@ public class BranchService extends CmsJdbcSupport {
     }
 
     public Map<String, Object> updateBranch(long id, BranchRequest request) {
+        requireCanEditBranch(request.staffId(), id);
         BranchRequest normalized = validate(request);
         jdbc.update("""
                 UPDATE branches
@@ -54,7 +59,8 @@ public class BranchService extends CmsJdbcSupport {
         String bankAccount = optionalPattern(request.bankAccount(), "bankAccount", 30, "^\\d+$");
         String bankBranch = optionalPattern(request.bankBranch(), "bankBranch", 100, null);
         String bankAccountName = optionalPattern(request.bankAccountName(), "bankAccountName", 100, null);
-        return new BranchRequest(name, companyName, branchCode, branchAddress, taxId, bankAccount, bankBranch, bankAccountName);
+        return new BranchRequest(name, companyName, branchCode, branchAddress, taxId, bankAccount, bankBranch,
+                bankAccountName, request.staffId());
     }
 
     private String requiredBranchName(String value) {
@@ -66,5 +72,44 @@ public class BranchService extends CmsJdbcSupport {
             throw new IllegalArgumentException("branchName must be at most 100 characters");
         }
         return trimmed;
+    }
+
+    private record StaffAuthority(String roleName, Long branchId) {
+    }
+
+    private StaffAuthority staffAuthority(Long staffId) {
+        if (staffId == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "staffId is required");
+        }
+        try {
+            return jdbc.queryForObject("""
+                    SELECT rp.role_name AS role_name, s.branch_id AS branch_id
+                    FROM staff s
+                    JOIN role_permissions rp ON rp.role_permission_id = s.role_permission_id
+                    WHERE s.staff_id = ?
+                    """,
+                    (rs, rowNum) -> new StaffAuthority(rs.getString("role_name"),
+                            rs.getObject("branch_id") == null ? null : rs.getLong("branch_id")),
+                    staffId);
+        } catch (EmptyResultDataAccessException e) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "staff not found");
+        }
+    }
+
+    private void requireManager(Long staffId) {
+        StaffAuthority authority = staffAuthority(staffId);
+        if (!"主管".equals(authority.roleName())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "only 主管 can create branches");
+        }
+    }
+
+    private void requireCanEditBranch(Long staffId, long branchId) {
+        StaffAuthority authority = staffAuthority(staffId);
+        if ("主管".equals(authority.roleName())) {
+            return;
+        }
+        if (authority.branchId() == null || authority.branchId() != branchId) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "can only edit your own branch");
+        }
     }
 }

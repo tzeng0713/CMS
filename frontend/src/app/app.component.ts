@@ -1391,16 +1391,15 @@ export class AppComponent implements OnInit, AfterViewInit {
     return this.currentUser()?.canManageBranch === true;
   }
 
-  loadBranchRows(): void {
+  canEditBranch(branch: BranchSummary): boolean {
     const user = this.currentUser();
+    if (!user) return false;
+    return user.canManageBranch || branch.branch_id === user.branch_id;
+  }
+
+  loadBranchRows(): void {
     this.api.branchList().subscribe({
-      next: (rows) => {
-        if (!user?.canManageBranch && user?.branch_id) {
-          this.branchRows.set(rows.filter((r) => r.branch_id === user.branch_id));
-        } else {
-          this.branchRows.set(rows);
-        }
-      },
+      next: (rows) => this.branchRows.set(rows),
       error: () => this.error.set('無法載入分館資料。')
     });
   }
@@ -1512,7 +1511,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       taxId: form.taxId.trim() || undefined,
       bankAccount: form.bankAccount.trim() || undefined,
       bankBranch: form.bankBranch.trim() || undefined,
-      bankAccountName: form.bankAccountName.trim() || undefined
+      bankAccountName: form.bankAccountName.trim() || undefined,
+      staffId: this.currentStaffId()
     };
   }
 

@@ -1635,7 +1635,7 @@
         <div class="panel-header">
           <div>
             <h2>分館管理</h2>
-            <p>主管可新增或修改分館；其他角色僅能查詢所屬分館。</p>
+            <p>所有角色皆可查看全部分館；僅主管可新增分館，其他角色僅能修改所屬分館。</p>
           </div>
           <button type="button" *ngIf="canManageBranch() && !creatingBranch()" (click)="startCreateBranch()">新增分館</button>
         </div>
@@ -1755,7 +1755,7 @@
               <button
                 type="button"
                 class="ghost compact-button"
-                *ngIf="canManageBranch()"
+                *ngIf="canEditBranch(row)"
                 (click)="$event.stopPropagation(); startEditBranch(row)"
               >
                 修改
