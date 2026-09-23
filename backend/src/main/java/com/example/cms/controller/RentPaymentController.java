@@ -1,7 +1,10 @@
 package com.example.cms.controller;
 
 import com.example.cms.dto.RentPaymentRequest;
+import com.example.cms.dto.RentPaymentImportRequest;
+import com.example.cms.service.RentPaymentImportService;
 import com.example.cms.service.RentPaymentService;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -10,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
@@ -17,9 +21,11 @@ import java.util.Map;
 @RequestMapping("/api/rent-payments")
 public class RentPaymentController {
     private final RentPaymentService service;
+    private final RentPaymentImportService importService;
 
-    public RentPaymentController(RentPaymentService service) {
+    public RentPaymentController(RentPaymentService service, RentPaymentImportService importService) {
         this.service = service;
+        this.importService = importService;
     }
 
     @GetMapping
@@ -36,6 +42,16 @@ public class RentPaymentController {
     @PostMapping
     public Map<String, Object> createRentPayment(@RequestBody RentPaymentRequest request) {
         return service.createRentPayment(request);
+    }
+
+    @PostMapping(value = "/import-preview", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public Map<String, Object> previewRentPaymentImport(@RequestParam("file") MultipartFile file) {
+        return importService.preview(file);
+    }
+
+    @PostMapping("/import")
+    public Map<String, Object> importRentPayments(@RequestBody RentPaymentImportRequest request) {
+        return importService.importRows(request);
     }
 
     @PutMapping("/{id}")

@@ -38,9 +38,47 @@ CREATE TABLE IF NOT EXISTS staff (
   branch_id BIGINT DEFAULT 1,
   staff_name VARCHAR(80) NOT NULL,
   account VARCHAR(80) NOT NULL,
+  email VARCHAR(254),
+  email_verified_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  account_approved_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  account_approved_by BIGINT,
   password_hash VARCHAR(255),
   CONSTRAINT fk_staff_role FOREIGN KEY (role_permission_id) REFERENCES role_permissions(role_permission_id),
-  CONSTRAINT fk_staff_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id)
+  CONSTRAINT fk_staff_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id),
+  CONSTRAINT fk_staff_approved_by FOREIGN KEY (account_approved_by) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+  password_reset_token_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  staff_id BIGINT NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  used_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_password_reset_tokens_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+  email_verification_token_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  staff_id BIGINT NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  expires_at TIMESTAMP NOT NULL,
+  used_at TIMESTAMP,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_email_verification_tokens_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id)
+);
+
+CREATE TABLE IF NOT EXISTS staff_profile_change_requests (
+  staff_profile_change_request_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  staff_id BIGINT NOT NULL,
+  requested_staff_name VARCHAR(80) NOT NULL,
+  requested_email VARCHAR(254) NOT NULL,
+  status VARCHAR(20) NOT NULL DEFAULT 'PENDING',
+  requested_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  reviewed_at TIMESTAMP,
+  reviewed_by BIGINT,
+  CONSTRAINT fk_profile_change_requests_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id),
+  CONSTRAINT fk_profile_change_requests_reviewer FOREIGN KEY (reviewed_by) REFERENCES staff(staff_id)
 );
 
 CREATE TABLE IF NOT EXISTS customers (

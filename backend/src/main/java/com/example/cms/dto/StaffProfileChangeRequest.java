@@ -1,9 +1,8 @@
 package com.example.cms.dto;
 
-public record RegisterRequest(
+public record StaffProfileChangeRequest(
+        Long requestedByStaffId,
         String staffName,
-        String account,
-        String password,
         String email
 ) {
 }
