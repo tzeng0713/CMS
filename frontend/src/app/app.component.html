@@ -2712,8 +2712,11 @@
                 step="0.01"
                 name="editRefundDeductionTotal"
                 [(ngModel)]="refundEditForm.deductionTotal"
-                [readonly]="editing.refund_status === '審核通過'"
+                [readonly]="editing.refund_status === '審核通過' || refundEditForm.chargeListId !== null"
               />
+              <span class="hint" *ngIf="editing.refund_status !== '審核通過' && refundEditForm.chargeListId !== null">
+                已由收費清單帶入，金額唯讀
+              </span>
             </label>
             <p class="hint" *ngIf="editing.contract_end_date_text">
               租約到期日參考：{{ editing.contract_end_date_text }}（供核對是否為中途解約）
@@ -2777,8 +2780,14 @@
               />
             </label>
             <label *ngIf="editing.refund_status === '審核通過'">
-              退款日期
-              <input type="date" name="editRefundedAt" [(ngModel)]="refundEditForm.refundedAt" />
+              <span>退款日期<span class="required-mark">*</span></span>
+              <input
+                type="date"
+                name="editRefundedAt"
+                [(ngModel)]="refundEditForm.refundedAt"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['refundedAt']"
+              />
             </label>
             <label>
               目前狀態（系統維護，不可修改）
@@ -2885,7 +2894,15 @@
           </label>
           <label>
             扣款總額
-            <input type="number" min="0" step="0.01" name="newRefundDeductionTotal" [(ngModel)]="newRefundForm.deductionTotal" />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              name="newRefundDeductionTotal"
+              [(ngModel)]="newRefundForm.deductionTotal"
+              [readonly]="newRefundForm.chargeListId !== null"
+            />
+            <span class="hint" *ngIf="newRefundForm.chargeListId !== null">已由收費清單帶入，金額唯讀</span>
           </label>
           <label class="checkbox-label">
             <input type="checkbox" name="newRefundMidTermTermination" [(ngModel)]="newRefundForm.midTermTermination" />

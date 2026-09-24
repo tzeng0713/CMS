@@ -3875,13 +3875,14 @@ export class AppComponent implements OnInit, AfterViewInit {
     });
   }
 
-  private requiredRefundFieldErrors(form: RefundForm): Record<string, boolean> {
+  private requiredRefundFieldErrors(form: RefundForm, requireRefundedAt = false): Record<string, boolean> {
     const errors: Record<string, boolean> = {};
     if (!form.refundReason.trim()) errors['refundReason'] = true;
     if (!form.paymentMethod.trim()) errors['paymentMethod'] = true;
     if (!form.bankCode.trim()) errors['bankCode'] = true;
     if (!form.bankAccount.trim()) errors['bankAccount'] = true;
     if (!form.bankAccountName.trim()) errors['bankAccountName'] = true;
+    if (requireRefundedAt && !form.refundedAt.trim()) errors['refundedAt'] = true;
     return errors;
   }
 
@@ -4111,13 +4112,18 @@ export class AppComponent implements OnInit, AfterViewInit {
     if (!row) {
       return;
     }
-    const editRefundMissingFields = this.requiredRefundFieldErrors(this.refundEditForm);
+    const editRefundMissingFields = this.requiredRefundFieldErrors(
+      this.refundEditForm,
+      row.refund_status === '審核通過'
+    );
     this.refundEditFieldErrors.set(editRefundMissingFields);
     if (Object.keys(editRefundMissingFields).length) {
       this.error.set(
         editRefundMissingFields['refundReason']
           ? '請填寫退款原因。'
-          : '請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。'
+          : editRefundMissingFields['refundedAt']
+            ? '請填寫退款日期。'
+            : '請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。'
       );
       return;
     }

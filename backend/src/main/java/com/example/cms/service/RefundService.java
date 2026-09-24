@@ -145,6 +145,7 @@ public class RefundService extends CmsJdbcSupport {
             if (!"已退款".equals(blankToNull(request.refundStatus()))) {
                 throw new IllegalArgumentException("審核通過的退款單僅能辦理退款，不可修改金額");
             }
+            requireNonBlank(request.refundedAt(), "refundedAt");
             jdbc.update("""
                     UPDATE refunds
                     SET refund_status = '已退款',
