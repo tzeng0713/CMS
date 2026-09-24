@@ -383,7 +383,6 @@ export interface RefundSummary {
   matched_company_name: string | null;
   tax_id: string | null;
   contract_deposit: number | null;
-  contract_rent: number | null;
   contract_end_date_text: string | null;
   refund_reason: string | null;
   adjustment_amount: number;

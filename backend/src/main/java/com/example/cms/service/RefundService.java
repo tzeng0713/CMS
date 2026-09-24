@@ -280,7 +280,6 @@ public class RefundService extends CmsJdbcSupport {
         return """
                 SELECT r.*, c.company_name AS matched_company_name, c.tax_id,
                        co.deposit AS contract_deposit,
-                       co.rent AS contract_rent,
                        co.end_date_text AS contract_end_date_text,
                        s1.staff_name AS created_by_name,
                        s2.staff_name AS reviewed_by_name,
@@ -294,20 +293,19 @@ public class RefundService extends CmsJdbcSupport {
                 """;
     }
 
-    private record RefundBase(BigDecimal amount, boolean midTermCapped) {
+    private record RefundBase(BigDecimal amount, boolean midTermApplied) {
     }
 
     /**
-     * 秘書於退款申請勾選「中途解約」時，可退押金上限為一個月租金；
-     * 未勾選（合約到期解約）維持全額押金。
+     * 秘書於退款申請勾選「中途解約」時，押金基準為押金的一半（若合約未收押金，押金為 0，基準也是 0，等於沒有可退的押金）；
+     * 未勾選（合約到期解約）則維持全額押金。月租金額不參與這個判斷。
      */
     private RefundBase refundBaseAmount(Long contractId, boolean midTermTermination) {
-        Map<String, Object> contract = jdbc.queryForMap(
-                "SELECT deposit, rent FROM contracts WHERE contract_id = ?", contractId);
-        BigDecimal deposit = zeroIfNull((BigDecimal) contract.get("deposit"));
-        BigDecimal rent = zeroIfNull((BigDecimal) contract.get("rent"));
-        if (midTermTermination && rent.compareTo(deposit) < 0) {
-            return new RefundBase(rent, true);
+        BigDecimal deposit = zeroIfNull(jdbc.queryForObject(
+                "SELECT deposit FROM contracts WHERE contract_id = ?", BigDecimal.class, contractId));
+        if (midTermTermination) {
+            BigDecimal half = deposit.divide(BigDecimal.valueOf(2), 2, java.math.RoundingMode.HALF_UP);
+            return new RefundBase(half, deposit.compareTo(BigDecimal.ZERO) > 0);
         }
         return new RefundBase(deposit, false);
     }
@@ -319,8 +317,8 @@ public class RefundService extends CmsJdbcSupport {
     }
 
     private String refundMessage(RefundBase refundBase) {
-        if (refundBase.midTermCapped()) {
-            return "中途解約，退款金額已依規定以一個月租金（NT$" + refundBase.amount() + "）為押金退還上限。";
+        if (refundBase.midTermApplied()) {
+            return "中途解約，退款金額已依規定以押金的一半（NT$" + refundBase.amount() + "）為基準計算。";
         }
         return null;
     }

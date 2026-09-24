@@ -2725,7 +2725,7 @@
                 [(ngModel)]="refundEditForm.midTermTermination"
                 [disabled]="editing.refund_status === '審核通過'"
               />
-              中途解約（可退押金上限為一個月租金；未勾選視為合約到期解約）
+              中途解約（可退押金為押金的一半；未勾選視為合約到期解約，全額退還押金）
             </label>
             <label>
               <span>退款方式<span class="required-mark">*</span></span>
@@ -2889,7 +2889,7 @@
           </label>
           <label class="checkbox-label">
             <input type="checkbox" name="newRefundMidTermTermination" [(ngModel)]="newRefundForm.midTermTermination" />
-            中途解約（可退押金上限為一個月租金；未勾選視為合約到期解約）
+            中途解約（可退押金為押金的一半；未勾選視為合約到期解約，全額退還押金）
           </label>
           <label>
             <span>退款方式<span class="required-mark">*</span></span>

@@ -3927,15 +3927,15 @@ export class AppComponent implements OnInit, AfterViewInit {
   /**
    * 與後端 RefundService.refundBaseAmount()/requireNotOverDeducted() 相同的算法，
    * 讓前端能在送出前（跳出確認視窗前）就提前算出是否會超額扣款，不用等 API 回傳才知道。
+   * 中途解約的押金基準是押金的一半（沒收押金則為 0），月租金額不參與這個判斷。
    */
   private computeRefundAmount(
     deposit: number,
-    rent: number | null,
     midTermTermination: boolean,
     adjustmentAmount: number,
     deductionTotal: number
   ): number {
-    const base = midTermTermination && rent !== null && rent < deposit ? rent : deposit;
+    const base = midTermTermination ? deposit / 2 : deposit;
     return base + (adjustmentAmount || 0) - (deductionTotal || 0);
   }
 
@@ -3948,8 +3948,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       return null;
     }
     const deposit = Number(contract['deposit'] ?? 0);
-    const rent = contract['rent'] === null || contract['rent'] === undefined ? null : Number(contract['rent']);
-    const computed = this.computeRefundAmount(deposit, rent, form.midTermTermination, form.adjustmentAmount, form.deductionTotal);
+    const computed = this.computeRefundAmount(deposit, form.midTermTermination, form.adjustmentAmount, form.deductionTotal);
     if (computed >= 0) {
       return null;
     }
@@ -3969,7 +3968,6 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
     const computed = this.computeRefundAmount(
       Number(row.contract_deposit),
-      row.contract_rent === null || row.contract_rent === undefined ? null : Number(row.contract_rent),
       form.midTermTermination,
       form.adjustmentAmount,
       form.deductionTotal
