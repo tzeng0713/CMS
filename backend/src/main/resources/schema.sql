@@ -108,6 +108,7 @@ CREATE TABLE IF NOT EXISTS customers (
 
 CREATE TABLE IF NOT EXISTS customer_relation_groups (
   relation_group_id BIGINT PRIMARY KEY,
+  group_note VARCHAR(1000),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

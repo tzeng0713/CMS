@@ -663,10 +663,30 @@
               代辦
             </label>
             <label class="wide">
-              備註
+                  客戶備註
               <textarea name="editNotes" rows="3" [(ngModel)]="customerEditForm.notes"></textarea>
+              <small>僅套用於 {{ c.company_name }}；若要更新所有關聯公司的共用內容，請修改下方集團備註。</small>
             </label>
               </div>
+            </section>
+            <section class="customer-form-section relation-group-edit-section" *ngIf="c.relationGroup as group">
+              <div class="customer-section-heading relation-group-heading">
+                <div>
+                  <h3>關聯集團</h3>
+                  <span>目前共有 {{ group.member_count }} 間成員；集團備註會同步顯示於所有成員。</span>
+                </div>
+                <span class="relation-group-status is-linked">共用資料</span>
+              </div>
+              <div class="relation-group-member-list" aria-label="關聯集團成員">
+                <span *ngFor="let member of group.members" [class.current]="member.customer_id === c.customer_id">
+                  {{ member.company_name }}<small *ngIf="member.customer_id === c.customer_id">目前公司</small>
+                </span>
+              </div>
+              <label class="wide relation-note-field">
+                集團備註
+                <textarea name="editRelationGroupNote" rows="3" [(ngModel)]="customerEditForm.relationGroupNote" placeholder="請輸入所有關聯公司共用的備註"></textarea>
+                <small>儲存前會再次確認；確認後將同步更新 {{ group.member_count }} 間成員。</small>
+              </label>
             </section>
             <footer class="customer-detail-actions">
               <button type="submit" [disabled]="saving()">儲存修改</button>
@@ -705,8 +725,18 @@
             </div>
           </ng-template>
 
-        <section class="panel" *ngIf="relatedCompanies().length">
-          <h3>相關公司</h3>
+        <section class="panel relation-group-detail" *ngIf="c.relationGroup as group">
+          <div class="panel-header">
+            <div>
+              <h3>關聯集團</h3>
+              <p>共 {{ group.member_count }} 間成員；集團備註與成員名單會同步連動。</p>
+            </div>
+            <span class="relation-group-status is-linked">共用資料</span>
+          </div>
+          <div class="relation-group-note-display">
+            <span>集團備註</span>
+            <p>{{ group.group_note || '尚未填寫集團備註' }}</p>
+          </div>
           <ul class="same-owner related-company-list">
             <li *ngFor="let company of relatedCompanies()">
               <button
@@ -822,6 +852,7 @@
                       name="newCompanyName"
                       [(ngModel)]="newCustomerForm.companyName"
                       (ngModelChange)="lookupNewCustomerSuggestions(); clearNewCustomerFieldError('companyName')"
+                      (blur)="detectPendingRelationForNewCustomer()"
                       placeholder="請輸入公司名稱"
                       [class.field-invalid]="newCustomerFieldErrors()['companyName']"
                       [attr.aria-invalid]="newCustomerFieldErrors()['companyName'] ? 'true' : null"
@@ -889,27 +920,83 @@
                   代辦
                 </label>
                 <label class="wide">
-                  備註
+                  客戶備註
                   <textarea name="newNotes" rows="3" [(ngModel)]="newCustomerForm.notes" placeholder="請輸入備註"></textarea>
+                  <small>僅套用於此公司；關聯集團共用資訊請填寫下方的集團備註。</small>
                 </label>
               </div>
             </section>
 
             <section class="customer-form-section related-company-section">
-              <div class="customer-section-heading">
-                <h3>相關公司</h3>
-                <span>若有關聯公司，請逐筆新增。</span>
-              </div>
-              <div class="related-company-fields">
-                <div class="repeatable-field" *ngFor="let relatedName of newCustomerForm.relatedCompanyNames; let i = index; trackBy: trackByIndex">
-                  <input
-                    [name]="'newRelatedCompany' + i"
-                    [(ngModel)]="newCustomerForm.relatedCompanyNames[i]"
-                    placeholder="輸入相關公司名稱"
-                  />
-                  <button type="button" class="icon-button remove" title="移除相關公司" aria-label="移除相關公司" (click)="removeRelatedCompany(i)">×</button>
+              <div class="customer-section-heading relation-group-heading">
+                <div>
+                  <h3>關聯集團</h3>
+                  <span>集團備註與成員會由同一筆資料共用，避免逐家公司重複維護。</span>
                 </div>
-                <button type="button" class="add-related-company" (click)="addRelatedCompany()">新增相關公司</button>
+                <span class="relation-group-status" [class.is-linked]="newCustomerForm.relationMode === 'join'">
+                  {{ newCustomerForm.relationMode === 'join' ? '已加入集團' : newCustomerForm.relationMode === 'create' ? '建立新集團' : '未設定' }}
+                </span>
+              </div>
+
+              <div class="relation-mode-selector" role="group" aria-label="關聯集團設定方式">
+                <button type="button" class="relation-mode-button" [class.active]="newCustomerForm.relationMode === 'none'" [attr.aria-pressed]="newCustomerForm.relationMode === 'none'" (click)="setNewCustomerRelationMode('none')">
+                  <strong>暫不設定</strong><span>此公司不加入關聯集團</span>
+                </button>
+                <button type="button" class="relation-mode-button" [class.active]="newCustomerForm.relationMode === 'create'" [attr.aria-pressed]="newCustomerForm.relationMode === 'create'" (click)="setNewCustomerRelationMode('create')">
+                  <strong>建立新集團</strong><span>先登錄待建立的關聯公司</span>
+                </button>
+                <button type="button" class="relation-mode-button" [class.active]="newCustomerForm.relationMode === 'join'" [attr.aria-pressed]="newCustomerForm.relationMode === 'join'" (click)="setNewCustomerRelationMode('join')">
+                  <strong>加入既有集團</strong><span>搜尋 A、B 或 C 公司加入</span>
+                </button>
+              </div>
+
+              <p class="relation-group-empty" *ngIf="newCustomerForm.relationMode === 'none'">日後若有新公司加入，可在新增該公司時選擇任一既有成員加入集團。</p>
+
+              <div class="relation-group-editor" *ngIf="newCustomerForm.relationMode === 'create'">
+                <p class="relation-group-helper">輸入預計建立的關聯公司。之後建立同名客戶時，系統會提示加入此集團。</p>
+                <div class="related-company-fields">
+                  <div class="repeatable-field" *ngFor="let relatedName of newCustomerForm.relatedCompanyNames; let i = index; trackBy: trackByIndex">
+                    <input
+                      [name]="'newRelatedCompany' + i"
+                      [(ngModel)]="newCustomerForm.relatedCompanyNames[i]"
+                      placeholder="輸入相關公司名稱"
+                    />
+                    <button type="button" class="icon-button remove" title="移除相關公司" aria-label="移除相關公司" (click)="removeRelatedCompany(i)">×</button>
+                  </div>
+                  <button type="button" class="add-related-company" (click)="addRelatedCompany()">新增相關公司</button>
+                </div>
+                <label class="relation-note-field">
+                  集團備註
+                  <textarea name="newRelationGroupNote" rows="3" [(ngModel)]="newCustomerForm.relationGroupNote" placeholder="例如：XXX；此內容將由所有關聯公司共用"></textarea>
+                  <small>建立後可由任一集團成員的「集團備註」更新，所有成員會同步顯示。</small>
+                </label>
+              </div>
+
+              <div class="relation-group-editor" *ngIf="newCustomerForm.relationMode === 'join'">
+                <label class="relation-search-field">
+                  搜尋既有集團
+                  <input name="relationGroupSearch" [(ngModel)]="relationGroupSearch" (input)="lookupRelationGroups()" placeholder="輸入任一成員名稱，例如 A 公司" autocomplete="off" />
+                  <small>請主動選擇既有成員；系統不會依統編推論關聯性。</small>
+                </label>
+                <div class="relation-group-option-list" *ngIf="relationGroupOptions().length">
+                  <button type="button" *ngFor="let group of relationGroupOptions()" (click)="selectRelationGroup(group)">
+                    <strong>{{ relationGroupLabel(group) }}</strong>
+                    <span>{{ group.member_count }} 間成員 · {{ group.group_note || '尚未填寫集團備註' }}</span>
+                  </button>
+                </div>
+                <div class="relation-group-option-list pending" *ngIf="pendingRelationGroupOptions().length > 1">
+                  <p>找到多個待建立的關聯集團，請選擇正確的一個：</p>
+                  <button type="button" *ngFor="let group of pendingRelationGroupOptions()" (click)="selectRelationGroup(group)">
+                    <strong>{{ relationGroupLabel(group) }}</strong>
+                    <span>{{ group.member_count }} 間成員</span>
+                  </button>
+                </div>
+                <article class="relation-group-preview" *ngIf="selectedNewCustomerRelationGroup() as group">
+                  <div><span>已選擇關聯集團</span><strong>{{ relationGroupLabel(group) }}</strong></div>
+                  <div><span>集團備註</span><p>{{ group.group_note || '尚未填寫集團備註' }}</p></div>
+                  <div class="relation-member-chips"><span *ngFor="let member of group.members">{{ member.company_name }}</span></div>
+                  <small>集團備註為共用資料，建立此客戶後將以唯讀方式顯示。</small>
+                </article>
               </div>
             </section>
           </section>

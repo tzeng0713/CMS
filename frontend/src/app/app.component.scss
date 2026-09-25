@@ -1577,6 +1577,8 @@ input:disabled {
 .related-company-section {
   display: grid;
   gap: 16px;
+  border-color: #dfceb0;
+  background: linear-gradient(135deg, #fffdf8 0%, #f8f5ed 100%);
 }
 
 .customer-section-heading {
@@ -1592,6 +1594,243 @@ input:disabled {
 .customer-section-heading span {
   color: #817b73;
   font-size: 13px;
+}
+
+.relation-group-heading {
+  align-items: flex-start;
+  justify-content: space-between;
+}
+
+.relation-group-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.relation-group-status {
+  flex: 0 0 auto;
+  padding: 5px 10px;
+  border: 1px solid #ded7cc;
+  border-radius: 999px;
+  background: #fffdfa;
+  color: #716c65 !important;
+  font-size: 12px !important;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.relation-group-status.is-linked {
+  border-color: #c9dfcf;
+  background: #eef8f0;
+  color: #367453 !important;
+}
+
+.relation-mode-selector {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.relation-mode-button {
+  min-height: 86px;
+  padding: 14px;
+  border: 1px solid #dfd9ce;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--brand-ink);
+  text-align: left;
+  transition: border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.relation-mode-button strong,
+.relation-mode-button span {
+  display: block;
+}
+
+.relation-mode-button strong {
+  margin-bottom: 5px;
+  font-size: 14px;
+}
+
+.relation-mode-button span {
+  color: #756f65;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.relation-mode-button:hover:not(:disabled),
+.relation-mode-button:focus-visible,
+.relation-mode-button.active {
+  border-color: var(--brand-gold);
+  background: #fffaf0;
+  box-shadow: 0 0 0 3px rgba(169, 130, 55, 0.12);
+}
+
+.relation-mode-button.active strong {
+  color: var(--brand-gold-strong);
+}
+
+.relation-group-empty,
+.relation-group-helper {
+  margin: 0;
+  color: #716c65;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.relation-group-editor {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  border: 1px solid #e6ddcc;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.relation-note-field,
+.relation-search-field {
+  display: grid;
+  gap: 6px;
+  color: #47413a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.relation-note-field small,
+.relation-search-field small,
+.relation-group-preview small {
+  color: #756f65;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.relation-group-option-list {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid #ded7cc;
+  border-radius: 9px;
+  background: #fff;
+}
+
+.relation-group-option-list.pending {
+  gap: 8px;
+  padding: 12px;
+  border-color: #ebd7a5;
+  background: #fffaf0;
+}
+
+.relation-group-option-list.pending p {
+  margin: 0;
+  color: #6e5622;
+  font-size: 13px;
+}
+
+.relation-group-option-list button {
+  display: grid;
+  gap: 3px;
+  min-height: 52px;
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid #eee8de;
+  border-radius: 0;
+  background: #fff;
+  color: var(--brand-ink);
+  text-align: left;
+}
+
+.relation-group-option-list button:last-child {
+  border-bottom: 0;
+}
+
+.relation-group-option-list button:hover,
+.relation-group-option-list button:focus-visible {
+  background: #fff9ea;
+}
+
+.relation-group-option-list button strong {
+  font-size: 13px;
+}
+
+.relation-group-option-list button span {
+  color: #756f65;
+  font-size: 12px;
+}
+
+.relation-group-preview,
+.relation-group-note-display {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid #c9dfcf;
+  border-radius: 10px;
+  background: #f4fbf5;
+}
+
+.relation-group-preview > div,
+.relation-group-note-display {
+  display: grid;
+  gap: 4px;
+}
+
+.relation-group-preview span,
+.relation-group-note-display > span {
+  color: #637064;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.relation-group-preview p,
+.relation-group-note-display p {
+  margin: 0;
+  color: #354536;
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.relation-member-chips,
+.relation-group-member-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.relation-member-chips span,
+.relation-group-member-list > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 1px solid #cee0d1;
+  border-radius: 999px;
+  background: #fff;
+  color: #3d6146;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.relation-group-member-list > span.current {
+  border-color: #d9bc77;
+  background: #fff9ea;
+  color: #765b1e;
+}
+
+.relation-group-member-list small {
+  color: inherit;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.relation-group-edit-section {
+  display: grid;
+  gap: 16px;
+  border-color: #c9dfcf;
+  background: #f8fcf8;
+}
+
+.relation-group-detail {
+  display: grid;
+  gap: 16px;
 }
 
 .related-company-section .related-company-fields {
@@ -4580,6 +4819,19 @@ $charge-list-slate: #6b6f76;
 }
 
 @media (max-width: 720px) {
+  .relation-mode-selector {
+    grid-template-columns: 1fr;
+  }
+
+  .relation-group-heading {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .relation-group-status {
+    align-self: flex-start;
+  }
+
   .toast-container {
     right: 16px;
     bottom: max(16px, env(safe-area-inset-bottom));

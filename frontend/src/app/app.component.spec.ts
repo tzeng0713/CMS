@@ -34,6 +34,26 @@ describe('new customer flow', () => {
     expect(component.newCustomerForm.companyName).toBe('測試客戶有限公司');
   });
 
+  it('joins a selected relation group and uses its shared note', () => {
+    const group = {
+      relation_group_id: 48,
+      group_note: '集團共用 XXX',
+      member_count: 3,
+      members: [
+        { relation_member_id: 1, customer_id: 10, company_name: 'A 公司', is_resolved: true },
+        { relation_member_id: 2, customer_id: null, company_name: 'B 公司', is_resolved: false },
+        { relation_member_id: 3, customer_id: null, company_name: 'C 公司', is_resolved: false }
+      ]
+    };
+
+    component.selectRelationGroup(group);
+
+    expect(component.newCustomerForm.relationMode).toBe('join');
+    expect(component.newCustomerForm.relationGroupId).toBe(48);
+    expect(component.newCustomerForm.relationGroupNote).toBe('集團共用 XXX');
+    expect(component.newCustomerForm.relatedCompanyNames).toEqual([]);
+  });
+
   it('opens the password recovery form from login', () => {
     component.openForgotPassword();
 

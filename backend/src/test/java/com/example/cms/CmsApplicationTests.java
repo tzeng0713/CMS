@@ -392,6 +392,86 @@ class CmsApplicationTests {
     }
 
     @Test
+    void relationGroupSharesNotesAcrossPendingAndNewMembers() throws Exception {
+        MvcResult alphaResult = mvc.perform(post("/api/customers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "Shared Group Alpha Co",
+                                  "relatedCompanyNames": ["Shared Group Beta Co", "Shared Group Gamma Co"],
+                                  "relationGroupNote": "集團共用 XXX",
+                                  "updatedBy": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relationGroup.group_note", is("集團共用 XXX")))
+                .andExpect(jsonPath("$.relationGroup.members[*].company_name",
+                        hasItems("Shared Group Alpha Co", "Shared Group Beta Co", "Shared Group Gamma Co")))
+                .andReturn();
+        long alphaId = objectMapper.readTree(alphaResult.getResponse().getContentAsString())
+                .get("customer_id").asLong();
+        long groupId = objectMapper.readTree(alphaResult.getResponse().getContentAsString())
+                .path("relationGroup").path("relation_group_id").asLong();
+
+        mvc.perform(get("/api/customers/relation-groups/pending-match")
+                        .param("companyName", "Shared Group Beta Co"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].relation_group_id", is((int) groupId)))
+                .andExpect(jsonPath("$[0].group_note", is("集團共用 XXX")));
+
+        MvcResult betaResult = mvc.perform(post("/api/customers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "Shared Group Beta Co",
+                                  "relationGroupId": %d,
+                                  "relationGroupNote": "集團共用 XXX",
+                                  "updatedBy": 1
+                                }
+                                """.formatted(groupId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relationGroup.group_note", is("集團共用 XXX")))
+                .andExpect(jsonPath("$.relatedCompanies[*].company_name",
+                        hasItems("Shared Group Alpha Co", "Shared Group Gamma Co")))
+                .andReturn();
+        long betaId = objectMapper.readTree(betaResult.getResponse().getContentAsString())
+                .get("customer_id").asLong();
+
+        mvc.perform(post("/api/customers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "Shared Group Delta Co",
+                                  "relationGroupId": %d,
+                                  "relationGroupNote": "集團共用 XXX",
+                                  "updatedBy": 1
+                                }
+                                """.formatted(groupId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relatedCompanies[*].company_name",
+                        hasItems("Shared Group Alpha Co", "Shared Group Beta Co", "Shared Group Gamma Co")));
+
+        mvc.perform(put("/api/customers/{id}", betaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "Shared Group Beta Co",
+                                  "relationGroupId": %d,
+                                  "relationGroupNote": "已更新的集團備註",
+                                  "updatedBy": 1
+                                }
+                                """.formatted(groupId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relationGroup.group_note", is("已更新的集團備註")));
+
+        mvc.perform(get("/api/customers/{id}", alphaId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relationGroup.group_note", is("已更新的集團備註")))
+                .andExpect(jsonPath("$.relatedCompanies[*].company_name",
+                        hasItems("Shared Group Beta Co", "Shared Group Gamma Co", "Shared Group Delta Co")));
+    }
+
+    @Test
     void contractRenewalStoresTheCurrentPaymentAmountAndDate() throws Exception {
         MvcResult created = mvc.perform(post("/api/contracts/with-first-payment")
                         .contentType(MediaType.APPLICATION_JSON)

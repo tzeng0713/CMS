@@ -21,6 +21,7 @@ import {
   ContractSearchFilters,
   CustomerDetail,
   CustomerPayload,
+  CustomerRelationGroup,
   CustomerSearchFilters,
   CustomerSummary,
   Dashboard,
@@ -130,6 +131,8 @@ interface NavGroup {
   children: NavItem[];
 }
 
+type RelationMode = 'none' | 'create' | 'join';
+
 type CustomerForm = {
   companyName: string;
   taxId: string;
@@ -149,6 +152,9 @@ type CustomerForm = {
   relatedCompanyNames: string[];
   notes: string;
   registrationType: string;
+  relationMode: RelationMode;
+  relationGroupId: number | null;
+  relationGroupNote: string;
   updatedBy: number;
 };
 
@@ -278,9 +284,12 @@ const emptyCustomerForm = (): CustomerForm => ({
   accountantInfo: '',
   accountInfo: '',
   isAgent: false,
-  relatedCompanyNames: [''],
+  relatedCompanyNames: [],
   notes: '',
   registrationType: '登記',
+  relationMode: 'none',
+  relationGroupId: null,
+  relationGroupNote: '',
   updatedBy: 1
 });
 
@@ -621,6 +630,9 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.bonusRuleRows().filter((rule) => rule.is_active && MANUAL_ONLY_RULE_TYPES.has(rule.rule_type))
   );
   newCustomerOptions = signal<CustomerSummary[]>([]);
+  relationGroupOptions = signal<CustomerRelationGroup[]>([]);
+  pendingRelationGroupOptions = signal<CustomerRelationGroup[]>([]);
+  selectedNewCustomerRelationGroup = signal<CustomerRelationGroup | null>(null);
   rentCustomerOptions = signal<CustomerSummary[]>([]);
   contractCustomerOptions = signal<CustomerSummary[]>([]);
   selectedRentCustomer = signal<CustomerDetail | null>(null);
@@ -738,6 +750,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   newCustomerLeaseImage: File | null = null;
   newCustomerFirstPaymentAmount: number | null = null;
   newCustomerFirstPaymentDateText = '';
+  relationGroupSearch = '';
   customerNewStep = signal<1 | 2>(1);
   customerEditForm: CustomerForm = emptyCustomerForm();
   newContractForm: ContractForm = emptyContractForm();
@@ -1817,6 +1830,12 @@ export class AppComponent implements OnInit, AfterViewInit {
     if (!customer) {
       return;
     }
+    const previousGroupNote = customer.relationGroup?.group_note ?? '';
+    if (customer.relationGroup
+      && previousGroupNote !== this.customerEditForm.relationGroupNote
+      && !window.confirm(`這會更新 ${customer.relationGroup.member_count} 間關聯公司的集團備註，確定要儲存嗎？`)) {
+      return;
+    }
     this.saveCustomer(customer.customer_id, this.customerEditForm, '客戶資料已更新。');
   }
 
@@ -1838,11 +1857,87 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.clearNewCustomerFieldError('companyName');
   }
 
+  detectPendingRelationForNewCustomer(): void {
+    const companyName = this.newCustomerForm.companyName.trim();
+    if (!companyName || this.newCustomerForm.relationMode !== 'none') {
+      return;
+    }
+    this.api.pendingRelationGroupMatches(companyName).subscribe({
+      next: (groups) => {
+        if (companyName !== this.newCustomerForm.companyName.trim()) {
+          return;
+        }
+        this.pendingRelationGroupOptions.set(groups);
+        if (groups.length === 1) {
+          this.selectRelationGroup(groups[0], true);
+        }
+      },
+      error: () => this.pendingRelationGroupOptions.set([])
+    });
+  }
+
+  setNewCustomerRelationMode(mode: RelationMode): void {
+    this.newCustomerForm.relationMode = mode;
+    this.pendingRelationGroupOptions.set([]);
+    this.relationGroupOptions.set([]);
+    this.relationGroupSearch = '';
+    if (mode === 'none') {
+      this.newCustomerForm.relationGroupId = null;
+      this.newCustomerForm.relationGroupNote = '';
+      this.newCustomerForm.relatedCompanyNames = [];
+      this.selectedNewCustomerRelationGroup.set(null);
+      return;
+    }
+    if (mode === 'create') {
+      this.newCustomerForm.relationGroupId = null;
+      this.newCustomerForm.relationGroupNote = '';
+      this.newCustomerForm.relatedCompanyNames = this.newCustomerForm.relatedCompanyNames.length
+        ? this.newCustomerForm.relatedCompanyNames
+        : [''];
+      this.selectedNewCustomerRelationGroup.set(null);
+      return;
+    }
+    this.newCustomerForm.relatedCompanyNames = [];
+  }
+
+  lookupRelationGroups(): void {
+    const search = this.relationGroupSearch.trim();
+    if (!search) {
+      this.relationGroupOptions.set([]);
+      return;
+    }
+    this.api.relationGroupLookup(search).subscribe({
+      next: (groups) => this.relationGroupOptions.set(groups),
+      error: () => this.error.set('無法查詢關聯集團。')
+    });
+  }
+
+  selectRelationGroup(group: CustomerRelationGroup, detected = false): void {
+    this.newCustomerForm.relationMode = 'join';
+    this.newCustomerForm.relationGroupId = group.relation_group_id;
+    this.newCustomerForm.relationGroupNote = group.group_note ?? '';
+    this.newCustomerForm.relatedCompanyNames = [];
+    this.relationGroupSearch = '';
+    this.relationGroupOptions.set([]);
+    this.pendingRelationGroupOptions.set([]);
+    this.selectedNewCustomerRelationGroup.set(group);
+    if (detected) {
+      this.showToast('已找到待建立的關聯集團，集團備註將自動共用。');
+    }
+  }
+
+  relationGroupLabel(group: CustomerRelationGroup): string {
+    return group.members.map((member) => member.company_name).join('、');
+  }
+
   addRelatedCompany(): void {
     this.newCustomerForm.relatedCompanyNames.push('');
   }
 
   removeRelatedCompany(index: number): void {
+    if (!this.newCustomerForm.relatedCompanyNames.length) {
+      return;
+    }
     if (this.newCustomerForm.relatedCompanyNames.length === 1) {
       this.newCustomerForm.relatedCompanyNames[0] = '';
       return;
@@ -1860,6 +1955,15 @@ export class AppComponent implements OnInit, AfterViewInit {
       return;
     }
     this.clearNewCustomerFieldError('companyName');
+    if (this.newCustomerForm.relationMode === 'create'
+      && !this.newCustomerForm.relatedCompanyNames.some((name) => name.trim())) {
+      this.error.set('建立關聯集團時，請至少填寫一間相關公司。');
+      return;
+    }
+    if (this.newCustomerForm.relationMode === 'join' && !this.newCustomerForm.relationGroupId) {
+      this.error.set('請先選擇要加入的關聯集團。');
+      return;
+    }
     if (!this.validContractStaff(this.newCustomerContractForm)) {
       return;
     }
@@ -4234,6 +4338,9 @@ export class AppComponent implements OnInit, AfterViewInit {
       relatedCompanyNames: [''],
       notes: customer.notes ?? '',
       registrationType: customer.registration_type ?? rentalItem,
+      relationMode: customer.relationGroup ? 'join' : 'none',
+      relationGroupId: customer.relationGroup?.relation_group_id ?? null,
+      relationGroupNote: customer.relationGroup?.group_note ?? '',
       updatedBy: this.currentStaffId()
     };
   }
@@ -4259,6 +4366,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       relatedCompanyNames: form.relatedCompanyNames.map((name) => name.trim()).filter(Boolean),
       notes: form.notes,
       registrationType: form.rentalItem || form.registrationType,
+      relationGroupId: form.relationGroupId,
+      relationGroupNote: form.relationMode === 'none' ? undefined : form.relationGroupNote,
       updatedBy: form.updatedBy
     };
   }
@@ -4289,6 +4398,8 @@ export class AppComponent implements OnInit, AfterViewInit {
         customer.accountInfo.trim() ||
         customer.isAgent ||
         customer.relatedCompanyNames.some((name) => name.trim()) ||
+        customer.relationMode !== 'none' ||
+        customer.relationGroupNote.trim() ||
         customer.notes.trim() ||
         contract.officeId !== null ||
         contract.rentalItem !== contractDefaults.rentalItem ||
@@ -4321,6 +4432,10 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.newCustomerFirstPaymentAmount = null;
     this.newCustomerFirstPaymentDateText = '';
     this.newCustomerOptions.set([]);
+    this.relationGroupOptions.set([]);
+    this.pendingRelationGroupOptions.set([]);
+    this.selectedNewCustomerRelationGroup.set(null);
+    this.relationGroupSearch = '';
     this.newCustomerFieldErrors.set({});
     this.customerNewStep.set(1);
   }

@@ -120,6 +120,7 @@ public class CustomerService extends CmsJdbcSupport {
                 ORDER BY co.contract_id DESC
                 """, id));
         detail.put("relatedCompanies", relatedCompanies(id));
+        detail.put("relationGroup", relationGroupForCustomer(id));
         detail.put("sameOwnerCompanies", sameOwnerCompanies(ownerName, id));
         detail.put("rentPayments", jdbc.queryForList("""
                 SELECT * FROM rent_payments
@@ -160,6 +161,45 @@ public class CustomerService extends CmsJdbcSupport {
                 """, like, like);
     }
 
+    /**
+     * Finds existing relation groups through any member name. This is an explicit
+     * "join a group" lookup; it never infers a group from a tax ID.
+     */
+    public List<Map<String, Object>> relationGroupLookup(String search) {
+        String searchText = blankToNull(search);
+        if (searchText == null) {
+            return List.of();
+        }
+        List<Long> groupIds = jdbc.queryForList("""
+                SELECT DISTINCT relation_group_id
+                FROM customer_relation_members
+                WHERE LOWER(company_name) LIKE LOWER(?)
+                ORDER BY relation_group_id DESC
+                LIMIT 12
+                """, Long.class, "%" + searchText + "%");
+        return relationGroupSummaries(groupIds);
+    }
+
+    /**
+     * A name may have been entered by a colleague before that company has a
+     * customer record. Return the matching group so the UI can ask the user to
+     * join it and display the shared note as read-only.
+     */
+    public List<Map<String, Object>> pendingRelationGroupMatches(String companyName) {
+        String normalizedName = blankToNull(companyName);
+        if (normalizedName == null) {
+            return List.of();
+        }
+        List<Long> groupIds = jdbc.queryForList("""
+                SELECT DISTINCT relation_group_id
+                FROM customer_relation_members
+                WHERE customer_id IS NULL
+                  AND LOWER(company_name) = LOWER(?)
+                ORDER BY relation_group_id DESC
+                """, Long.class, normalizedName);
+        return relationGroupSummaries(groupIds);
+    }
+
     @Transactional
     public Map<String, Object> createCustomer(CustomerRequest request) {
         Long id = nextId("customers", "customer_id");
@@ -197,7 +237,8 @@ public class CustomerService extends CmsJdbcSupport {
                 normalizeRegistrationType(request.registrationType(), request.rentalItem()),
                 request.updatedBy() == null ? 1L : request.updatedBy());
         linkPendingRelationMember(id, companyName);
-        saveRelatedCompanies(id, companyName, request.relatedCompanyNames());
+        saveRelatedCompanies(id, companyName, request.relatedCompanyNames(),
+                request.relationGroupId(), request.relationGroupNote());
         return customerDetail(id);
     }
 
@@ -250,7 +291,8 @@ public class CustomerService extends CmsJdbcSupport {
                 normalizeRegistrationType(request.registrationType(), request.rentalItem()),
                 request.updatedBy() == null ? 1L : request.updatedBy(),
                 id);
-        saveRelatedCompanies(id, requiredCompanyName(request.companyName()), request.relatedCompanyNames());
+        saveRelatedCompanies(id, requiredCompanyName(request.companyName()), request.relatedCompanyNames(),
+                request.relationGroupId(), request.relationGroupNote());
         return customerDetail(id);
     }
 
@@ -372,12 +414,8 @@ public class CustomerService extends CmsJdbcSupport {
     }
 
     private List<Map<String, Object>> relatedCompanies(long customerId) {
-        List<Long> groups = jdbc.queryForList("""
-                SELECT relation_group_id
-                FROM customer_relation_members
-                WHERE customer_id = ?
-                """, Long.class, customerId);
-        if (groups.isEmpty()) {
+        Long groupId = relationGroupIdForCustomer(customerId);
+        if (groupId == null) {
             return List.of();
         }
         return jdbc.queryForList("""
@@ -387,7 +425,45 @@ public class CustomerService extends CmsJdbcSupport {
                 WHERE relation_group_id = ?
                   AND (customer_id IS NULL OR customer_id <> ?)
                 ORDER BY company_name
-                """, groups.get(0), customerId);
+                """, groupId, customerId);
+    }
+
+    private Map<String, Object> relationGroupForCustomer(long customerId) {
+        Long groupId = relationGroupIdForCustomer(customerId);
+        return groupId == null ? null : relationGroupSummary(groupId);
+    }
+
+    private List<Map<String, Object>> relationGroupSummaries(List<Long> groupIds) {
+        List<Map<String, Object>> groups = new ArrayList<>();
+        for (Long groupId : groupIds) {
+            Map<String, Object> group = relationGroupSummary(groupId);
+            if (group != null) {
+                groups.add(group);
+            }
+        }
+        return groups;
+    }
+
+    private Map<String, Object> relationGroupSummary(long groupId) {
+        List<Map<String, Object>> groups = jdbc.queryForList("""
+                SELECT relation_group_id, group_note
+                FROM customer_relation_groups
+                WHERE relation_group_id = ?
+                """, groupId);
+        if (groups.isEmpty()) {
+            return null;
+        }
+        Map<String, Object> group = new LinkedHashMap<>(groups.get(0));
+        List<Map<String, Object>> members = jdbc.queryForList("""
+                SELECT relation_member_id, customer_id, company_name,
+                       CASE WHEN customer_id IS NULL THEN FALSE ELSE TRUE END AS is_resolved
+                FROM customer_relation_members
+                WHERE relation_group_id = ?
+                ORDER BY company_name
+                """, groupId);
+        group.put("members", members);
+        group.put("member_count", members.size());
+        return group;
     }
 
     private void linkPendingRelationMember(long customerId, String companyName) {
@@ -407,17 +483,24 @@ public class CustomerService extends CmsJdbcSupport {
         }
     }
 
-    private void saveRelatedCompanies(long customerId, String companyName, List<String> requestedNames) {
-        if (requestedNames == null) {
-            return;
-        }
-        List<String> names = normalizedRelatedCompanyNames(companyName, requestedNames);
-        if (names.isEmpty()) {
-            return;
+    private void saveRelatedCompanies(long customerId, String companyName, List<String> requestedNames,
+                                      Long requestedGroupId, String requestedGroupNote) {
+        List<String> names = requestedNames == null
+                ? List.of()
+                : normalizedRelatedCompanyNames(companyName, requestedNames);
+        Long groupId = relationGroupIdForCustomer(customerId);
+
+        if (requestedGroupId != null) {
+            if (relationGroupSummary(requestedGroupId) == null) {
+                throw new IllegalArgumentException("relationGroupId does not exist");
+            }
+            if (groupId != null && !requestedGroupId.equals(groupId)) {
+                mergeRelationGroups(requestedGroupId, groupId);
+            }
+            groupId = requestedGroupId;
         }
 
-        Long groupId = relationGroupIdForCustomer(customerId);
-        if (groupId == null) {
+        if (groupId == null && !names.isEmpty()) {
             for (String name : names) {
                 Long relatedCustomerId = uniqueCustomerIdByCompanyName(name);
                 if (relatedCustomerId != null) {
@@ -428,12 +511,17 @@ public class CustomerService extends CmsJdbcSupport {
                 }
             }
         }
-        if (groupId == null) {
-            groupId = nextId("customer_relation_groups", "relation_group_id");
-            jdbc.update("INSERT INTO customer_relation_groups (relation_group_id) VALUES (?)", groupId);
-        }
-        ensureRelationMember(groupId, customerId, companyName);
 
+        if (groupId == null && !names.isEmpty()) {
+            groupId = nextId("customer_relation_groups", "relation_group_id");
+            jdbc.update("INSERT INTO customer_relation_groups (relation_group_id, group_note) VALUES (?, ?)",
+                    groupId, blankToNull(requestedGroupNote));
+        }
+        if (groupId == null) {
+            return;
+        }
+
+        ensureRelationMember(groupId, customerId, companyName);
         for (String name : names) {
             Long relatedCustomerId = uniqueCustomerIdByCompanyName(name);
             if (relatedCustomerId != null) {
@@ -443,6 +531,10 @@ public class CustomerService extends CmsJdbcSupport {
                 }
             }
             ensureRelationMember(groupId, relatedCustomerId, name);
+        }
+        if (requestedGroupNote != null) {
+            jdbc.update("UPDATE customer_relation_groups SET group_note = ? WHERE relation_group_id = ?",
+                    blankToNull(requestedGroupNote), groupId);
         }
     }
 
@@ -509,6 +601,16 @@ public class CustomerService extends CmsJdbcSupport {
     }
 
     private void mergeRelationGroups(long targetGroupId, long sourceGroupId) {
+        String targetNote = jdbc.queryForObject(
+                "SELECT group_note FROM customer_relation_groups WHERE relation_group_id = ?",
+                String.class, targetGroupId);
+        String sourceNote = jdbc.queryForObject(
+                "SELECT group_note FROM customer_relation_groups WHERE relation_group_id = ?",
+                String.class, sourceGroupId);
+        if (blankToNull(targetNote) == null && blankToNull(sourceNote) != null) {
+            jdbc.update("UPDATE customer_relation_groups SET group_note = ? WHERE relation_group_id = ?",
+                    sourceNote, targetGroupId);
+        }
         List<Map<String, Object>> sourceMembers = jdbc.queryForList("""
                 SELECT relation_member_id, customer_id, company_name
                 FROM customer_relation_members

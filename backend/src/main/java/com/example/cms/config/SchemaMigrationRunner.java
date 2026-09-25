@@ -149,9 +149,11 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         jdbc.execute("""
                 CREATE TABLE IF NOT EXISTS customer_relation_groups (
                   relation_group_id BIGINT PRIMARY KEY,
+                  group_note VARCHAR(1000),
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
+        addColumnIfMissing("customer_relation_groups", "group_note", "VARCHAR(1000)");
         jdbc.execute("""
                 CREATE TABLE IF NOT EXISTS customer_relation_members (
                   relation_member_id BIGINT PRIMARY KEY,

@@ -120,17 +120,27 @@ export interface CustomerPage {
   pageSize: number;
 }
 
+export interface CustomerRelationMember {
+  relation_member_id: number;
+  customer_id: number | null;
+  company_name: string;
+  is_resolved: boolean;
+}
+
+export interface CustomerRelationGroup {
+  relation_group_id: number;
+  group_note: string | null;
+  member_count: number;
+  members: CustomerRelationMember[];
+}
+
 export interface CustomerDetail extends CustomerSummary {
   contact_person: string | null;
   forwarding_address: string | null;
   petty_cash: number | null;
   notes: string | null;
-  relatedCompanies: Array<{
-    relation_member_id: number;
-    customer_id: number | null;
-    company_name: string;
-    is_resolved: boolean;
-  }>;
+  relatedCompanies: CustomerRelationMember[];
+  relationGroup: CustomerRelationGroup | null;
   contracts: Array<Record<string, unknown>>;
   sameOwnerCompanies: CustomerSummary[];
   rentPayments: Array<Record<string, unknown>>;
@@ -158,6 +168,8 @@ export interface CustomerPayload {
   relatedCompanyNames?: string[];
   notes?: string;
   registrationType?: string;
+  relationGroupId?: number | null;
+  relationGroupNote?: string | null;
   updatedBy?: number;
 }
 
@@ -671,6 +683,18 @@ export class CmsApiService {
   customerLookup(search = ''): Observable<CustomerSummary[]> {
     return this.http.get<CustomerSummary[]>(`${this.baseUrl}/customers/lookup`, {
       params: search ? { search } : {}
+    });
+  }
+
+  relationGroupLookup(search: string): Observable<CustomerRelationGroup[]> {
+    return this.http.get<CustomerRelationGroup[]>(`${this.baseUrl}/customers/relation-groups`, {
+      params: { search }
+    });
+  }
+
+  pendingRelationGroupMatches(companyName: string): Observable<CustomerRelationGroup[]> {
+    return this.http.get<CustomerRelationGroup[]>(`${this.baseUrl}/customers/relation-groups/pending-match`, {
+      params: { companyName }
     });
   }
 
