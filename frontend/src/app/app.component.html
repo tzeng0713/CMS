@@ -569,10 +569,15 @@
             <button type="button" class="ghost compact-button back-button" (click)="backToCustomerList()">返回列表</button>
             <p class="customer-detail-eyebrow">Customer Profile</p>
             <h2>{{ c.company_name }}</h2>
-            <p class="customer-detail-summary">負責人 {{ c.owner_name || '-' }} / {{ c.branch_name || '未指定分館' }} / 房號 {{ c.office_no || '-' }}</p>
           </div>
           <div class="header-actions customer-detail-header-actions">
-            <span class="status">{{ displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status)) }}</span>
+            <span
+              class="customer-detail-status"
+              [class.terminated]="displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status)) === '已解約'"
+              [attr.aria-label]="'租約狀態：' + displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status))"
+            >
+              {{ displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status)) }}
+            </span>
             <button type="button" class="ghost" *ngIf="!editingCustomer()" (click)="startEditCustomer()">修改</button>
           </div>
         </header>
@@ -719,57 +724,43 @@
                   <div><span>會計師資訊</span><strong>{{ c.accountant_info || c.referrer || '-' }}</strong></div>
                   <div><span>帳戶資訊</span><strong>{{ c.account_info || '-' }}</strong></div>
                   <div class="wide"><span>代辦</span><strong>{{ c.is_agent ? '是' : '否' }}</strong></div>
-                  <div class="wide"><span>備註</span><strong>{{ c.notes || '-' }}</strong></div>
+                  <div class="wide"><span>客戶備註</span><strong>{{ c.notes || '-' }}</strong></div>
                 </div>
               </section>
             </div>
           </ng-template>
 
-        <section class="panel relation-group-detail" *ngIf="c.relationGroup as group">
-          <div class="panel-header">
-            <div>
-              <h3>關聯集團</h3>
-              <p>共 {{ group.member_count }} 間成員；集團備註與成員名單會同步連動。</p>
+        <div class="customer-detail-lower-grid" [class.customer-detail-lower-grid-single]="!c.relationGroup">
+          <section class="panel relation-group-detail" *ngIf="c.relationGroup as group">
+            <div class="panel-header">
+              <div>
+                <h3>關聯集團</h3>
+                <p>共 {{ group.member_count }} 間成員；集團備註與成員名單會同步連動。</p>
+              </div>
+              <span class="relation-group-status is-linked">共用資料</span>
             </div>
-            <span class="relation-group-status is-linked">共用資料</span>
-          </div>
-          <div class="relation-group-note-display">
-            <span>集團備註</span>
-            <p>{{ group.group_note || '尚未填寫集團備註' }}</p>
-          </div>
-          <ul class="same-owner related-company-list">
-            <li *ngFor="let company of relatedCompanies()">
-              <button
-                type="button"
-                *ngIf="company.customer_id; else unresolvedCompany"
-                (click)="openCustomerDetail(company.customer_id!)"
-              >
-                {{ company.company_name }}
-              </button>
-              <ng-template #unresolvedCompany>
-                <strong>{{ company.company_name }}</strong>
-              </ng-template>
-              <span>{{ company.is_resolved ? '已建立客戶資料' : '尚未建立客戶資料' }}</span>
-            </li>
-          </ul>
-        </section>
-
-        <section class="panel split">
-          <div>
-            <h3>同負責人公司</h3>
-            <p class="muted">依客戶資料的負責人欄位連動。</p>
-            <ul class="same-owner">
-              <li *ngFor="let company of sameOwnerCompanies()">
-                <button type="button" (click)="openCustomerDetail(company.customer_id)">
+            <div class="relation-group-note-display">
+              <span>集團備註</span>
+              <p>{{ group.group_note || '尚未填寫集團備註' }}</p>
+            </div>
+            <ul class="related-company-list">
+              <li *ngFor="let company of relatedCompanies()">
+                <button
+                  type="button"
+                  *ngIf="company.customer_id; else unresolvedCompany"
+                  (click)="openCustomerDetail(company.customer_id!)"
+                >
                   {{ company.company_name }}
                 </button>
-                <span>{{ company.rental_item || company.registration_type || '-' }}</span>
+                <ng-template #unresolvedCompany>
+                  <strong>{{ company.company_name }}</strong>
+                </ng-template>
+                <span>{{ company.is_resolved ? '已建立客戶資料' : '尚未建立客戶資料' }}</span>
               </li>
-              <li *ngIf="!sameOwnerCompanies().length" class="empty">目前沒有其他同負責人公司</li>
             </ul>
-          </div>
+          </section>
 
-          <div>
+          <section class="panel customer-contract-panel">
             <h3>租約資料</h3>
             <div class="contract-cards" *ngIf="c.contracts.length; else noCustomerContracts">
               <article *ngFor="let contract of c.contracts">
@@ -798,8 +789,8 @@
             <ng-template #noCustomerContracts>
               <p class="empty-state">目前沒有租約資料</p>
             </ng-template>
-          </div>
-        </section>
+          </section>
+        </div>
 
         <section class="panel">
           <h3>近期租金紀錄</h3>

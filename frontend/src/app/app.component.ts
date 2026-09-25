@@ -783,7 +783,6 @@ export class AppComponent implements OnInit, AfterViewInit {
   @ViewChild('contractCustomerSearchInput') contractCustomerSearchInput?: ElementRef<HTMLInputElement>;
 
   selectedCustomerId = computed(() => this.selectedCustomer()?.customer_id ?? null);
-  sameOwnerCompanies = computed(() => this.selectedCustomer()?.sameOwnerCompanies ?? []);
   relatedCompanies = computed(() => this.selectedCustomer()?.relatedCompanies ?? []);
   pageTitle = computed(() => {
     const titles: Partial<Record<ViewKey, string>> = {
