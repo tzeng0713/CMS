@@ -2035,50 +2035,7 @@ input:disabled {
   display: grid;
   gap: 10px;
   padding: 12px;
-  border: 1px solid #d9e2ef;
-  border-radius: 8px;
   background: #ffffff;
-}
-
-.contract-card-title {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-}
-
-.contract-card-title span {
-  border-radius: 999px;
-  padding: 5px 9px;
-  background: #e0f2fe;
-  color: #0369a1;
-  font-size: 12px;
-  font-weight: 800;
-}
-
-.records {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.record {
-  padding: 10px;
-  border-radius: 8px;
-  background: #fff7ed;
-  border: 1px solid #fed7aa;
-}
-
-.record span,
-.record small {
-  display: block;
-  color: #9a3412;
-}
-
-.record strong {
-  display: block;
-  margin: 5px 0;
 }
 
 .error {

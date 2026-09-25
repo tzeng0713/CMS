@@ -764,10 +764,6 @@
             <h3>租約資料</h3>
             <div class="contract-cards" *ngIf="c.contracts.length; else noCustomerContracts">
               <article *ngFor="let contract of c.contracts">
-                <div class="contract-card-title">
-                  <strong>{{ value(contract, 'rental_item') }}</strong>
-                  <span>{{ displayLeaseStatus(contract['lease_status']) }}</span>
-                </div>
                 <div class="info-grid compact">
                   <div><span>承租狀態</span><strong>{{ value(contract, 'rental_status') }}</strong></div>
                   <div><span>簽約日期</span><strong>{{ value(contract, 'signed_date_text') }}</strong></div>
@@ -792,16 +788,6 @@
           </section>
         </div>
 
-        <section class="panel">
-          <h3>近期租金紀錄</h3>
-          <div class="records">
-            <div class="record" *ngFor="let p of c.rentPayments | slice:0:12">
-              <span>{{ formatPaymentMonth(p['payment_month']) }}</span>
-              <strong>{{ money(p['amount']) }}</strong>
-              <small>{{ value(p, 'receipt_no') }}</small>
-            </div>
-          </div>
-        </section>
         </div>
       </section>
     </section>
