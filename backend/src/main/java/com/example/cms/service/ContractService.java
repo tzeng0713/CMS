@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,7 +34,7 @@ public class ContractService extends CmsJdbcSupport {
 
     public Map<String, Object> contracts(String search, String companyName, String taxId,
                                          String startDateText, String endDateText, String leaseStatus,
-                                         Integer page, Integer pageSize) {
+                                         Long contractId, Integer page, Integer pageSize) {
         String searchText = search == null ? "" : search.trim();
         String like = "%" + searchText + "%";
         String companyLike = "%" + (companyName == null ? "" : companyName.trim()) + "%";
@@ -54,6 +55,7 @@ public class ContractService extends CmsJdbcSupport {
                   AND (? = '' OR co.lease_status = ?)
                   AND (? = '' OR co.end_date_text IS NULL OR co.end_date_text = '' OR co.end_date_text >= ?)
                   AND (? = '' OR co.start_date_text IS NULL OR co.start_date_text = '' OR co.start_date_text <= ?)
+                  AND (? IS NULL OR co.contract_id = ?)
                 """;
         Object[] filterArguments = {
                 like, like, like, like, like, like,
@@ -61,11 +63,12 @@ public class ContractService extends CmsJdbcSupport {
                 taxIdText, taxIdLike,
                 statusText, statusText,
                 startText, startText,
-                endText, endText
+                endText, endText,
+                contractId, contractId
         };
         int size = pageSize == null || pageSize <= 0 ? 20 : Math.min(pageSize, 200);
         int pageNumber = page == null || page < 0 ? 0 : page;
-        var pageArguments = new ArrayList<>(List.of(filterArguments));
+        var pageArguments = new ArrayList<>(Arrays.asList(filterArguments));
         pageArguments.add(size);
         pageArguments.add(pageNumber * size);
         List<Map<String, Object>> rows = jdbc.queryForList("""
@@ -167,11 +170,13 @@ public class ContractService extends CmsJdbcSupport {
         jdbc.update("""
                 UPDATE contracts
                 SET lease_status = ?,
+                    termination_date_text = ?,
                     updated_by = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE contract_id = ?
                 """,
                 normalizeContractStatus(request.leaseStatus()),
+                blankToNull(request.terminationDateText()),
                 request.updatedBy() == null ? 1L : request.updatedBy(),
                 id);
         return contractDetail(id);

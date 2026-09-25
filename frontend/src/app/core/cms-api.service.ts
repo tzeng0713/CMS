@@ -301,6 +301,7 @@ export interface ContractSearchFilters {
   startDateText?: string;
   endDateText?: string;
   leaseStatus?: string;
+  contractId?: number | null;
 }
 
 export interface RentPaymentSearchFilters {
@@ -384,6 +385,7 @@ export interface RefundSummary {
   tax_id: string | null;
   contract_deposit: number | null;
   contract_end_date_text: string | null;
+  contract_lease_status: string | null;
   refund_reason: string | null;
   adjustment_amount: number;
   adjustment_note: string | null;

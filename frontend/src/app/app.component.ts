@@ -4033,6 +4033,31 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.setView('charges');
   }
 
+  goToContractManagementForRefund(contractId: number): void {
+    this.contractFilters = {
+      companyName: '',
+      taxId: '',
+      startDateText: '',
+      endDateText: '',
+      leaseStatus: '',
+      contractId
+    };
+    this.contractPage.set(0);
+    this.setView('contract-search');
+    this.api.contracts(this.contractFilters, 0, this.contractPageSize()).subscribe({
+      next: (value) => {
+        this.contracts.set(value.content);
+        this.contractTotal.set(value.totalElements);
+        this.contractPage.set(value.page);
+        const match = value.content.find((row) => Number(row['contract_id']) === contractId) ?? value.content[0] ?? null;
+        if (match) {
+          this.startEditContract(match);
+        }
+      },
+      error: () => this.error.set('無法載入租約清單。')
+    });
+  }
+
   startEditRefund(row: RefundSummary): void {
     this.refundOverDeductedNotice.set(null);
     this.refundEditFieldErrors.set({});

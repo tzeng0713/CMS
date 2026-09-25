@@ -282,6 +282,7 @@ public class RefundService extends CmsJdbcSupport {
                 SELECT r.*, c.company_name AS matched_company_name, c.tax_id,
                        co.deposit AS contract_deposit,
                        co.end_date_text AS contract_end_date_text,
+                       co.lease_status AS contract_lease_status,
                        s1.staff_name AS created_by_name,
                        s2.staff_name AS reviewed_by_name,
                        s3.staff_name AS termination_staff_name

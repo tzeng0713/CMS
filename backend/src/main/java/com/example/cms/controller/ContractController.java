@@ -30,9 +30,10 @@ public class ContractController {
                                          @RequestParam(required = false) String startDateText,
                                          @RequestParam(required = false) String endDateText,
                                          @RequestParam(required = false) String leaseStatus,
+                                         @RequestParam(required = false) Long contractId,
                                          @RequestParam(required = false) Integer page,
                                          @RequestParam(required = false) Integer pageSize) {
-        return service.contracts(search, companyName, taxId, startDateText, endDateText, leaseStatus, page, pageSize);
+        return service.contracts(search, companyName, taxId, startDateText, endDateText, leaseStatus, contractId, page, pageSize);
     }
 
     @PostMapping

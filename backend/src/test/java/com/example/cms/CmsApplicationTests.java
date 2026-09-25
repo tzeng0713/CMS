@@ -1186,7 +1186,7 @@ class CmsApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.office_id", is(1)))
                 .andExpect(jsonPath("$.payment_months", is(6)))
-                .andExpect(jsonPath("$.termination_date_text", nullValue()))
+                .andExpect(jsonPath("$.termination_date_text", is("2026-12-31")))
                 .andExpect(jsonPath("$.lease_status", is("已解約")));
 
         mvc.perform(get("/api/contracts")

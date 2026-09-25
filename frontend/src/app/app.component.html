@@ -1078,7 +1078,6 @@
               <div><span>付款週期</span><strong>{{ value(editing, 'payment_months') }}</strong></div>
               <div><span>起租日期</span><strong>{{ value(editing, 'start_date_text') }}</strong></div>
               <div><span>到期日期</span><strong>{{ value(editing, 'end_date_text') }}</strong></div>
-              <div><span>退租日期</span><strong>{{ value(editing, 'termination_date_text') }}</strong></div>
               <div><span>租金</span><strong>{{ money(editing['rent']) }}</strong></div>
               <div><span>押金</span><strong>{{ money(editing['deposit']) }}</strong></div>
             </div>
@@ -1088,6 +1087,10 @@
                 <select name="editContractLeaseStatus" [(ngModel)]="contractEditForm.leaseStatus">
                   <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
                 </select>
+              </label>
+              <label class="contract-edit-status">
+                退租日期
+                <input type="date" name="editContractTerminationDate" [(ngModel)]="contractEditForm.terminationDateText" />
               </label>
               <div class="form-actions">
                 <button type="submit" [disabled]="saving()">儲存修改</button>
@@ -2516,6 +2519,14 @@
                     [class.approved]="row.refund_status === '審核通過'"
                     [class.refunded]="row.refund_status === '已退款'"
                     [class.cancelled]="row.refund_status === '已取消'">{{ row.refund_status }}</span>
+              <button
+                type="button"
+                class="ghost compact-button"
+                *ngIf="row.refund_status === '已退款' && row.contract_lease_status === '綁約中'"
+                (click)="$event.stopPropagation(); goToContractManagementForRefund(row.contract_id)"
+              >
+                前往租約管理
+              </button>
             </span>
           </div>
         </div>
@@ -2565,6 +2576,14 @@
                           [class.approved]="detail.refund_status === '審核通過'"
                           [class.refunded]="detail.refund_status === '已退款'"
                           [class.cancelled]="detail.refund_status === '已取消'">{{ detail.refund_status }}</span>
+                    <button
+                      type="button"
+                      class="ghost compact-button"
+                      *ngIf="detail.refund_status === '已退款' && detail.contract_lease_status === '綁約中'"
+                      (click)="goToContractManagementForRefund(detail.contract_id)"
+                    >
+                      前往租約管理
+                    </button>
                   </dd>
                 </div>
                 <div>
