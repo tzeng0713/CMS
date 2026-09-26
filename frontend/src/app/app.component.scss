@@ -1024,6 +1024,15 @@ textarea {
   min-width: 0;
 }
 
+.customer-contract-panel .info-grid div {
+  border: 1px solid #eee3d0;
+  background: #faf7f0;
+}
+
+.customer-contract-panel .info-grid span {
+  color: #85765f;
+}
+
 .customer-detail-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
