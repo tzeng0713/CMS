@@ -165,6 +165,10 @@ describe('new customer flow', () => {
     expect(component.newCustomerFieldErrors()).toEqual({});
   });
 
+  it('shows a neutral no-contract status instead of a customer rental status', () => {
+    expect(component.customerLeaseStatus({ contracts: [], lease_status: null })).toBe('尚無租約');
+  });
+
   it('stores operation feedback as a toast', () => {
     component.showToast('新增成功');
 
@@ -529,6 +533,10 @@ describe('new customer flow', () => {
     };
 
     expect(customerSearchStatus.displayCustomerLeaseStatus('有效中')).toBe('續約中');
+  });
+
+  it('labels customers without a contract clearly in the search results', () => {
+    expect(component.customerListLeaseStatus({ contract_id: null, lease_status: null })).toBe('尚無租約');
   });
 
   it('toggles advanced customer filters without clearing the query', () => {

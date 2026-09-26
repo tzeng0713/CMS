@@ -4179,8 +4179,21 @@ export class AppComponent implements OnInit, AfterViewInit {
     return status === '綁約中' ? '續約中' : status;
   }
 
+  customerLeaseStatus(customer: Pick<CustomerDetail, 'contracts' | 'lease_status'>): string {
+    if (!customer.contracts?.length) {
+      return '尚無租約';
+    }
+    return this.displayLeaseStatus(customer.contracts[0]['lease_status'] ?? customer.lease_status);
+  }
+
   displayCustomerLeaseStatus(value: unknown): string {
     return String(value) === '已解約' ? '已解約' : '續約中';
+  }
+
+  customerListLeaseStatus(customer: Pick<CustomerSummary, 'contract_id' | 'lease_status'>): string {
+    return customer.contract_id === null || customer.contract_id === undefined
+      ? '尚無租約'
+      : this.displayCustomerLeaseStatus(customer.lease_status);
   }
 
   displayRentalStatus(value: unknown): string {

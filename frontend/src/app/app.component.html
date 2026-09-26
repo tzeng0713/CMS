@@ -546,8 +546,8 @@
             <span>{{ customer.owner_name || '-' }}</span>
             <span>{{ customer.rental_item || customer.registration_type || '-' }}</span>
             <span>
-              <span class="lease-status" [class.terminated]="displayCustomerLeaseStatus(customer.lease_status) === '已解約'">
-                {{ displayCustomerLeaseStatus(customer.lease_status) }}
+              <span class="lease-status" [class.terminated]="customerListLeaseStatus(customer) === '已解約'" [class.no-contract]="customerListLeaseStatus(customer) === '尚無租約'">
+                {{ customerListLeaseStatus(customer) }}
               </span>
             </span>
             <span>{{ customer.office_no || '-' }}</span>
@@ -573,10 +573,11 @@
           <div class="header-actions customer-detail-header-actions">
             <span
               class="customer-detail-status"
-              [class.terminated]="displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status)) === '已解約'"
-              [attr.aria-label]="'租約狀態：' + displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status))"
+              [class.terminated]="customerLeaseStatus(c) === '已解約'"
+              [class.no-contract]="customerLeaseStatus(c) === '尚無租約'"
+              [attr.aria-label]="'租約狀態：' + customerLeaseStatus(c)"
             >
-              {{ displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status)) }}
+              {{ customerLeaseStatus(c) }}
             </span>
             <button type="button" class="ghost" *ngIf="!editingCustomer()" (click)="startEditCustomer()">修改</button>
           </div>

@@ -1112,6 +1112,16 @@ textarea {
   background: #7b8086;
 }
 
+.customer-detail-status.no-contract {
+  border-color: #e3dccd;
+  background: #fbfaf7;
+  color: #766b59;
+}
+
+.customer-detail-status.no-contract::before {
+  background: #a99e8e;
+}
+
 .header-actions {
   display: flex;
   gap: 8px;
@@ -4526,6 +4536,14 @@ $charge-list-slate: #6b6f76;
 
 .lease-status.terminated::before {
   background: #7b8086;
+}
+
+.lease-status.no-contract {
+  color: #766b59;
+}
+
+.lease-status.no-contract::before {
+  background: #a99e8e;
 }
 
 .customer-view-button {
