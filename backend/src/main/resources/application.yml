@@ -29,7 +29,10 @@ cms:
   seed:
     enabled: ${CMS_SEED_ENABLED:true}
   backup:
-    google-service-account-json: ${GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_JSON:}
+    google-oauth-client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
+    google-oauth-client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}
+    google-oauth-refresh-token: ${GOOGLE_OAUTH_REFRESH_TOKEN:}
+    google-oauth-redirect-uri: ${GOOGLE_OAUTH_REDIRECT_URI:http://localhost:8080/api/backups/oauth/callback}
     drive-folder-id: ${GOOGLE_DRIVE_BACKUP_FOLDER_ID:}
   password-reset:
     app-base-url: ${CMS_APP_BASE_URL:http://localhost:4200}

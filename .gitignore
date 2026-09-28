@@ -26,6 +26,9 @@ PROJECT_AUDIT.md
 # Local use-case docs
 docs/*-use-cases.md
 
+# Local secrets (never commit)
+scripts/env.local.sh
+
 # OS/editor files
 .DS_Store
 Thumbs.db

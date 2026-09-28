@@ -1,13 +1,13 @@
 package com.example.cms.service;
 
 import com.example.cms.service.support.CmsJdbcSupport;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport;
 import com.google.api.client.http.ByteArrayContent;
 import com.google.api.client.json.gson.GsonFactory;
 import com.google.api.services.drive.Drive;
-import com.google.api.services.drive.DriveScopes;
 import com.google.auth.http.HttpCredentialsAdapter;
-import com.google.auth.oauth2.GoogleCredentials;
+import com.google.auth.oauth2.UserCredentials;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Font;
@@ -22,8 +22,12 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -45,14 +49,25 @@ public class BackupService extends CmsJdbcSupport {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     private static final DateTimeFormatter FILE_TIMESTAMP = DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss");
 
-    private final String googleServiceAccountJson;
+    private static final String OAUTH_SCOPE = "https://www.googleapis.com/auth/drive.file";
+
+    private final String googleOauthClientId;
+    private final String googleOauthClientSecret;
+    private final String googleOauthRefreshToken;
+    private final String googleOauthRedirectUri;
     private final String driveFolderId;
 
     public BackupService(JdbcTemplate jdbc,
-                          @Value("${cms.backup.google-service-account-json:}") String googleServiceAccountJson,
+                          @Value("${cms.backup.google-oauth-client-id:}") String googleOauthClientId,
+                          @Value("${cms.backup.google-oauth-client-secret:}") String googleOauthClientSecret,
+                          @Value("${cms.backup.google-oauth-refresh-token:}") String googleOauthRefreshToken,
+                          @Value("${cms.backup.google-oauth-redirect-uri:http://localhost:8080/api/backups/oauth/callback}") String googleOauthRedirectUri,
                           @Value("${cms.backup.drive-folder-id:}") String driveFolderId) {
         super(jdbc);
-        this.googleServiceAccountJson = googleServiceAccountJson;
+        this.googleOauthClientId = googleOauthClientId;
+        this.googleOauthClientSecret = googleOauthClientSecret;
+        this.googleOauthRefreshToken = googleOauthRefreshToken;
+        this.googleOauthRedirectUri = googleOauthRedirectUri;
         this.driveFolderId = driveFolderId;
     }
 
@@ -193,16 +208,21 @@ public class BackupService extends CmsJdbcSupport {
     }
 
     private DriveUploadResult uploadToDrive(byte[] bytes, String fileName) throws Exception {
-        if (blankToNull(googleServiceAccountJson) == null) {
-            throw new IllegalStateException("尚未設定 Google Drive 服務帳戶金鑰（GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_JSON）");
+        if (blankToNull(googleOauthClientId) == null || blankToNull(googleOauthClientSecret) == null) {
+            throw new IllegalStateException("尚未設定 Google OAuth 用戶端（GOOGLE_OAUTH_CLIENT_ID／GOOGLE_OAUTH_CLIENT_SECRET）");
+        }
+        if (blankToNull(googleOauthRefreshToken) == null) {
+            throw new IllegalStateException("尚未完成 Google 帳號授權，請先開啟 /api/backups/oauth/authorize 完成一次性授權，並把取得的 refresh token 設定到 GOOGLE_OAUTH_REFRESH_TOKEN");
         }
         if (blankToNull(driveFolderId) == null) {
             throw new IllegalStateException("尚未設定 Google Drive 備份資料夾 ID（GOOGLE_DRIVE_BACKUP_FOLDER_ID）");
         }
 
-        GoogleCredentials credentials = GoogleCredentials
-                .fromStream(new ByteArrayInputStream(googleServiceAccountJson.getBytes(StandardCharsets.UTF_8)))
-                .createScoped(List.of(DriveScopes.DRIVE_FILE));
+        UserCredentials credentials = UserCredentials.newBuilder()
+                .setClientId(googleOauthClientId)
+                .setClientSecret(googleOauthClientSecret)
+                .setRefreshToken(googleOauthRefreshToken)
+                .build();
 
         Drive drive = new Drive.Builder(
                 GoogleNetHttpTransport.newTrustedTransport(),
@@ -222,6 +242,49 @@ public class BackupService extends CmsJdbcSupport {
                 .execute();
 
         return new DriveUploadResult(uploaded.getId(), uploaded.getWebViewLink());
+    }
+
+    /**
+     * 個人 Gmail 帳號沒有共用雲端硬碟，服務帳戶又沒有儲存配額，
+     * 因此改用「使用者委派」：以下兩個方法讓管理者一次性用自己的 Google 帳號完成 OAuth 授權，
+     * 換取 refresh token 後，之後每次備份都是以該真人帳號的名義上傳（用他自己的儲存空間）。
+     */
+    public String buildAuthorizationUrl() {
+        return "https://accounts.google.com/o/oauth2/v2/auth"
+                + "?client_id=" + urlEncode(googleOauthClientId)
+                + "&redirect_uri=" + urlEncode(googleOauthRedirectUri)
+                + "&response_type=code"
+                + "&access_type=offline"
+                + "&prompt=consent"
+                + "&scope=" + urlEncode(OAUTH_SCOPE);
+    }
+
+    public String exchangeCodeForRefreshToken(String code) throws Exception {
+        String form = "code=" + urlEncode(code)
+                + "&client_id=" + urlEncode(googleOauthClientId)
+                + "&client_secret=" + urlEncode(googleOauthClientSecret)
+                + "&redirect_uri=" + urlEncode(googleOauthRedirectUri)
+                + "&grant_type=authorization_code";
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create("https://oauth2.googleapis.com/token"))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .POST(HttpRequest.BodyPublishers.ofString(form))
+                .build();
+        HttpResponse<String> response = HttpClient.newHttpClient()
+                .send(request, HttpResponse.BodyHandlers.ofString());
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> body = new ObjectMapper().readValue(response.body(), Map.class);
+        Object refreshToken = body.get("refresh_token");
+        if (response.statusCode() != 200 || refreshToken == null) {
+            throw new IllegalStateException("Google OAuth 授權失敗：" + response.body());
+        }
+        return refreshToken.toString();
+    }
+
+    private String urlEncode(String value) {
+        return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
     }
 
     private record DriveUploadResult(String fileId, String webViewLink) {

@@ -15,7 +15,7 @@
 |---|---|
 | 手動觸發備份 | 主管在畫面上按「立即備份」，同步觸發匯出＋上傳流程，完成後才回應 |
 | 匯出 Excel | 將固定範圍的四張資料表匯出成同一份 `.xlsx`，每張表各為一個分頁 |
-| 上傳 Google Drive | 透過服務帳戶（Service Account）認證，把匯出的檔案上傳到指定資料夾 |
+| 上傳 Google Drive | 透過 OAuth2 使用者委派（管理者自己的 Google 帳號授權），把匯出的檔案上傳到指定資料夾 |
 | 備份歷史紀錄 | 每次備份（不論成功或失敗）都會寫入 `backup_logs`，畫面上依時間新到舊列出 |
 
 此功能**沒有自動排程**，比照業績結算、國稅局通報等功能的既有模式，沒有 `@Scheduled`，全部由主管手動在畫面上按「立即備份」觸發（詳見第 9 節已知限制）。
@@ -77,27 +77,38 @@ CMS備份_{yyyyMMdd}_{HHmmss}.xlsx
 
 ## 4. Google Drive 上傳
 
-### 4.1 認證方式
+### 4.1 認證方式：OAuth2 使用者委派（不是服務帳戶）
 
-- 使用 Google 官方 Java SDK（`google-api-services-drive`、`google-auth-library-oauth2-http`），以**服務帳戶（Service Account）**認證，範圍（scope）為 `DriveScopes.DRIVE_FILE`。
-- 服務帳戶金鑰的**完整 JSON 內容**（非檔案路徑）由環境變數 `GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY_JSON` 提供，於 `application.yml` 以 `cms.backup.google-service-account-json` 讀入，未設定時為空字串。
-- 金鑰內容不寫死在程式碼、不進版控。
+最初設計是用**服務帳戶（Service Account）**認證，但實測發現 Google Drive API 對服務帳戶有這個限制：**服務帳戶本身沒有儲存配額**，只要是由服務帳戶「建立新檔案」，即使目標資料夾已經共用給它、給了編輯者權限，一律會收到 `403 storageQuotaExceeded`。這是 Google 從 2021 年起的既定行為，官方建議改用共用雲端硬碟（Shared Drive）或 OAuth 使用者委派——共用雲端硬碟僅 Google Workspace（企業／教育）付費帳戶才有，個人 Gmail 帳號無法使用，因此本功能改採 **OAuth2 使用者委派**：
 
-### 4.2 目標資料夾
+- 使用 Google 官方 Java SDK（`google-api-services-drive`、`google-auth-library-oauth2-http`），以管理者**自己的 Google 帳號**取得授權，之後上傳的檔案歸屬於該真人帳號、使用其自身的雲端硬碟容量（免費帳號通常 15GB），不會有配額問題。
+- 授權範圍（scope）為 `https://www.googleapis.com/auth/drive.file`（僅限本應用程式建立／開啟的檔案，不會讀取使用者雲端硬碟裡其他既有檔案）。
+- 需要在 [Google Cloud Console](https://console.cloud.google.com/) 建立一組 **OAuth 用戶端 ID**（類型選 Web application），取得 `client_id`／`client_secret`，並在該用戶端設定 Authorized redirect URI 為 `http://localhost:8080/api/backups/oauth/callback`（或部署環境對應的網址）。
+- `client_id`／`client_secret` 由環境變數 `GOOGLE_OAUTH_CLIENT_ID`／`GOOGLE_OAUTH_CLIENT_SECRET` 提供，於 `application.yml` 以 `cms.backup.google-oauth-client-id`／`cms.backup.google-oauth-client-secret` 讀入。
+
+### 4.2 一次性授權流程（人工步驟，程式無法自動完成）
+
+管理者只需要做**一次**（除非 refresh token 被撤銷或過期）：
+
+1. 設定好 `GOOGLE_OAUTH_CLIENT_ID`、`GOOGLE_OAUTH_CLIENT_SECRET`、`GOOGLE_DRIVE_BACKUP_FOLDER_ID` 後啟動後端（`GOOGLE_OAUTH_REFRESH_TOKEN` 先留空）。
+2. 瀏覽器打開 `GET /api/backups/oauth/authorize`，會被導向 Google 登入／同意畫面，用要拿來存放備份的那個 Google 帳號登入並同意授權。
+3. Google 導回 `GET /api/backups/oauth/callback?code=...`（`BackupController.oauthCallback()`），後端用 `code` 向 `https://oauth2.googleapis.com/token` 換取 token，畫面上會直接顯示取得的 **refresh token**。
+4. 把這組 refresh token 複製貼到環境變數 `GOOGLE_OAUTH_REFRESH_TOKEN`，重新啟動後端即完成設定。
+
+> `/api/backups/oauth/*` 這兩個端點目前沒有做主管權限檢查，設計上僅供本機／內部網路一次性設定使用；若後端未來要部署到公開網際網路，需自行評估是否要加上存取限制（例如防火牆、白名單 IP，或拿到 refresh token 後直接下架這兩個端點）。
+
+### 4.3 目標資料夾
 
 - 由環境變數 `GOOGLE_DRIVE_BACKUP_FOLDER_ID` 提供，於 `application.yml` 以 `cms.backup.drive-folder-id` 讀入。
+- 這個資料夾**由管理者在自己的 Google Drive 裡建立**（就是步驟 2 授權用的那個帳號），不需要額外共用給誰——因為現在上傳者就是帳號本人。
 - 上傳時以 `File.setParents(List.of(driveFolderId))` 指定父資料夾。
 
-### 4.3 前置設定（人工步驟，程式無法自動完成）
+### 4.4 執行期認證與上傳結果
 
-服務帳戶本身沒有自己的雲端硬碟儲存空間，**必須先到 Google Drive 網頁上，將目標資料夾「共用」給服務帳戶的 email**（格式類似 `xxx@xxx.iam.gserviceaccount.com`），並給予「編輯者」權限，否則上傳一律失敗（會反映在 `errorMessage`／`backup_logs.error_message` 中）。
-
-### 4.4 上傳結果
-
-上傳成功後取回：
-
-- `id`：Google Drive 上的檔案 ID → 對應回應欄位 `driveFileId`
-- `webViewLink`：可在瀏覽器開啟的分享連結 → 對應回應欄位 `driveUrl`
+- 每次觸發備份時，後端用 `client_id`／`client_secret`／`refresh_token` 建立 `com.google.auth.oauth2.UserCredentials`，SDK 會自動換取短效的 access token 呼叫 Drive API，不需要每次手動處理 token 過期。
+- 上傳成功後取回：
+  - `id`：Google Drive 上的檔案 ID → 對應回應欄位 `driveFileId`
+  - `webViewLink`：可在瀏覽器開啟的分享連結 → 對應回應欄位 `driveUrl`
 
 ---
 
@@ -152,7 +163,9 @@ CMS備份_{yyyyMMdd}_{HHmmss}.xlsx
 ## 9. 已知限制 / 待辦事項
 
 - **完全手動觸發，沒有排程**：系統沒有 cron／`@Scheduled` 機制，多久備份一次完全依賴主管自己記得上畫面按「立即備份」，系統不會主動提醒。
-- **服務帳戶資料夾共用是人工步驟**：部署或更換服務帳戶金鑰後，若忘記把目標資料夾共用給新的服務帳戶 email，上傳會直接失敗，需人工到 Google Drive 網頁設定，程式無法自動偵測或代為完成。
+- **一次性 OAuth 授權是人工步驟**：需要管理者手動打開 `/api/backups/oauth/authorize` 用自己的 Google 帳號完成一次同意畫面，並把取得的 refresh token 貼進環境變數，程式無法自動完成這一步；換了 Google 帳號、client secret 被重置，或 refresh token 被撤銷／過期時，需要重新走一次這個流程。
+- **`/api/backups/oauth/*` 端點沒有權限檢查**：目前設計僅供本機／內部網路做一次性設定，若後端部署到公開網際網路，需自行評估是否要限制存取（防火牆、白名單，或設定完成後直接下架這兩個端點），避免被外部用來竊取或覆蓋 OAuth 授權。
+- **備份檔案歸屬於管理者個人帳號**：上傳的檔案存放在該管理者自己的 Google Drive 裡，佔用他個人的儲存空間，換人管理或該帳號被停用時，需要重新設定授權並考慮既有備份檔案的搬遷。
 - **備份範圍固定寫死在程式碼**：四張表的清單目前是常數，不能透過 API 或畫面動態調整要備份哪些表；未來若要新增／移除表，需要改程式碼。
 - **同步處理，可能受限於 HTTP 逾時**：資料量變大（例如租約或收款紀錄累積到相當規模）時，匯出＋上傳時間拉長，可能超過瀏覽器或反向代理的逾時設定而導致前端顯示失敗，但實際上傳可能仍在背景完成或已完成，此時 `backup_logs` 是否寫入視例外拋出的時間點而定，畫面上不一定能即時反映真實狀態。若資料量持續成長，建議評估改為非同步（例如先回傳「已受理」再背景執行，前端輪詢 `backup_logs`）。
 - **沒有全量匯出以外的模式**：不支援增量備份、不支援排除特定欄位或篩選時間區間，每次都是四張表的完整 `SELECT *`。
