@@ -3309,12 +3309,12 @@
             <div class="panel-header">
               <div>
                 <h3>結算觸發</h3>
-                <p>規則一／二／三／四／六／八一次結算，可重複執行，已入帳的資料不會重複計算。套用月份：{{ monthLabel(settleMonthlyYearMonth) }}</p>
+                <p>規則一／二／三／四／五／六／八一次結算，可重複執行，已入帳的資料不會重複計算。套用月份：{{ monthLabel(settleMonthlyYearMonth) }}</p>
               </div>
             </div>
             <div class="settle-actions">
               <div class="settle-action-item">
-                <p>規則一／二／三／八：辦公室出租、公司登記業績、同心、公司登記年繳（逐筆合約／收款觸發）；規則四／六：滿租獎金、登記加乘獎金（按月結算，套用上方「目前檢視月份」）</p>
+                <p>規則一／二／三／五／八：辦公室出租、公司登記業績、同心、工商代辦、公司登記年繳（逐筆合約／收款觸發，規則五依客戶「代辦」標記自動判斷）；規則四／六：滿租獎金、登記加乘獎金（按月結算，套用上方「目前檢視月份」）</p>
                 <button type="button" [disabled]="settlingBusiness()" (click)="settleBusinessBonuses()">業績結算</button>
               </div>
             </div>
@@ -3325,7 +3325,7 @@
             <div class="panel-header">
               <div>
                 <h3>手動新增業績獎金</h3>
-                <p>規則五：工商代辦獎金尚無自動結算引擎，主管核對「新簽約檔案」後在此登打單筆獎金。</p>
+                <p>規則五：工商代辦獎金已可依客戶「代辦」標記自動結算，此處保留作為備援／覆寫，供主管核對「新簽約檔案」後登打單筆獎金。</p>
               </div>
             </div>
             <div class="manual-bonus-fields">

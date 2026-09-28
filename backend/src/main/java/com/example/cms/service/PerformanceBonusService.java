@@ -33,8 +33,10 @@ public class PerformanceBonusService extends CmsJdbcSupport {
     private static final Pattern PERIOD_PATTERN = Pattern.compile("^(\\d{4})-P([123])$");
     private static final Pattern YEAR_MONTH_PATTERN = Pattern.compile("^(\\d{4})-(\\d{2})$");
 
-    // 沒有自動結算引擎的規則類型：只有這些規則能透過 manualCreate() 手動登打，
+    // 允許透過 manualCreate() 手動登打的規則類型（白名單）：
     // 避免主管誤對已有自動結算流程（sync-transactions／settle-monthly／settle-period）的規則手動入帳造成重複發放。
+    // BUSINESS_AGENT（規則五）雖然已在 syncTransactionBonuses() 增加自動結算，
+    // 但客戶的代辦（is_agent）狀態可能在簽約後才確認或需要人工覆寫個案金額，因此保留手動新增作為備援／覆寫管道。
     private static final Set<String> MANUALLY_ONLY_RULE_TYPES = Set.of("BUSINESS_AGENT");
 
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -99,7 +101,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                 """;
     }
 
-    // ---------- 規則一二三八：逐筆合約／收款觸發 ----------
+    // ---------- 規則一二三五八：逐筆合約／收款觸發 ----------
 
     public Map<String, Object> syncTransactionBonuses(SyncTransactionBonusRequest request) {
         requireManager(request.staffId());
@@ -113,7 +115,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
         for (Map<String, Object> row : jdbc.queryForList("""
                 SELECT contract_id, rule_type FROM performance_bonuses
                 WHERE contract_id IS NOT NULL
-                  AND rule_type IN ('OFFICE_RENTAL', 'COMPANY_REGISTRATION', 'TEAMWORK')
+                  AND rule_type IN ('OFFICE_RENTAL', 'COMPANY_REGISTRATION', 'TEAMWORK', 'BUSINESS_AGENT')
                 """)) {
             existingContractRule.add(toLong(row.get("contract_id")) + ":" + row.get("rule_type"));
         }
@@ -220,6 +222,40 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                         }
                     }
                 }
+            }
+        }
+
+        // 規則五：工商代辦獎金（客戶標記為代辦 is_agent=true 時，簽約合約自動結算；
+        // 仍保留 manualCreate() 手動新增作為備援／覆寫，避免代辦狀態於簽約後才確認的情況漏記）
+        Map<String, Object> agentRule = optionalSingleActiveRule("BUSINESS_AGENT");
+        if (agentRule == null) {
+            skippedNoActiveRule.add("BUSINESS_AGENT");
+        } else {
+            BigDecimal unitAmount = (BigDecimal) agentRule.get("unit_amount");
+            Long agentRuleId = toLong(agentRule.get("bonus_rule_id"));
+            for (Map<String, Object> row : jdbc.queryForList("""
+                    SELECT c.contract_id, c.start_date_text, c.signer_staff_id
+                    FROM contracts c
+                    JOIN customers cu ON cu.customer_id = c.customer_id
+                    WHERE cu.is_agent = TRUE AND c.lease_status = '綁約中'
+                    """)) {
+                Long contractId = toLong(row.get("contract_id"));
+                if (existingContractRule.contains(contractId + ":BUSINESS_AGENT")) {
+                    skippedAlreadyRecorded++;
+                    continue;
+                }
+                Long signerId = toLong(row.get("signer_staff_id"));
+                if (signerId == null || unitAmount == null) {
+                    continue;
+                }
+                String period = yearMonthOf((String) row.get("start_date_text"));
+                if (period == null) {
+                    skippedMissingDate++;
+                    continue;
+                }
+                insertBonusRow(signerId, agentRuleId, "BUSINESS_AGENT", contractId, null, null,
+                        period, null, null, unitAmount, "工商代辦獎金", request.staffId());
+                createdCount++;
             }
         }
 
@@ -468,7 +504,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
         return result;
     }
 
-    // ---------- 規則五等無自動結算引擎的規則：手動登打單筆獎金 ----------
+    // ---------- 手動登打單筆獎金（規則五等允許手動新增的規則，可作為自動結算的備援／覆寫） ----------
 
     public Map<String, Object> manualCreate(ManualPerformanceBonusRequest request) {
         requireManager(request.staffId());

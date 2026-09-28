@@ -555,7 +555,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     { value: 'COMPANY_REGISTRATION', label: '二、公司登記業績獎金' },
     { value: 'TEAMWORK', label: '三、同心獎金' },
     { value: 'FULL_OCCUPANCY', label: '四、滿租獎金' },
-    { value: 'BUSINESS_AGENT', label: '五、工商代辦獎金（採手動新增）' },
+    { value: 'BUSINESS_AGENT', label: '五、工商代辦獎金（依客戶代辦標記自動結算，亦可手動新增）' },
     { value: 'REGISTRATION_MULTIPLIER', label: '六、公司登記加乘獎金' },
     { value: 'BRANCH_PERFORMANCE', label: '七、分館績效獎金' },
     { value: 'ANNUAL_PAYMENT', label: '八、公司登記年繳獎金' }

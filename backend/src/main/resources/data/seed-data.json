@@ -578,7 +578,7 @@
       "ruleType": "BUSINESS_AGENT",
       "unitAmount": 800,
       "periodType": "PER_TRANSACTION",
-      "description": "尚未支援自動結算：系統目前無法區分「公司登記」與「工商代辦」案件，且缺少「案件已完成送件流程」狀態欄位，需後續設計並新增欄位後才能回補自動計算。此規則目前僅供記錄。",
+      "description": "客戶標記為代辦（is_agent=true）時，其名下「綁約中」合約於業績結算時自動發放給簽約祕書；亦保留手動新增作為備援／覆寫。",
       "isActive": true
     },
     {
