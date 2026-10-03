@@ -657,6 +657,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   contractCustomerDropdownOpen = signal(false);
   private toastTimeoutId: ReturnType<typeof setTimeout> | null = null;
   private toastExitTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private preserveCustomerSearchStateOnNextEntry = false;
   search = '';
   rentPaymentFilters: RentPaymentSearchFilters = {
     companyName: '',
@@ -984,6 +985,11 @@ export class AppComponent implements OnInit, AfterViewInit {
   private activateView(view: ViewKey): void {
     const enteringNewCustomerPage = view === 'customer-new' && this.activeView() !== 'customer-new';
     const enteringRentPaymentImportPage = view === 'rent-new' && this.activeView() !== 'rent-new';
+    const enteringCustomerSearchPage = view === 'customer-search' && this.activeView() !== 'customer-search';
+    if (enteringCustomerSearchPage && !this.preserveCustomerSearchStateOnNextEntry) {
+      this.resetCustomerSearchOnEntry();
+    }
+    this.preserveCustomerSearchStateOnNextEntry = false;
     this.activeView.set(view);
     this.error.set('');
     this.success.set('');
@@ -1736,6 +1742,27 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.loadCustomers();
   }
 
+  private resetCustomerSearchOnEntry(): void {
+    this.customerFilters = {
+      companyName: '',
+      taxId: '',
+      phone: '',
+      accountInfo: '',
+      ownerName: '',
+      branchId: null,
+      officeNo: '',
+      ownerBirthdayMonth: null,
+      contactBirthdayMonth: null
+    };
+    this.customerPage.set(0);
+    this.customerPageSize.set(20);
+    this.advancedFiltersOpen.set(true);
+    this.customers.set([]);
+    this.customerTotal.set(0);
+    this.selectedCustomer.set(null);
+    this.editingCustomer.set(false);
+  }
+
   loadCustomerSupportData(): void {
     if (this.branches().length) {
       return;
@@ -1759,6 +1786,10 @@ export class AppComponent implements OnInit, AfterViewInit {
   goToNewCustomerStep(step: 1 | 2): void {
     if (step === 2 && !this.newCustomerForm.companyName.trim()) {
       this.requireNewCustomerCompanyName();
+      return;
+    }
+    if (step === 2 && this.newCustomerFieldErrors()['companyName']) {
+      setTimeout(() => this.newCompanyNameInput?.nativeElement.focus(), 0);
       return;
     }
     this.customerNewStep.set(step);
@@ -1791,6 +1822,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   backToCustomerList(): void {
     this.selectedCustomer.set(null);
     this.editingCustomer.set(false);
+    this.preserveCustomerSearchStateOnNextEntry = true;
     this.router.navigateByUrl('/customers');
   }
 
@@ -1838,22 +1870,29 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.saveCustomer(customer.customer_id, this.customerEditForm, '客戶資料已更新。');
   }
 
-  lookupNewCustomerSuggestions(): void {
+  validateNewCustomerCompanyName(): void {
     const term = this.newCustomerForm.companyName.trim();
+    this.clearNewCustomerFieldError('companyName');
+    this.newCustomerOptions.set([]);
     if (!term) {
-      this.newCustomerOptions.set([]);
       return;
     }
     this.api.customerLookup(term).subscribe({
-      next: (rows) => this.newCustomerOptions.set(rows),
+      next: (rows) => {
+        if (term !== this.newCustomerForm.companyName.trim()) {
+          return;
+        }
+        const normalizedTerm = term.toLocaleLowerCase();
+        const isDuplicate = rows.some((row) => row.company_name.trim().toLocaleLowerCase() === normalizedTerm);
+        if (isDuplicate) {
+          this.newCustomerFieldErrors.set({
+            ...this.newCustomerFieldErrors(),
+            companyName: '公司名稱已存在，請改用其他名稱。'
+          });
+        }
+      },
       error: () => this.error.set('無法查詢既有客戶。')
     });
-  }
-
-  fillExistingCustomerName(customer: CustomerSummary): void {
-    this.newCustomerForm.companyName = customer.company_name;
-    this.newCustomerOptions.set([]);
-    this.clearNewCustomerFieldError('companyName');
   }
 
   detectPendingRelationForNewCustomer(): void {
@@ -1953,7 +1992,11 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.requireNewCustomerCompanyName();
       return;
     }
-    this.clearNewCustomerFieldError('companyName');
+    if (this.newCustomerFieldErrors()['companyName']) {
+      this.customerNewStep.set(1);
+      setTimeout(() => this.newCompanyNameInput?.nativeElement.focus(), 0);
+      return;
+    }
     if (this.newCustomerForm.relationMode === 'create'
       && !this.newCustomerForm.relatedCompanyNames.some((name) => name.trim())) {
       this.error.set('建立關聯集團時，請至少填寫一間相關公司。');
@@ -2002,8 +2045,16 @@ export class AppComponent implements OnInit, AfterViewInit {
           this.loadCustomers();
           this.router.navigate(['/customers', value.customer_id]);
         },
-        error: () => {
+        error: (response: HttpErrorResponse) => {
           this.saving.set(false);
+          if (response.status === 400 && response.error?.error === 'companyName already exists') {
+            this.newCustomerFieldErrors.set({ companyName: '公司名稱已存在，請改用其他名稱。' });
+            this.newCustomerOptions.set([]);
+            this.customerNewStep.set(1);
+            this.error.set('');
+            setTimeout(() => this.newCompanyNameInput?.nativeElement.focus(), 0);
+            return;
+          }
           this.error.set('客戶與租約新增失敗，請確認必填欄位與租約狀態。');
         }
       });
@@ -2045,8 +2096,14 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.loadDashboard();
         this.loadCustomers();
       },
-      error: () => {
+      error: (response: HttpErrorResponse) => {
         this.saving.set(false);
+        if (id !== null && response.status === 400 && response.error?.error === 'companyName already exists') {
+          this.customerEditFieldErrors.set({ companyName: '公司名稱已存在，請改用其他名稱。' });
+          this.error.set('');
+          setTimeout(() => this.editCompanyNameInput?.nativeElement.focus(), 0);
+          return;
+        }
         this.error.set('客戶資料儲存失敗。');
       }
     });

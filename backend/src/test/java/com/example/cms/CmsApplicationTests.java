@@ -1339,6 +1339,28 @@ class CmsApplicationTests {
     }
 
     @Test
+    void customersCannotShareCompanyNamesIgnoringWhitespaceOrCase() throws Exception {
+        insertDashboardCustomer("Duplicate Guard Customer", "1980-01-01");
+
+        mvc.perform(post("/api/customers")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "companyName": "  duplicate guard customer  ",
+                                  "updatedBy": 1
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("companyName already exists")));
+
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM customers WHERE LOWER(TRIM(company_name)) = LOWER(?)",
+                Integer.class,
+                "Duplicate Guard Customer");
+        org.junit.jupiter.api.Assertions.assertEquals(1, count);
+    }
+
+    @Test
     void customerWithContractStoresLeaseImagePath() throws Exception {
         MockMultipartFile payload = new MockMultipartFile("payload", "", MediaType.TEXT_PLAIN_VALUE, """
                 {

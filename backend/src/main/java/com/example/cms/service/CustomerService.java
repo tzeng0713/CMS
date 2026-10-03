@@ -202,8 +202,9 @@ public class CustomerService extends CmsJdbcSupport {
 
     @Transactional
     public Map<String, Object> createCustomer(CustomerRequest request) {
-        Long id = nextId("customers", "customer_id");
         String companyName = requiredCompanyName(request.companyName());
+        requireUniqueCompanyName(companyName, null);
+        Long id = nextId("customers", "customer_id");
         String accountantInfo = blankToNull(request.accountantInfo());
         if (accountantInfo == null) {
             accountantInfo = blankToNull(request.referrer());
@@ -243,6 +244,8 @@ public class CustomerService extends CmsJdbcSupport {
     }
 
     public Map<String, Object> updateCustomer(long id, CustomerRequest request) {
+        String companyName = requiredCompanyName(request.companyName());
+        requireUniqueCompanyName(companyName, id);
         String accountantInfo = blankToNull(request.accountantInfo());
         if (accountantInfo == null) {
             accountantInfo = blankToNull(request.referrer());
@@ -271,7 +274,7 @@ public class CustomerService extends CmsJdbcSupport {
                     updated_at = CURRENT_TIMESTAMP
                 WHERE customer_id = ?
                 """,
-                requiredCompanyName(request.companyName()),
+                companyName,
                 blankToNull(request.taxId()),
                 normalizeStatus(request.status()),
                 normalizeRentalItem(request.rentalItem(), request.registrationType()),
@@ -291,7 +294,7 @@ public class CustomerService extends CmsJdbcSupport {
                 normalizeRegistrationType(request.registrationType(), request.rentalItem()),
                 request.updatedBy() == null ? 1L : request.updatedBy(),
                 id);
-        saveRelatedCompanies(id, requiredCompanyName(request.companyName()), request.relatedCompanyNames(),
+        saveRelatedCompanies(id, companyName, request.relatedCompanyNames(),
                 request.relationGroupId(), request.relationGroupNote());
         return customerDetail(id);
     }
@@ -314,6 +317,19 @@ public class CustomerService extends CmsJdbcSupport {
             throw new IllegalArgumentException("companyName is required");
         }
         return value.trim();
+    }
+
+    private void requireUniqueCompanyName(String companyName, Long excludedCustomerId) {
+        String sql = "SELECT COUNT(*) FROM customers WHERE LOWER(TRIM(company_name)) = LOWER(?)";
+        Integer duplicateCount;
+        if (excludedCustomerId == null) {
+            duplicateCount = jdbc.queryForObject(sql, Integer.class, companyName);
+        } else {
+            duplicateCount = jdbc.queryForObject(sql + " AND customer_id <> ?", Integer.class, companyName, excludedCustomerId);
+        }
+        if (duplicateCount != null && duplicateCount > 0) {
+            throw new IllegalArgumentException("companyName already exists");
+        }
     }
 
     private String customerListSql() {

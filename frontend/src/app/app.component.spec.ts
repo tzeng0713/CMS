@@ -112,6 +112,19 @@ describe('new customer flow', () => {
     expect(component.newCustomerFieldErrors()).toEqual({});
   });
 
+  it('marks an existing company name as invalid and does not offer it for selection', () => {
+    const api = {
+      customerLookup: () => of([{ company_name: '既有客戶有限公司' }])
+    } as unknown as CmsApiService;
+    const duplicateComponent = new AppComponent(api, {} as Router);
+    duplicateComponent.newCustomerForm.companyName = '  既有客戶有限公司  ';
+
+    duplicateComponent.validateNewCustomerCompanyName();
+
+    expect(duplicateComponent.newCustomerFieldErrors()['companyName']).toBe('公司名稱已存在，請改用其他名稱。');
+    expect(duplicateComponent.newCustomerOptions()).toEqual([]);
+  });
+
   it('keeps registration validation beside the specific invalid field', () => {
     component.registerForm = {
       account: '',
@@ -163,6 +176,46 @@ describe('new customer flow', () => {
     activateView.call(component, 'customer-new');
 
     expect(component.newCustomerFieldErrors()).toEqual({});
+  });
+
+  it('restores the customer search to its initial state after visiting another page', () => {
+    spyOn(component, 'loadActiveViewData');
+    component.activeView.set('contract-search');
+    component.customerFilters.companyName = '吉';
+    component.customerFilters.phone = '0912';
+    component.customerPage.set(2);
+    component.customerPageSize.set(50);
+    component.advancedFiltersOpen.set(false);
+
+    const activateView = (component as unknown as { activateView: (view: 'customer-search') => void }).activateView;
+    activateView.call(component, 'customer-search');
+
+    expect(component.customerFilters).toEqual({
+      companyName: '',
+      taxId: '',
+      phone: '',
+      accountInfo: '',
+      ownerName: '',
+      branchId: null,
+      officeNo: '',
+      ownerBirthdayMonth: null,
+      contactBirthdayMonth: null
+    });
+    expect(component.customerPage()).toBe(0);
+    expect(component.customerPageSize()).toBe(20);
+    expect(component.advancedFiltersOpen()).toBeTrue();
+  });
+
+  it('keeps customer search conditions when returning from a customer detail', () => {
+    spyOn(component, 'loadActiveViewData');
+    component.activeView.set('customer-detail');
+    component.customerFilters.companyName = '吉';
+    component.backToCustomerList();
+
+    const activateView = (component as unknown as { activateView: (view: 'customer-search') => void }).activateView;
+    activateView.call(component, 'customer-search');
+
+    expect(component.customerFilters.companyName).toBe('吉');
   });
 
   it('shows a neutral no-contract status instead of a customer rental status', () => {

@@ -829,7 +829,7 @@
                       #newCompanyNameInput
                       name="newCompanyName"
                       [(ngModel)]="newCustomerForm.companyName"
-                      (ngModelChange)="lookupNewCustomerSuggestions(); clearNewCustomerFieldError('companyName')"
+                      (ngModelChange)="validateNewCustomerCompanyName()"
                       (blur)="detectPendingRelationForNewCustomer()"
                       placeholder="請輸入公司名稱"
                       [class.field-invalid]="newCustomerFieldErrors()['companyName']"
@@ -840,12 +840,6 @@
                       {{ newCustomerFieldErrors()['companyName'] }}
                     </span>
                   </label>
-                  <div class="lookup-list" *ngIf="newCustomerOptions().length">
-                    <button type="button" *ngFor="let option of newCustomerOptions()" (click)="fillExistingCustomerName(option)">
-                      <strong>{{ option.company_name }}</strong>
-                      <span>負責人 {{ option.owner_name || '-' }} / 統編 {{ option.tax_id || '-' }}</span>
-                    </button>
-                  </div>
                 </div>
                 <label>
                   統一編號
@@ -954,7 +948,6 @@
                 <label class="relation-search-field">
                   搜尋既有集團
                   <input name="relationGroupSearch" [(ngModel)]="relationGroupSearch" (input)="lookupRelationGroups()" placeholder="輸入任一成員名稱，例如 A 公司" autocomplete="off" />
-                  <small>請主動選擇既有成員；系統不會依統編推論關聯性。</small>
                 </label>
                 <div class="relation-group-option-list" *ngIf="relationGroupOptions().length">
                   <button type="button" *ngFor="let group of relationGroupOptions()" (click)="selectRelationGroup(group)">
@@ -973,7 +966,6 @@
                   <div><span>已選擇關聯集團</span><strong>{{ relationGroupLabel(group) }}</strong></div>
                   <div><span>集團備註</span><p>{{ group.group_note || '尚未填寫集團備註' }}</p></div>
                   <div class="relation-member-chips"><span *ngFor="let member of group.members">{{ member.company_name }}</span></div>
-                  <small>集團備註為共用資料，建立此客戶後將以唯讀方式顯示。</small>
                 </article>
               </div>
             </section>
