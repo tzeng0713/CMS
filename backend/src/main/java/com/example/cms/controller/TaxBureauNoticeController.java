@@ -32,12 +32,11 @@ public class TaxBureauNoticeController {
 
     @PostMapping("/generate")
     public ResponseEntity<byte[]> generate(@RequestBody TaxBureauNoticeGenerateRequest request) {
-        byte[] bytes = service.generate(request);
-        String filename = "國稅局通報_" + request.yearMonth() + ".xlsx";
-        String encodedFilename = URLEncoder.encode(filename, StandardCharsets.UTF_8).replace("+", "%20");
+        TaxBureauNoticeService.GeneratedFile file = service.generate(request);
+        String encodedFilename = URLEncoder.encode(file.filename(), StandardCharsets.UTF_8).replace("+", "%20");
         return ResponseEntity.ok()
-                .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"))
+                .contentType(MediaType.parseMediaType(file.contentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFilename)
-                .body(bytes);
+                .body(file.bytes());
     }
 }

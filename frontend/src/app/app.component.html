@@ -3641,7 +3641,8 @@
           <div>
             <h2>國稅局通報</h2>
             <p>
-              依月份彙整當月遷出（遷離）的公司名單，產生通報檔案（.xlsx）供下載送件。系統依租約終止日自動篩選，送出前請確認名單是否需要人工增減。
+              依月份彙整當月遷出（遷離）的公司名單，產生通報檔案（.xlsx 或 .pdf）供下載送件。系統依租約終止日自動篩選，送出前請確認名單是否需要人工增減。
+              匯出 PDF 時，每個已勾選分館的受文者、負責人、電話都必須填寫完整才能下載。
             </p>
           </div>
         </div>
@@ -3651,16 +3652,29 @@
             月份
             <input type="month" name="taxNoticeYearMonth" [(ngModel)]="taxNoticeYearMonth" />
           </label>
+          <label>
+            匯出格式
+            <select name="taxNoticeFormat" [(ngModel)]="taxNoticeFormat">
+              <option value="XLSX">Excel（.xlsx）</option>
+              <option value="PDF">PDF（.pdf）</option>
+            </select>
+          </label>
           <button type="button" (click)="loadTaxBureauNoticePreview()" [disabled]="taxNoticeLoading()">
             {{ taxNoticeLoading() ? '查詢中…' : '查詢' }}
           </button>
           <button
             type="button"
             (click)="generateTaxBureauNotice()"
-            [disabled]="taxNoticeGenerating() || !hasTaxNoticeSelection()"
+            [disabled]="taxNoticeGenerating() || !canGenerateTaxBureauNotice()"
           >
             {{ taxNoticeGenerating() ? '產生中…' : '產生並下載通報檔案' }}
           </button>
+        </div>
+
+        <div class="tax-notice-warning" *ngIf="taxNoticeFormat === 'PDF' && taxNoticeIncompleteBranchNames().length">
+          <strong>
+            以下分館尚未填寫完整的受文者／負責人／電話，請填寫完整後才能匯出 PDF：{{ taxNoticeIncompleteBranchNames().join('、') }}
+          </strong>
         </div>
 
         <div class="tax-notice-warning" *ngIf="taxNoticeUnassigned().length">

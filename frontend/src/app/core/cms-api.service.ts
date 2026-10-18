@@ -613,10 +613,13 @@ export interface TaxBureauNoticeBranchInfo {
   contactPhone?: string;
 }
 
+export type TaxBureauNoticeFormat = 'XLSX' | 'PDF';
+
 export interface TaxBureauNoticeGenerateRequest {
   yearMonth: string;
   items: TaxBureauNoticeSelection[];
   branchInfo: TaxBureauNoticeBranchInfo[];
+  format: TaxBureauNoticeFormat;
 }
 
 @Injectable({ providedIn: 'root' })

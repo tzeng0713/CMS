@@ -14,6 +14,7 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
 import org.apache.poi.ss.util.CellRangeAddress;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -88,10 +89,22 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
         return result;
     }
 
-    public byte[] generate(TaxBureauNoticeGenerateRequest request) {
+    /** Fields shared by both the Excel and PDF renderers for one branch's notice document. */
+    record BranchDocFields(String landlordName, String branchCode, String branchAddress,
+                            String taxOfficeName, String responsiblePerson, String contactPhone) {
+        boolean hasCompleteContactInfo() {
+            return !taxOfficeName.isEmpty() && !responsiblePerson.isEmpty() && !contactPhone.isEmpty();
+        }
+    }
+
+    public record GeneratedFile(byte[] bytes, String contentType, String filename) {
+    }
+
+    public GeneratedFile generate(TaxBureauNoticeGenerateRequest request) {
         if (request.items() == null || request.items().isEmpty()) {
             throw new IllegalArgumentException("items must not be empty");
         }
+        String format = normalizeFormat(request.format());
 
         Map<Long, TaxBureauNoticeBranchInfo> branchInfoMap = new LinkedHashMap<>();
         if (request.branchInfo() != null) {
@@ -137,6 +150,65 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
             sheetGroups.computeIfAbsent(branchId, k -> new ArrayList<>()).add(row);
         }
 
+        for (List<Map<String, Object>> rows : sheetGroups.values()) {
+            rows.sort(Comparator
+                    .comparing((Map<String, Object> r) -> (LocalDate) r.get("noticeDate"))
+                    .thenComparing(r -> (String) r.get("company_name")));
+        }
+
+        Map<Long, BranchDocFields> fieldsByBranch = new LinkedHashMap<>();
+        for (Map.Entry<Long, List<Map<String, Object>>> entry : sheetGroups.entrySet()) {
+            fieldsByBranch.put(entry.getKey(), branchDocFields(entry.getValue().get(0), branchInfoMap.get(entry.getKey())));
+        }
+
+        String yearMonth = blankToEmpty(request.yearMonth());
+        if ("PDF".equals(format)) {
+            List<String> incomplete = new ArrayList<>();
+            for (Map.Entry<Long, List<Map<String, Object>>> entry : sheetGroups.entrySet()) {
+                if (!fieldsByBranch.get(entry.getKey()).hasCompleteContactInfo()) {
+                    String branchName = blankToEmpty((String) entry.getValue().get(0).get("branch_name"));
+                    incomplete.add(branchName.isEmpty() ? ("分館 #" + entry.getKey()) : branchName);
+                }
+            }
+            if (!incomplete.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "以下分館尚未填寫完整的受文者／負責人／電話，請填寫完整後再匯出 PDF：" + String.join("、", incomplete));
+            }
+            byte[] bytes = generatePdf(sheetGroups, fieldsByBranch);
+            return new GeneratedFile(bytes, "application/pdf", "國稅局通報_" + yearMonth + ".pdf");
+        }
+
+        byte[] bytes = generateXlsx(sheetGroups, fieldsByBranch);
+        return new GeneratedFile(bytes,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                "國稅局通報_" + yearMonth + ".xlsx");
+    }
+
+    private BranchDocFields branchDocFields(Map<String, Object> first, TaxBureauNoticeBranchInfo info) {
+        String branchName = blankToEmpty((String) first.get("branch_name"));
+        String branchCompanyName = blankToEmpty((String) first.get("branch_company_name"));
+        String landlordName = branchCompanyName.isEmpty() ? branchName : branchCompanyName;
+        String branchCode = blankToEmpty((String) first.get("branch_code"));
+        String branchAddress = blankToEmpty((String) first.get("branch_address"));
+        String taxOfficeName = info == null ? "" : blankToEmpty(info.taxOfficeName());
+        String responsiblePerson = info == null ? "" : blankToEmpty(info.responsiblePerson());
+        String contactPhone = info == null ? "" : blankToEmpty(info.contactPhone());
+        return new BranchDocFields(landlordName, branchCode, branchAddress, taxOfficeName, responsiblePerson, contactPhone);
+    }
+
+    private String normalizeFormat(String format) {
+        String text = blankToNull(format);
+        if (text == null) {
+            return "XLSX";
+        }
+        String upper = text.toUpperCase();
+        if ("XLSX".equals(upper) || "PDF".equals(upper)) {
+            return upper;
+        }
+        throw new IllegalArgumentException("format must be XLSX or PDF");
+    }
+
+    private byte[] generateXlsx(Map<Long, List<Map<String, Object>>> sheetGroups, Map<Long, BranchDocFields> fieldsByBranch) {
         try (Workbook workbook = new XSSFWorkbook()) {
             CellStyle titleStyle = titleStyle(workbook);
             CellStyle bodyStyle = bodyStyle(workbook);
@@ -147,13 +219,8 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
 
             for (Map.Entry<Long, List<Map<String, Object>>> entry : sheetGroups.entrySet()) {
                 List<Map<String, Object>> rows = entry.getValue();
-                rows.sort(Comparator
-                        .comparing((Map<String, Object> r) -> (LocalDate) r.get("noticeDate"))
-                        .thenComparing(r -> (String) r.get("company_name")));
-                Map<String, Object> first = rows.get(0);
-                long branchId = ((Number) first.get("branch_id")).longValue();
-                TaxBureauNoticeBranchInfo info = branchInfoMap.get(branchId);
-                buildSheet(workbook, rows, info, usedSheetNames, titleStyle, bodyStyle, headerStyle, tableCellStyle, noCellStyle);
+                BranchDocFields fields = fieldsByBranch.get(entry.getKey());
+                buildSheet(workbook, rows, fields, usedSheetNames, titleStyle, bodyStyle, headerStyle, tableCellStyle, noCellStyle);
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -164,18 +231,33 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
         }
     }
 
-    private void buildSheet(Workbook workbook, List<Map<String, Object>> rows, TaxBureauNoticeBranchInfo info,
+    private byte[] generatePdf(Map<Long, List<Map<String, Object>>> sheetGroups, Map<Long, BranchDocFields> fieldsByBranch) {
+        try (PDDocument document = new PDDocument()) {
+            TaxBureauNoticePdfRenderer renderer = new TaxBureauNoticePdfRenderer(document);
+            for (Map.Entry<Long, List<Map<String, Object>>> entry : sheetGroups.entrySet()) {
+                renderer.renderBranch(entry.getValue(), fieldsByBranch.get(entry.getKey()));
+            }
+            renderer.finish();
+
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            document.save(out);
+            return out.toByteArray();
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to generate tax bureau notice pdf", e);
+        }
+    }
+
+    private void buildSheet(Workbook workbook, List<Map<String, Object>> rows, BranchDocFields fields,
                              Set<String> usedSheetNames, CellStyle titleStyle, CellStyle bodyStyle, CellStyle headerStyle,
                              CellStyle tableCellStyle, CellStyle noCellStyle) {
         Map<String, Object> first = rows.get(0);
         String branchName = blankToEmpty((String) first.get("branch_name"));
-        String branchCompanyName = blankToEmpty((String) first.get("branch_company_name"));
-        String landlordName = branchCompanyName.isEmpty() ? branchName : branchCompanyName;
-        String branchCode = blankToEmpty((String) first.get("branch_code"));
-        String branchAddress = blankToEmpty((String) first.get("branch_address"));
-        String taxOfficeName = info == null ? "" : blankToEmpty(info.taxOfficeName());
-        String responsiblePerson = info == null ? "" : blankToEmpty(info.responsiblePerson());
-        String contactPhone = info == null ? "" : blankToEmpty(info.contactPhone());
+        String landlordName = fields.landlordName();
+        String branchCode = fields.branchCode();
+        String branchAddress = fields.branchAddress();
+        String taxOfficeName = fields.taxOfficeName();
+        String responsiblePerson = fields.responsiblePerson();
+        String contactPhone = fields.contactPhone();
 
         Sheet sheet = workbook.createSheet(sheetName(branchCode.isEmpty() ? branchName : branchCode, usedSheetNames));
 

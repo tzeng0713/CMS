@@ -2,7 +2,8 @@
 
 本文件說明國稅局通報（Tax Bureau Notice）功能的資料模型、業務邏輯、API 與前端操作流程，作為後續維護與驗收的依據。此功能僅處理「遷出（遷離）」通報，不處理遷入。對應程式碼位置：
 
-- 後端：`backend/src/main/java/com/example/cms/controller/TaxBureauNoticeController.java`、`.../service/TaxBureauNoticeService.java`
+- 後端：`backend/src/main/java/com/example/cms/controller/TaxBureauNoticeController.java`、`.../service/TaxBureauNoticeService.java`、`.../service/TaxBureauNoticePdfRenderer.java`
+- 字型：`backend/src/main/resources/fonts/NotoSansTC-{Regular,Bold}.ttf`（PDF 匯出用，內嵌於輸出檔中以支援中文字）
 - 資料庫：`backend/src/main/resources/schema.sql`（`branches.company_name`）、`.../config/SchemaMigrationRunner.java`
 - 前端：`frontend/src/app/app.component.ts`、`app.component.html`（`activeView() === 'tax-bureau-notices'` 區塊）、`frontend/src/app/core/cms-api.service.ts`
 
@@ -15,7 +16,8 @@
 | 查詢本月通報名單 | 依月份自動篩選出當月應通報國稅局「遷出」的公司，依分館分組顯示 |
 | 勾選通報對象 | 每筆公司預設勾選，秘書可依實際情況取消勾選特定公司（例如已知作廢、找不到人等邊界情境） |
 | 填寫分館通報資訊 | 每個分館群組可填寫受文者（國稅局分局）、負責人、電話；瀏覽器會記住上次填過的值，下次同分館免重填 |
-| 產生並下載通報檔案 | 依勾選內容產生 `.xlsx`，比照公司既有紙本通報公文格式，每個分館各一個分頁，供秘書下載後送件 |
+| 選擇匯出格式 | 秘書可選擇產生 `.xlsx`（Excel，每分館一個分頁）或 `.pdf`（每分館一頁起，比照紙本公文排版，超過 15 筆名單自動分頁並重複表頭） |
+| 產生並下載通報檔案 | 依勾選內容與所選格式產生檔案，比照公司既有紙本通報公文格式，供秘書下載後送件。**匯出 PDF 時，每個已勾選分館的受文者／負責人／電話三欄都必須填寫完整才能下載**（前端擋在送出前，後端 `generate()` 也會重新驗證並回傳 `400`，見第 5.4 節） |
 
 此功能**沒有自動排程**，全部由秘書手動在畫面上按「查詢」「產生並下載通報檔案」觸發（詳見第 8 節已知限制）。
 
@@ -61,15 +63,16 @@
 
 ---
 
-## 5. Excel 產生邏輯
+## 5. 通報檔案產生邏輯
 
 ### 5.1 觸發與範圍
 
-- 前端把目前勾選的公司（`contractId`）與各分館填寫的通報資訊（受文者／負責人／電話）一併送到後端。
-- 後端**重新用 `contractId` 查一次資料庫**取得公司名稱、統一編號、通報日期、所屬分館等權威資料，不直接信任前端傳來的公司資料內容（僅信任「選了哪些 `contractId`」），避免竄改請求偽造通報內容。
+- 前端把目前勾選的公司（`contractId`）、各分館填寫的通報資訊（受文者／負責人／電話）與選擇的 `format`（`XLSX` 或 `PDF`，省略時預設 `XLSX`）一併送到後端 `POST /api/tax-bureau-notices/generate`。
+- 後端**重新用 `contractId` 查一次資料庫**取得公司名稱、統一編號、通報日期、所屬分館等權威資料，不直接信任前端傳來的公司資料內容（僅信任「選了哪些 `contractId`」與「選了哪種格式」），避免竄改請求偽造通報內容。
 - 若某筆 `contractId` 找不到、沒有分館、或終止日期欄位是空的，直接回傳 `400` 錯誤並中止整個產生流程（不會產生部分成功的檔案）。
+- `TaxBureauNoticeService.BranchDocFields` 是 Excel／PDF 共用的分館欄位物件（發文者／門牌／地址／受文者／負責人／電話），兩種格式都由同一份已排序、已查完權威資料的 `sheetGroups`（分館 ID → 該分館租約清單）產生，避免邏輯分岔。
 
-### 5.2 版面格式
+### 5.2 版面格式（Excel 與 PDF 共用內容）
 
 比照公司既有紙本通報公文樣式（`受文者／發文者／發文日／主旨／說明／名單表格／公司資訊`），每個分館各自一個工作表分頁：
 
@@ -95,13 +98,30 @@ No. | 通報日期 | 門牌 | 公司名稱 | 統一編號
 - 「發文日」一律採產生檔案當下的日期（`Asia/Taipei` 時區），非租約日期。
 - 「公司名稱」（發文者／公司欄位）優先使用 `branches.company_name`，若該分館未填則退回使用 `branches.branch_name`。
 - 「門牌」欄位使用 `branches.branch_code`。
+- 名單固定至少 15 列（不足補空白列），超過 15 筆則列出全部。
+
+**Excel（`.xlsx`，`TaxBureauNoticeService#generateXlsx`）**
+- 每個分館各自一個工作表分頁，欄寬自動依內容調整（`autoSizeColumn`）。
 - 字級：標題「通報」二字 36pt、粗體；其餘所有文字（含表頭與資料列）15pt，表頭另加粗體。
 - 分頁名稱：使用門牌（例如 `221`）；若門牌未填則退回用分館名稱。名稱長度會截斷到 Excel 上限 31 字元，重複時自動加上流水號後綴。
 
+**PDF（`.pdf`，`TaxBureauNoticePdfRenderer`）**
+- A4 直式，每個分館從新的一頁開始；若該分館名單列數超過一頁容納範圍，自動分頁並在續頁重複欄位表頭（頁尾的「公司／負責人／地址／電話」只會出現在名單結束後的那一頁）。
+- 中文使用內嵌的 Noto Sans TC 字型（Regular／Bold，SIL Open Font License），僅內嵌實際用到的字（`PDType0Font.load(..., true)` 子集化），避免檔案過大與缺字問題。
+- 若公司名稱過長超出欄寬，字級會自動縮小（最小 6pt）以維持單行顯示，不會跨欄位重疊。
+- 不繪製任何公司大小章圖樣，紅色印章需在列印後由人工蓋印（表格與頁尾文字之間保留的空白即為蓋印區域）。
+
 ### 5.3 下載
 
-- 後端以 `ResponseEntity<byte[]>` 回傳，`Content-Type` 為 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`，`Content-Disposition` 帶下載檔名 `國稅局通報_{yearMonth}.xlsx`。
+- 後端以 `ResponseEntity<byte[]>` 回傳；`Content-Type`、副檔名依 `format` 決定：Excel 為 `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` + `國稅局通報_{yearMonth}.xlsx`，PDF 為 `application/pdf` + `國稅局通報_{yearMonth}.pdf`。
 - 前端收到 `Blob` 後用 `URL.createObjectURL` + 觸發 `<a download>` 完成瀏覽器下載，不經過任何中介頁面。
+
+### 5.4 PDF 專屬的「資料填寫完整」檢查
+
+- 僅 PDF 格式會檢查；Excel 沿用原本行為，受文者／負責人／電話留空也能產生檔案。
+- **前端**：`taxNoticeIncompleteBranchNames()` 檢查所有「已勾選名單所屬」的分館，受文者／負責人／電話三欄是否皆非空白；只要有一個分館缺漏，「產生並下載通報檔案」按鈕會被 disable，畫面上方也會列出缺漏的分館名稱提示秘書。
+- **後端**：`TaxBureauNoticeService#generate()` 在組好 `sheetGroups` 後，若 `format=PDF`，會重新用 `BranchDocFields#hasCompleteContactInfo()` 檢查每個分館，任一分館缺漏即丟出 `IllegalArgumentException`（對應 HTTP `400`，訊息列出缺漏的分館名稱），不信任前端是否真的擋住送出。
+- 這個檢查**不會**連帶寫回資料庫，受文者／負責人／電話仍然只存在瀏覽器 `localStorage`（見第 6 節）。
 
 ---
 
@@ -118,7 +138,7 @@ No. | 通報日期 | 門牌 | 公司名稱 | 統一編號
 | Method | Path | 說明 |
 |---|---|---|
 | GET | `/api/tax-bureau-notices/preview?yearMonth=YYYY-MM` | 查詢當月遷出通報候選名單，依分館分組回傳，另附「未指定分館」清單 |
-| POST | `/api/tax-bureau-notices/generate` | 依勾選的 `{contractId}` 清單與各分館填寫的通報資訊，產生並回傳 `.xlsx` 檔案（binary） |
+| POST | `/api/tax-bureau-notices/generate` | 依勾選的 `{contractId}` 清單、各分館填寫的通報資訊與 `format`（`XLSX`\|`PDF`，預設 `XLSX`），產生並回傳檔案（binary）。`format=PDF` 時，若有分館受文者／負責人／電話未填寫完整，回傳 `400` 並附上缺漏分館名稱 |
 
 ---
 
@@ -129,5 +149,6 @@ No. | 通報日期 | 門牌 | 公司名稱 | 統一編號
 - **沒有「已通報」狀態**：同一個月內可以重複查詢、重複產生同一批公司的通報檔案，系統不會標記或阻擋重複產生，也無法從系統直接看出「這個月到底寄出去了沒」。
 - **未指定辦公室／分館的租約無法通報**：這類候選人只能在畫面上看到提示清單，需先到租約管理補上 `office_id` 才能被系統正確分組，本功能不會自動猜測或修正。
 - **受文者／負責人／電話僅存在瀏覽器 `localStorage`**：換電腦、換瀏覽器或清除瀏覽器資料後需要重新輸入；也代表這三個欄位沒有跨裝置同步、沒有操作紀錄可查。
-- **後端以 `contractId` 重新查權威資料，但仍信任前端送來的受文者／負責人／電話文字內容**：這三個欄位會原樣寫進公文，沒有格式或必填檢查，錯字或忘記填都會直接反映在下載的檔案上。
-- **沒有專屬單元測試**：驗證方式為手動以 H2 seed data 啟動後端、呼叫 `preview`／`generate` API 確認回傳內容與 Excel 內容正確，以及以 Playwright 驅動瀏覽器操作一次完整流程；未納入自動化測試套件。
+- **後端以 `contractId` 重新查權威資料，但仍信任前端送來的受文者／負責人／電話文字內容**：這三個欄位會原樣寫進公文（僅 PDF 會強制檢查「有沒有填」，不檢查格式或是否真實），錯字會直接反映在下載的檔案上。
+- **PDF 內嵌字型固定為 Noto Sans TC**：若未來需要符合特定公文字型（例如標楷體）才能用印，需另外取得授權字型並替換 `backend/src/main/resources/fonts/` 下的檔案，`TaxBureauNoticePdfRenderer` 目前寫死讀取 `NotoSansTC-Regular.ttf`／`NotoSansTC-Bold.ttf`。
+- **沒有專屬單元測試**：驗證方式為手動以 H2 seed data 啟動後端、呼叫 `preview`／`generate`（含 PDF 格式與分頁情境）API 確認回傳內容、Excel 內容與 PDF 版面正確，以及以 Playwright 驅動瀏覽器操作一次完整流程；未納入自動化測試套件。

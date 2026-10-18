@@ -5,6 +5,7 @@ import java.util.List;
 public record TaxBureauNoticeGenerateRequest(
         String yearMonth,
         List<TaxBureauNoticeSelection> items,
-        List<TaxBureauNoticeBranchInfo> branchInfo
+        List<TaxBureauNoticeBranchInfo> branchInfo,
+        String format
 ) {
 }

@@ -41,6 +41,7 @@ import {
   SalesTargetPayload,
   SalesTargetSearchFilters,
   TaxBureauNoticeBranchInfo,
+  TaxBureauNoticeFormat,
   TaxBureauNoticeGroup,
   TaxBureauNoticeItem,
   RentPaymentSearchFilters
@@ -519,6 +520,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   refundEditBankCodeSearch = '';
   refundEditBankCodeOptions = signal<BankCode[]>([]);
   taxNoticeYearMonth = this.currentMonthValue();
+  taxNoticeFormat: TaxBureauNoticeFormat = 'XLSX';
   taxNoticeGroups = signal<TaxBureauNoticeGroup[]>([]);
   taxNoticeUnassigned = signal<TaxBureauNoticeItem[]>([]);
   taxNoticeSelected = signal<Set<string>>(new Set());
@@ -3602,6 +3604,27 @@ export class AppComponent implements OnInit, AfterViewInit {
     return this.taxNoticeSelected().size > 0;
   }
 
+  private selectedTaxNoticeGroups(): TaxBureauNoticeGroup[] {
+    const selected = this.taxNoticeSelected();
+    return this.taxNoticeGroups().filter((group) => group.items.some((item) => selected.has(this.taxNoticeItemKey(item))));
+  }
+
+  taxNoticeIncompleteBranchNames(): string[] {
+    if (this.taxNoticeFormat !== 'PDF') {
+      return [];
+    }
+    return this.selectedTaxNoticeGroups()
+      .filter((group) => {
+        const info = this.taxNoticeBranchInfoFor(group.branchId);
+        return !info.taxOfficeName?.trim() || !info.responsiblePerson?.trim() || !info.contactPhone?.trim();
+      })
+      .map((group) => group.branchName);
+  }
+
+  canGenerateTaxBureauNotice(): boolean {
+    return this.hasTaxNoticeSelection() && this.taxNoticeIncompleteBranchNames().length === 0;
+  }
+
   generateTaxBureauNotice(): void {
     const selected = this.taxNoticeSelected();
     const items = this.taxNoticeGroups()
@@ -3612,11 +3635,18 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.error.set('請至少選擇一筆要通報的公司。');
       return;
     }
+    const incompleteBranches = this.taxNoticeIncompleteBranchNames();
+    if (incompleteBranches.length) {
+      this.error.set(`匯出 PDF 前，請先完整填寫以下分館的受文者／負責人／電話：${incompleteBranches.join('、')}`);
+      return;
+    }
     const branchIds = new Set(this.taxNoticeGroups().map((group) => group.branchId));
     const branchInfo = Array.from(branchIds).map((branchId) => this.taxNoticeBranchInfoFor(branchId));
+    const format = this.taxNoticeFormat;
+    const extension = format === 'PDF' ? 'pdf' : 'xlsx';
 
     this.taxNoticeGenerating.set(true);
-    this.api.generateTaxBureauNotice({ yearMonth: this.taxNoticeYearMonth, items, branchInfo }).subscribe({
+    this.api.generateTaxBureauNotice({ yearMonth: this.taxNoticeYearMonth, items, branchInfo, format }).subscribe({
       next: (blob) => {
         this.taxNoticeGenerating.set(false);
         this.error.set('');
@@ -3624,15 +3654,35 @@ export class AppComponent implements OnInit, AfterViewInit {
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = `國稅局通報_${this.taxNoticeYearMonth}.xlsx`;
+        link.download = `國稅局通報_${this.taxNoticeYearMonth}.${extension}`;
         link.click();
         URL.revokeObjectURL(url);
       },
-      error: () => {
+      error: (err: HttpErrorResponse) => {
         this.taxNoticeGenerating.set(false);
-        this.error.set('國稅局通報檔案產生失敗。');
+        this.handleTaxNoticeGenerateError(err);
       }
     });
+  }
+
+  private handleTaxNoticeGenerateError(err: HttpErrorResponse): void {
+    const fallback = '國稅局通報檔案產生失敗。';
+    const errorBlob = err?.error;
+    if (errorBlob instanceof Blob && errorBlob.type.includes('json')) {
+      errorBlob.text().then(
+        (text) => {
+          try {
+            const parsed = JSON.parse(text);
+            this.error.set(parsed?.error ? `${fallback}（${parsed.error}）` : fallback);
+          } catch {
+            this.error.set(fallback);
+          }
+        },
+        () => this.error.set(fallback)
+      );
+      return;
+    }
+    this.error.set(fallback);
   }
 
   triggerBackup(): void {
