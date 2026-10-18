@@ -35,27 +35,18 @@ import java.util.Set;
 @Service
 public class TaxBureauNoticeService extends CmsJdbcSupport {
 
-    private static final String MOVE_OUT = "MOVE_OUT";
-    private static final String MOVE_IN = "MOVE_IN";
     private static final int MIN_TABLE_ROWS = 15;
 
     public TaxBureauNoticeService(JdbcTemplate jdbc) {
         super(jdbc);
     }
 
-    public Map<String, Object> preview(String yearMonth, String type) {
+    public Map<String, Object> preview(String yearMonth) {
         YearMonth ym = parseYearMonth(yearMonth);
-        String normalizedType = normalizeType(type);
 
-        List<Map<String, Object>> items = new ArrayList<>();
-        if (!MOVE_IN.equals(normalizedType)) {
-            items.addAll(candidateItems("termination_date_text", MOVE_OUT, ym));
-        }
-        if (!MOVE_OUT.equals(normalizedType)) {
-            items.addAll(candidateItems("start_date_text", MOVE_IN, ym));
-        }
+        List<Map<String, Object>> items = candidateItems(ym);
 
-        Map<String, Map<String, Object>> groups = new LinkedHashMap<>();
+        Map<Object, Map<String, Object>> groups = new LinkedHashMap<>();
         List<Map<String, Object>> unassigned = new ArrayList<>();
 
         for (Map<String, Object> item : items) {
@@ -64,16 +55,13 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
                 unassigned.add(item);
                 continue;
             }
-            String key = branchId + "|" + item.get("moveType");
-            Map<String, Object> group = groups.computeIfAbsent(key, k -> {
+            Map<String, Object> group = groups.computeIfAbsent(branchId, k -> {
                 Map<String, Object> g = new LinkedHashMap<>();
                 g.put("branchId", branchId);
                 g.put("branchName", item.get("branch_name"));
                 g.put("branchCompanyName", item.get("branch_company_name"));
                 g.put("branchCode", item.get("branch_code"));
                 g.put("branchAddress", item.get("branch_address"));
-                g.put("moveType", item.get("moveType"));
-                g.put("moveTypeLabel", item.get("moveTypeLabel"));
                 g.put("items", new ArrayList<Map<String, Object>>());
                 return g;
             });
@@ -91,13 +79,10 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
         }
 
         List<Map<String, Object>> sortedGroups = new ArrayList<>(groups.values());
-        sortedGroups.sort(Comparator
-                .comparing((Map<String, Object> g) -> String.valueOf(g.get("branchName")))
-                .thenComparing(g -> String.valueOf(g.get("moveType"))));
+        sortedGroups.sort(Comparator.comparing((Map<String, Object> g) -> String.valueOf(g.get("branchName"))));
 
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("yearMonth", ym.toString());
-        result.put("type", normalizedType);
         result.put("groups", sortedGroups);
         result.put("unassigned", unassigned);
         return result;
@@ -117,18 +102,14 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
             }
         }
 
-        Map<String, List<Map<String, Object>>> sheetGroups = new LinkedHashMap<>();
+        Map<Long, List<Map<String, Object>>> sheetGroups = new LinkedHashMap<>();
         for (TaxBureauNoticeSelection selection : request.items()) {
             requiredId(selection.contractId(), "contractId");
-            if (!MOVE_OUT.equals(selection.moveType()) && !MOVE_IN.equals(selection.moveType())) {
-                throw new IllegalArgumentException("moveType must be MOVE_OUT or MOVE_IN");
-            }
-            String dateColumn = MOVE_OUT.equals(selection.moveType()) ? "termination_date_text" : "start_date_text";
 
             Map<String, Object> row;
             try {
-                row = jdbc.queryForMap(("""
-                        SELECT co.contract_id, co.%s AS notice_date_text,
+                row = jdbc.queryForMap("""
+                        SELECT co.contract_id, co.termination_date_text AS notice_date_text,
                                c.company_name, c.tax_id,
                                b.branch_id, b.branch_name, b.company_name AS branch_company_name,
                                b.branch_code, b.branch_address
@@ -138,7 +119,7 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
                         LEFT JOIN staff ss ON ss.staff_id = co.signer_staff_id
                         LEFT JOIN branches b ON b.branch_id = COALESCE(ps.branch_id, ss.branch_id)
                         WHERE co.contract_id = ?
-                        """).formatted(dateColumn), selection.contractId());
+                        """, selection.contractId());
             } catch (EmptyResultDataAccessException e) {
                 throw new IllegalArgumentException("contractId not found: " + selection.contractId());
             }
@@ -148,14 +129,12 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
             }
             LocalDate noticeDate = localDate((String) row.get("notice_date_text"));
             if (noticeDate == null) {
-                throw new IllegalArgumentException("contract " + selection.contractId() + " is missing a valid date for " + selection.moveType());
+                throw new IllegalArgumentException("contract " + selection.contractId() + " is missing a valid termination date");
             }
-            row.put("move_type", selection.moveType());
             row.put("noticeDate", noticeDate);
 
             long branchId = ((Number) row.get("branch_id")).longValue();
-            String key = branchId + "|" + selection.moveType();
-            sheetGroups.computeIfAbsent(key, k -> new ArrayList<>()).add(row);
+            sheetGroups.computeIfAbsent(branchId, k -> new ArrayList<>()).add(row);
         }
 
         try (Workbook workbook = new XSSFWorkbook()) {
@@ -166,7 +145,7 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
             CellStyle noCellStyle = noCellStyle(workbook);
             Set<String> usedSheetNames = new LinkedHashSet<>();
 
-            for (Map.Entry<String, List<Map<String, Object>>> entry : sheetGroups.entrySet()) {
+            for (Map.Entry<Long, List<Map<String, Object>>> entry : sheetGroups.entrySet()) {
                 List<Map<String, Object>> rows = entry.getValue();
                 rows.sort(Comparator
                         .comparing((Map<String, Object> r) -> (LocalDate) r.get("noticeDate"))
@@ -189,8 +168,6 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
                              Set<String> usedSheetNames, CellStyle titleStyle, CellStyle bodyStyle, CellStyle headerStyle,
                              CellStyle tableCellStyle, CellStyle noCellStyle) {
         Map<String, Object> first = rows.get(0);
-        String moveType = (String) first.get("move_type");
-        boolean isMoveOut = MOVE_OUT.equals(moveType);
         String branchName = blankToEmpty((String) first.get("branch_name"));
         String branchCompanyName = blankToEmpty((String) first.get("branch_company_name"));
         String landlordName = branchCompanyName.isEmpty() ? branchName : branchCompanyName;
@@ -200,7 +177,7 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
         String responsiblePerson = info == null ? "" : blankToEmpty(info.responsiblePerson());
         String contactPhone = info == null ? "" : blankToEmpty(info.contactPhone());
 
-        Sheet sheet = workbook.createSheet(sheetName(branchCode.isEmpty() ? branchName : branchCode, isMoveOut, usedSheetNames));
+        Sheet sheet = workbook.createSheet(sheetName(branchCode.isEmpty() ? branchName : branchCode, usedSheetNames));
 
         int r = 0;
         Row titleRow = sheet.createRow(r++);
@@ -212,18 +189,12 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
         writeText(sheet, r++, "受文者 : " + taxOfficeName, bodyStyle);
         writeText(sheet, r++, "發文者 : " + landlordName, bodyStyle);
         writeText(sheet, r++, "發文日 : " + rocSpaced(today()), bodyStyle);
-        writeText(sheet, r++, "主  旨 : 通報公司行號" + (isMoveOut ? "已遷離本址" : "遷入本址"), bodyStyle);
+        writeText(sheet, r++, "主  旨 : 通報公司行號已遷離本址", bodyStyle);
 
-        if (isMoveOut) {
-            writeText(sheet, r++, "說  明 : ", bodyStyle);
-            writeText(sheet, r++, "一.以下公司因租約到期，並已遷離" + branchAddress, bodyStyle);
-            writeText(sheet, r++, "二.通報名單如下", bodyStyle);
-            r++;
-        } else {
-            r++;
-            writeText(sheet, r++, "名單如下：", bodyStyle);
-            r++;
-        }
+        writeText(sheet, r++, "說  明 : ", bodyStyle);
+        writeText(sheet, r++, "一.以下公司因租約到期，並已遷離" + branchAddress, bodyStyle);
+        writeText(sheet, r++, "二.通報名單如下", bodyStyle);
+        r++;
 
         Row headerRow = sheet.createRow(r++);
         String[] headers = {"No.", "通報日期", "門牌", "公司名稱", "統一編號"};
@@ -324,10 +295,9 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
         style.setBorderRight(BorderStyle.THIN);
     }
 
-    private String sheetName(String base, boolean isMoveOut, Set<String> usedSheetNames) {
+    private String sheetName(String base, Set<String> usedSheetNames) {
         String cleaned = (base == null || base.isBlank() ? "分館" : base).replaceAll("[\\\\/?*\\[\\]:]", "-");
-        String suffix = isMoveOut ? "" : "遷入";
-        String candidate = cleaned + suffix;
+        String candidate = cleaned;
         if (candidate.length() > 31) {
             candidate = candidate.substring(0, 31);
         }
@@ -343,9 +313,9 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
         return result;
     }
 
-    private List<Map<String, Object>> candidateItems(String dateColumn, String moveType, YearMonth ym) {
-        List<Map<String, Object>> rows = jdbc.queryForList(("""
-                SELECT co.contract_id, co.customer_id, co.%s AS notice_date_text,
+    private List<Map<String, Object>> candidateItems(YearMonth ym) {
+        List<Map<String, Object>> rows = jdbc.queryForList("""
+                SELECT co.contract_id, co.customer_id, co.termination_date_text AS notice_date_text,
                        c.company_name, c.tax_id,
                        o.office_no, b.branch_id, b.branch_name, b.company_name AS branch_company_name,
                        b.branch_code, b.branch_address
@@ -355,8 +325,8 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
                 LEFT JOIN staff ps ON ps.staff_id = co.partner_staff_id
                 LEFT JOIN staff ss ON ss.staff_id = co.signer_staff_id
                 LEFT JOIN branches b ON b.branch_id = COALESCE(ps.branch_id, ss.branch_id)
-                WHERE co.%s IS NOT NULL AND co.%s <> ''
-                """).formatted(dateColumn, dateColumn, dateColumn));
+                WHERE co.termination_date_text IS NOT NULL AND co.termination_date_text <> ''
+                """);
 
         List<Map<String, Object>> result = new ArrayList<>();
         LocalDate monthStart = ym.atDay(1);
@@ -377,17 +347,11 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
             item.put("branch_company_name", row.get("branch_company_name"));
             item.put("branch_code", row.get("branch_code"));
             item.put("branch_address", row.get("branch_address"));
-            item.put("moveType", moveType);
-            item.put("moveTypeLabel", moveTypeLabel(moveType));
             item.put("noticeDate", noticeDate);
             item.put("noticeDateText", rocSlash(noticeDate));
             result.add(item);
         }
         return result;
-    }
-
-    private String moveTypeLabel(String moveType) {
-        return MOVE_OUT.equals(moveType) ? "遷離" : "遷入";
     }
 
     private YearMonth parseYearMonth(String yearMonth) {
@@ -399,18 +363,6 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
         } catch (DateTimeParseException e) {
             throw new IllegalArgumentException("yearMonth must be in yyyy-MM format");
         }
-    }
-
-    private String normalizeType(String type) {
-        String text = blankToNull(type);
-        if (text == null) {
-            return "BOTH";
-        }
-        String upper = text.toUpperCase();
-        if (MOVE_OUT.equals(upper) || MOVE_IN.equals(upper) || "BOTH".equals(upper)) {
-            return upper;
-        }
-        throw new IllegalArgumentException("type must be MOVE_OUT, MOVE_IN or BOTH");
     }
 
     private LocalDate today() {

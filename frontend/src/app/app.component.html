@@ -3641,7 +3641,7 @@
           <div>
             <h2>國稅局通報</h2>
             <p>
-              依月份彙整當月遷離／遷入的公司名單，產生通報檔案（.xlsx）供下載送件。系統依租約起租日／終止日自動篩選，送出前請確認名單是否需要人工增減。
+              依月份彙整當月遷出（遷離）的公司名單，產生通報檔案（.xlsx）供下載送件。系統依租約終止日自動篩選，送出前請確認名單是否需要人工增減。
             </p>
           </div>
         </div>
@@ -3650,14 +3650,6 @@
           <label>
             月份
             <input type="month" name="taxNoticeYearMonth" [(ngModel)]="taxNoticeYearMonth" />
-          </label>
-          <label>
-            類型
-            <select name="taxNoticeType" [(ngModel)]="taxNoticeType">
-              <option value="BOTH">遷離＋遷入</option>
-              <option value="MOVE_OUT">僅遷離</option>
-              <option value="MOVE_IN">僅遷入</option>
-            </select>
           </label>
           <button type="button" (click)="loadTaxBureauNoticePreview()" [disabled]="taxNoticeLoading()">
             {{ taxNoticeLoading() ? '查詢中…' : '查詢' }}
@@ -3675,7 +3667,7 @@
           <strong>以下租約未設定辦公室／分館，無法自動歸入通報名單，請先至租約管理補上辦公室資料：</strong>
           <ul>
             <li *ngFor="let item of taxNoticeUnassigned()">
-              {{ item.companyName }}（{{ item.taxId }}）－{{ item.moveTypeLabel }} {{ item.noticeDateText }}
+              {{ item.companyName }}（{{ item.taxId }}）－{{ item.noticeDateText }}
             </li>
           </ul>
         </div>
@@ -3683,7 +3675,7 @@
         <div class="tax-notice-group" *ngFor="let group of taxNoticeGroups()">
           <div class="tax-notice-group-header">
             <div>
-              <h3>{{ group.branchName }}（{{ group.moveTypeLabel }}）</h3>
+              <h3>{{ group.branchName }}</h3>
               <p>門牌 {{ group.branchCode }}．{{ group.branchAddress }}</p>
             </div>
             <label class="tax-notice-select-all">
@@ -3698,7 +3690,7 @@
               <input
                 [ngModel]="taxNoticeBranchInfoFor(group.branchId).taxOfficeName"
                 (ngModelChange)="updateTaxNoticeBranchInfo(group.branchId, 'taxOfficeName', $event)"
-                name="taxOffice{{ group.branchId }}-{{ group.moveType }}"
+                name="taxOffice{{ group.branchId }}"
                 placeholder="例：台北市國稅局大安分局"
               />
             </label>
@@ -3707,7 +3699,7 @@
               <input
                 [ngModel]="taxNoticeBranchInfoFor(group.branchId).responsiblePerson"
                 (ngModelChange)="updateTaxNoticeBranchInfo(group.branchId, 'responsiblePerson', $event)"
-                name="taxPerson{{ group.branchId }}-{{ group.moveType }}"
+                name="taxPerson{{ group.branchId }}"
               />
             </label>
             <label>
@@ -3715,7 +3707,7 @@
               <input
                 [ngModel]="taxNoticeBranchInfoFor(group.branchId).contactPhone"
                 (ngModelChange)="updateTaxNoticeBranchInfo(group.branchId, 'contactPhone', $event)"
-                name="taxPhone{{ group.branchId }}-{{ group.moveType }}"
+                name="taxPhone{{ group.branchId }}"
               />
             </label>
           </div>

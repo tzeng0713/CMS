@@ -577,16 +577,12 @@ export interface SettlePeriodBonusResult {
   unassignedContractCount: number;
 }
 
-export type TaxBureauNoticeType = 'MOVE_OUT' | 'MOVE_IN' | 'BOTH';
-
 export interface TaxBureauNoticeItem {
   contractId: number;
   customerId: number;
   companyName: string;
   taxId: string | null;
   officeNo: string | null;
-  moveType: 'MOVE_OUT' | 'MOVE_IN';
-  moveTypeLabel: string;
   noticeDate: string;
   noticeDateText: string;
 }
@@ -597,21 +593,17 @@ export interface TaxBureauNoticeGroup {
   branchCompanyName: string | null;
   branchCode: string | null;
   branchAddress: string | null;
-  moveType: 'MOVE_OUT' | 'MOVE_IN';
-  moveTypeLabel: string;
   items: TaxBureauNoticeItem[];
 }
 
 export interface TaxBureauNoticePreview {
   yearMonth: string;
-  type: TaxBureauNoticeType;
   groups: TaxBureauNoticeGroup[];
   unassigned: TaxBureauNoticeItem[];
 }
 
 export interface TaxBureauNoticeSelection {
   contractId: number;
-  moveType: 'MOVE_OUT' | 'MOVE_IN';
 }
 
 export interface TaxBureauNoticeBranchInfo {
@@ -952,9 +944,9 @@ export class CmsApiService {
     return this.http.get<Record<string, unknown>>(`${this.baseUrl}/metadata`);
   }
 
-  taxBureauNoticePreview(yearMonth: string, type: TaxBureauNoticeType = 'BOTH'): Observable<TaxBureauNoticePreview> {
+  taxBureauNoticePreview(yearMonth: string): Observable<TaxBureauNoticePreview> {
     return this.http.get<TaxBureauNoticePreview>(`${this.baseUrl}/tax-bureau-notices/preview`, {
-      params: { yearMonth, type }
+      params: { yearMonth }
     });
   }
 

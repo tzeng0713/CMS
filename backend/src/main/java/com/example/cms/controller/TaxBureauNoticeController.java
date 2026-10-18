@@ -26,9 +26,8 @@ public class TaxBureauNoticeController {
     }
 
     @GetMapping("/preview")
-    public Map<String, Object> preview(@RequestParam String yearMonth,
-                                        @RequestParam(required = false) String type) {
-        return service.preview(yearMonth, type);
+    public Map<String, Object> preview(@RequestParam String yearMonth) {
+        return service.preview(yearMonth);
     }
 
     @PostMapping("/generate")

@@ -43,7 +43,6 @@ import {
   TaxBureauNoticeBranchInfo,
   TaxBureauNoticeGroup,
   TaxBureauNoticeItem,
-  TaxBureauNoticeType,
   RentPaymentSearchFilters
 } from './core/cms-api.service';
 
@@ -520,7 +519,6 @@ export class AppComponent implements OnInit, AfterViewInit {
   refundEditBankCodeSearch = '';
   refundEditBankCodeOptions = signal<BankCode[]>([]);
   taxNoticeYearMonth = this.currentMonthValue();
-  taxNoticeType: TaxBureauNoticeType = 'BOTH';
   taxNoticeGroups = signal<TaxBureauNoticeGroup[]>([]);
   taxNoticeUnassigned = signal<TaxBureauNoticeItem[]>([]);
   taxNoticeSelected = signal<Set<string>>(new Set());
@@ -3522,7 +3520,7 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   loadTaxBureauNoticePreview(): void {
     this.taxNoticeLoading.set(true);
-    this.api.taxBureauNoticePreview(this.taxNoticeYearMonth, this.taxNoticeType).subscribe({
+    this.api.taxBureauNoticePreview(this.taxNoticeYearMonth).subscribe({
       next: (preview) => {
         this.taxNoticeLoading.set(false);
         this.taxNoticeGroups.set(preview.groups);
@@ -3548,7 +3546,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   taxNoticeItemKey(item: TaxBureauNoticeItem): string {
-    return `${item.contractId}-${item.moveType}`;
+    return `${item.contractId}`;
   }
 
   isTaxNoticeItemSelected(item: TaxBureauNoticeItem): boolean {
@@ -3609,7 +3607,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     const items = this.taxNoticeGroups()
       .flatMap((group) => group.items)
       .filter((item) => selected.has(this.taxNoticeItemKey(item)))
-      .map((item) => ({ contractId: item.contractId, moveType: item.moveType }));
+      .map((item) => ({ contractId: item.contractId }));
     if (!items.length) {
       this.error.set('請至少選擇一筆要通報的公司。');
       return;
