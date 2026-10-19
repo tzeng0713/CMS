@@ -122,4 +122,29 @@ class RolePermissionsIntegrationTests {
         mvc.perform(put("/api/contracts/{id}", branchOneContract).session(general).contentType("application/json")
                 .content("{}" )).andExpect(status().isForbidden());
     }
+
+    @Test
+    void contractIdFilterAlsoRespectsStaffBranch() throws Exception {
+        MockHttpSession general = login("staff"); // branch 2
+        MockHttpSession manager = login("manager");
+        Long branchOneContract = jdbc.queryForObject("""
+                SELECT co.contract_id FROM contracts co JOIN offices o ON o.office_id = co.office_id
+                WHERE o.branch_id = 1 LIMIT 1
+                """, Long.class);
+        Long branchTwoContract = jdbc.queryForObject("""
+                SELECT co.contract_id FROM contracts co JOIN offices o ON o.office_id = co.office_id
+                WHERE o.branch_id = 2 LIMIT 1
+                """, Long.class);
+
+        mvc.perform(get("/api/contracts").param("contractId", branchTwoContract.toString()).session(general))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].contract_id").value(branchTwoContract));
+        mvc.perform(get("/api/contracts").param("contractId", branchOneContract.toString()).session(general))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(0));
+        mvc.perform(get("/api/contracts").param("contractId", branchOneContract.toString()).session(manager))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1));
+    }
 }

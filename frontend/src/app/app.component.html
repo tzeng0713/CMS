@@ -311,8 +311,6 @@
       <p class="page-description" *ngIf="pageDescription()">{{ pageDescription() }}</p>
     </section>
 
-    <p class="error" *ngIf="error()">{{ error() }}</p>
-
     <section class="home-view" *ngIf="activeView() === 'home' && dashboard() as d">
       <section class="kpis home-kpis" aria-label="客戶服務統計">
         <article>
@@ -1158,7 +1156,6 @@
               <div><span>付款週期</span><strong>{{ value(editing, 'payment_months') }}</strong></div>
               <div><span>起租日期</span><strong>{{ value(editing, 'start_date_text') }}</strong></div>
               <div><span>到期日期</span><strong>{{ value(editing, 'end_date_text') }}</strong></div>
-              <div><span>退租日期</span><strong>{{ value(editing, 'termination_date_text') }}</strong></div>
               <div><span>租金</span><strong>{{ money(editing['rent']) }}</strong></div>
               <div><span>押金</span><strong>{{ money(editing['deposit']) }}</strong></div>
             </div>
@@ -1168,6 +1165,10 @@
                 <select name="editContractLeaseStatus" [(ngModel)]="contractEditForm.leaseStatus">
                   <option *ngFor="let status of contractStatusOptions" [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
                 </select>
+              </label>
+              <label class="contract-edit-status">
+                退租日期
+                <input type="date" name="editContractTerminationDate" [(ngModel)]="contractEditForm.terminationDateText" />
               </label>
               <div class="form-actions">
                 <button type="submit" [disabled]="saving()">儲存修改</button>
@@ -1707,7 +1708,7 @@
         <div class="panel-header">
           <div>
             <h2>分館管理</h2>
-            <p>所有角色可查看各分館；主管可新增或修改全部分館，其他角色可修改所屬分館。</p>
+            <p>所有角色皆可查看全部分館；僅主管可新增分館，其他角色僅能修改所屬分館。</p>
           </div>
           <button type="button" *ngIf="canManageBranch() && !creatingBranch()" (click)="startCreateBranch()">新增分館</button>
         </div>
@@ -2060,12 +2061,8 @@
         </div>
 
         <section class="filter-bar charge-list-filter">
-          <label>
-            收費清單編號
-            <input type="number" name="chargeListFilterId" [(ngModel)]="chargeListFilters.chargeListId" />
-          </label>
           <label class="filter-customer-lookup">
-            客戶
+            客戶名稱
             <input
               type="search"
               name="chargeListFilterCustomer"
@@ -2085,8 +2082,8 @@
             </div>
           </label>
           <label>
-            租約編號
-            <input type="number" name="chargeListFilterContractId" [(ngModel)]="chargeListFilters.contractId" />
+            費用月份
+            <input type="month" name="chargeListFilterFeeMonth" [(ngModel)]="chargeListFilters.feeMonth" />
           </label>
           <label>
             單據狀態
@@ -2095,27 +2092,6 @@
               <option [ngValue]="1">已結清</option>
               <option [ngValue]="2">未結清</option>
             </select>
-          </label>
-          <label>
-            費用月份
-            <input type="month" name="chargeListFilterFeeMonth" [(ngModel)]="chargeListFilters.feeMonth" />
-          </label>
-          <label>
-            開單人
-            <select name="chargeListFilterCreatedBy" [(ngModel)]="chargeListFilters.createdBy">
-              <option [ngValue]="null">全部</option>
-              <option *ngFor="let staffMember of staffOptions()" [ngValue]="staffMember['staff_id']">
-                {{ staffMember['staff_name'] }}
-              </option>
-            </select>
-          </label>
-          <label>
-            開單日期（起）
-            <input type="date" name="chargeListFilterIssuedFrom" [(ngModel)]="chargeListFilters.issuedFrom" />
-          </label>
-          <label>
-            開單日期（迄）
-            <input type="date" name="chargeListFilterIssuedTo" [(ngModel)]="chargeListFilters.issuedTo" />
           </label>
           <div class="filter-actions">
             <button type="button" (click)="searchChargeLists()">搜尋</button>
@@ -2613,6 +2589,14 @@
                     [class.approved]="row.refund_status === '審核通過'"
                     [class.refunded]="row.refund_status === '已退款'"
                     [class.cancelled]="row.refund_status === '已取消'">{{ row.refund_status }}</span>
+              <button
+                type="button"
+                class="ghost compact-button"
+                *ngIf="row.refund_status === '已退款' && row.contract_lease_status === '綁約中'"
+                (click)="$event.stopPropagation(); goToContractManagementForRefund(row.contract_id)"
+              >
+                前往租約管理
+              </button>
             </span>
           </div>
         </div>
@@ -2662,6 +2646,14 @@
                           [class.approved]="detail.refund_status === '審核通過'"
                           [class.refunded]="detail.refund_status === '已退款'"
                           [class.cancelled]="detail.refund_status === '已取消'">{{ detail.refund_status }}</span>
+                    <button
+                      type="button"
+                      class="ghost compact-button"
+                      *ngIf="detail.refund_status === '已退款' && detail.contract_lease_status === '綁約中'"
+                      (click)="goToContractManagementForRefund(detail.contract_id)"
+                    >
+                      前往租約管理
+                    </button>
                   </dd>
                 </div>
                 <div>
@@ -2683,6 +2675,10 @@
                 <div>
                   <dt>解約類型</dt>
                   <dd>{{ detail.mid_term_termination ? '中途解約' : '合約到期解約' }}</dd>
+                </div>
+                <div>
+                  <dt>租約到期日（參考）</dt>
+                  <dd>{{ detail.contract_end_date_text || '-' }}</dd>
                 </div>
                 <div>
                   <dt>建立人 / 時間</dt>
@@ -2769,12 +2765,13 @@
               <input type="text" [value]="editing.contract_id" readonly />
             </label>
             <label>
-              退款原因
+              <span>退款原因<span class="required-mark" *ngIf="editing.refund_status !== '審核通過'">*</span></span>
               <input
                 type="text"
                 name="editRefundReason"
                 [(ngModel)]="refundEditForm.refundReason"
                 [readonly]="editing.refund_status === '審核通過'"
+                [class.field-invalid]="refundEditFieldErrors()['refundReason']"
               />
             </label>
             <label>
@@ -2804,9 +2801,15 @@
                 step="0.01"
                 name="editRefundDeductionTotal"
                 [(ngModel)]="refundEditForm.deductionTotal"
-                [readonly]="editing.refund_status === '審核通過'"
+                [readonly]="editing.refund_status === '審核通過' || refundEditForm.chargeListId !== null"
               />
+              <span class="hint" *ngIf="editing.refund_status !== '審核通過' && refundEditForm.chargeListId !== null">
+                已由收費清單帶入，金額唯讀
+              </span>
             </label>
+            <p class="hint" *ngIf="editing.contract_end_date_text">
+              租約到期日參考：{{ editing.contract_end_date_text }}（供核對是否為中途解約）
+            </p>
             <label class="checkbox-label">
               <input
                 type="checkbox"
@@ -2814,32 +2817,77 @@
                 [(ngModel)]="refundEditForm.midTermTermination"
                 [disabled]="editing.refund_status === '審核通過'"
               />
-              中途解約（可退押金上限為一個月租金；未勾選視為合約到期解約）
+              中途解約（可退押金為押金的一半；未勾選視為合約到期解約，全額退還押金）
             </label>
             <label>
-              退款方式
-              <input type="text" name="editRefundPaymentMethod" [(ngModel)]="refundEditForm.paymentMethod" />
+              <span>退款方式<span class="required-mark">*</span></span>
+              <input
+                type="text"
+                name="editRefundPaymentMethod"
+                [(ngModel)]="refundEditForm.paymentMethod"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['paymentMethod']"
+              />
+            </label>
+            <label class="bank-code-lookup">
+              <span>收款銀行代碼<span class="required-mark">*</span></span>
+              <input
+                type="search"
+                name="editRefundBankCode"
+                placeholder="輸入代碼或銀行名稱搜尋"
+                [(ngModel)]="refundEditBankCodeSearch"
+                (ngModelChange)="lookupRefundEditBankCode()"
+                (focus)="lookupRefundEditBankCode()"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['bankCode']"
+              />
+              <div class="lookup-list" *ngIf="refundEditBankCodeOptions().length">
+                <button type="button" *ngFor="let option of refundEditBankCodeOptions()" (click)="selectRefundEditBankCode(option)">
+                  <strong>{{ option.code }}</strong>
+                  <span>{{ option.name }}</span>
+                </button>
+              </div>
             </label>
             <label>
-              收款銀行代碼
-              <input type="text" name="editRefundBankCode" [(ngModel)]="refundEditForm.bankCode" />
+              <span>收款帳號<span class="required-mark">*</span></span>
+              <input
+                type="text"
+                name="editRefundBankAccount"
+                [(ngModel)]="refundEditForm.bankAccount"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['bankAccount']"
+              />
             </label>
             <label>
-              收款帳號
-              <input type="text" name="editRefundBankAccount" [(ngModel)]="refundEditForm.bankAccount" />
-            </label>
-            <label>
-              收款戶名
-              <input type="text" name="editRefundBankAccountName" [(ngModel)]="refundEditForm.bankAccountName" />
+              <span>收款戶名<span class="required-mark">*</span></span>
+              <input
+                type="text"
+                name="editRefundBankAccountName"
+                [(ngModel)]="refundEditForm.bankAccountName"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['bankAccountName']"
+              />
             </label>
             <label *ngIf="editing.refund_status === '審核通過'">
-              退款日期
-              <input type="date" name="editRefundedAt" [(ngModel)]="refundEditForm.refundedAt" />
+              <span>退款日期<span class="required-mark">*</span></span>
+              <input
+                type="date"
+                name="editRefundedAt"
+                [(ngModel)]="refundEditForm.refundedAt"
+                required
+                [class.field-invalid]="refundEditFieldErrors()['refundedAt']"
+              />
             </label>
             <label>
               目前狀態（系統維護，不可修改）
               <input type="text" [value]="editing.refund_status" readonly />
             </label>
+            <p class="error wide" *ngIf="refundOverDeductedNotice() as shortfallNotice">
+              {{ shortfallNotice.error }}
+              <button type="button" class="ghost compact-button" (click)="goToChargeListForRefundShortfall()">
+                前往收費清單管理{{ shortfallNotice.chargeListId ? '（收費清單 #' + shortfallNotice.chargeListId + '）' : '' }}
+              </button>
+            </p>
             <div class="form-actions wide">
               <button type="submit" [disabled]="saving()">
                 {{ editing.refund_status === '審核通過' ? '確認退款完成' : '儲存修改' }}
@@ -2888,24 +2936,42 @@
           *ngIf="selectedRefundCustomer() as refundCustomer"
         >
           <label>
+            公司名稱（不可修改）
+            <input type="text" [value]="refundCustomer.company_name" readonly />
+          </label>
+          <label>
             租約
             <select name="newRefundContract" [(ngModel)]="newRefundForm.contractId" required>
               <option [ngValue]="null">請選擇租約</option>
-              <option *ngFor="let contract of refundCustomer.contracts" [ngValue]="contract['contract_id']">
+              <option *ngFor="let contract of activeContracts(refundCustomer.contracts)" [ngValue]="contract['contract_id']">
                 {{ contract['office_no'] || '登記' }} / 押金 {{ money(contract['deposit']) }}
               </option>
             </select>
           </label>
+          <p class="hint" *ngIf="selectedContractEndDate(refundCustomer.contracts, newRefundForm.contractId) as endDate">
+            租約到期日參考：{{ endDate }}（供核對是否為中途解約）
+          </p>
           <label class="wide">
-            匯入收費清單編號（選填）
-            <input type="number" name="refundImportChargeListId" [(ngModel)]="refundImportChargeListId" />
+            匯入收費清單（選填）
+            <select name="refundImportChargeListId" [(ngModel)]="refundImportChargeListId">
+              <option [ngValue]="null">不匯入</option>
+              <option *ngFor="let chargeList of unsettledChargeLists(refundCustomer.chargeLists)" [ngValue]="chargeList['charge_list_id']">
+                #{{ chargeList['charge_list_id'] }} · {{ chargeList['fee_month'] || '退款差額' }} · {{ money(chargeList['total_amount']) }}
+              </option>
+            </select>
             <button type="button" class="ghost compact-button" (click)="importChargeListIntoRefund(newRefundForm)">
               帶入扣款金額
             </button>
           </label>
           <label>
-            退款原因
-            <input type="text" name="newRefundReason" [(ngModel)]="newRefundForm.refundReason" required />
+            <span>退款原因<span class="required-mark">*</span></span>
+            <input
+              type="text"
+              name="newRefundReason"
+              [(ngModel)]="newRefundForm.refundReason"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['refundReason']"
+            />
           </label>
           <label>
             調整金額（可正可負）
@@ -2917,27 +2983,68 @@
           </label>
           <label>
             扣款總額
-            <input type="number" min="0" step="0.01" name="newRefundDeductionTotal" [(ngModel)]="newRefundForm.deductionTotal" />
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              name="newRefundDeductionTotal"
+              [(ngModel)]="newRefundForm.deductionTotal"
+              [readonly]="newRefundForm.chargeListId !== null"
+            />
+            <span class="hint" *ngIf="newRefundForm.chargeListId !== null">已由收費清單帶入，金額唯讀</span>
           </label>
           <label class="checkbox-label">
             <input type="checkbox" name="newRefundMidTermTermination" [(ngModel)]="newRefundForm.midTermTermination" />
-            中途解約（可退押金上限為一個月租金；未勾選視為合約到期解約）
+            中途解約（可退押金為押金的一半；未勾選視為合約到期解約，全額退還押金）
           </label>
           <label>
-            退款方式
-            <input type="text" name="newRefundPaymentMethod" [(ngModel)]="newRefundForm.paymentMethod" />
+            <span>退款方式<span class="required-mark">*</span></span>
+            <input
+              type="text"
+              name="newRefundPaymentMethod"
+              [(ngModel)]="newRefundForm.paymentMethod"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['paymentMethod']"
+            />
+          </label>
+          <label class="bank-code-lookup">
+            <span>收款銀行代碼<span class="required-mark">*</span></span>
+            <input
+              type="search"
+              name="newRefundBankCode"
+              placeholder="輸入代碼或銀行名稱搜尋"
+              [(ngModel)]="newRefundBankCodeSearch"
+              (ngModelChange)="lookupNewRefundBankCode()"
+              (focus)="lookupNewRefundBankCode()"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['bankCode']"
+            />
+            <div class="lookup-list" *ngIf="newRefundBankCodeOptions().length">
+              <button type="button" *ngFor="let option of newRefundBankCodeOptions()" (click)="selectNewRefundBankCode(option)">
+                <strong>{{ option.code }}</strong>
+                <span>{{ option.name }}</span>
+              </button>
+            </div>
           </label>
           <label>
-            收款銀行代碼
-            <input type="text" name="newRefundBankCode" [(ngModel)]="newRefundForm.bankCode" />
+            <span>收款帳號<span class="required-mark">*</span></span>
+            <input
+              type="text"
+              name="newRefundBankAccount"
+              [(ngModel)]="newRefundForm.bankAccount"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['bankAccount']"
+            />
           </label>
           <label>
-            收款帳號
-            <input type="text" name="newRefundBankAccount" [(ngModel)]="newRefundForm.bankAccount" />
-          </label>
-          <label>
-            收款戶名
-            <input type="text" name="newRefundBankAccountName" [(ngModel)]="newRefundForm.bankAccountName" />
+            <span>收款戶名<span class="required-mark">*</span></span>
+            <input
+              type="text"
+              name="newRefundBankAccountName"
+              [(ngModel)]="newRefundForm.bankAccountName"
+              required
+              [class.field-invalid]="newRefundFieldErrors()['bankAccountName']"
+            />
           </label>
           <label>
             送出後狀態
@@ -2946,6 +3053,12 @@
               <option value="待審核">送交主管審核</option>
             </select>
           </label>
+          <p class="error wide" *ngIf="refundOverDeductedNotice() as shortfallNotice">
+            {{ shortfallNotice.error }}
+            <button type="button" class="ghost compact-button" (click)="goToChargeListForRefundShortfall()">
+              前往收費清單管理{{ shortfallNotice.chargeListId ? '（收費清單 #' + shortfallNotice.chargeListId + '）' : '' }}
+            </button>
+          </p>
           <div class="form-actions wide">
             <button type="submit" [disabled]="saving()">新增退款</button>
           </div>
@@ -3266,12 +3379,12 @@
             <div class="panel-header">
               <div>
                 <h3>結算觸發</h3>
-                <p>規則一／二／三／四／六／八一次結算，可重複執行，已入帳的資料不會重複計算。套用月份：{{ monthLabel(settleMonthlyYearMonth) }}</p>
+                <p>規則一／二／三／四／五／六／八一次結算，可重複執行，已入帳的資料不會重複計算。套用月份：{{ monthLabel(settleMonthlyYearMonth) }}</p>
               </div>
             </div>
             <div class="settle-actions">
               <div class="settle-action-item">
-                <p>規則一／二／三／八：辦公室出租、公司登記業績、同心、公司登記年繳（逐筆合約／收款觸發）；規則四／六：滿租獎金、登記加乘獎金（按月結算，套用上方「目前檢視月份」）</p>
+                <p>規則一／二／三／五／八：辦公室出租、公司登記業績、同心、工商代辦、公司登記年繳（逐筆合約／收款觸發，規則五依客戶「代辦」標記自動判斷）；規則四／六：滿租獎金、登記加乘獎金（按月結算，套用上方「目前檢視月份」）</p>
                 <button type="button" [disabled]="settlingBusiness()" (click)="settleBusinessBonuses()">業績結算</button>
               </div>
             </div>
@@ -3282,7 +3395,7 @@
             <div class="panel-header">
               <div>
                 <h3>手動新增業績獎金</h3>
-                <p>規則五：工商代辦獎金尚無自動結算引擎，主管核對「新簽約檔案」後在此登打單筆獎金。</p>
+                <p>規則五：工商代辦獎金已可依客戶「代辦」標記自動結算，此處保留作為備援／覆寫，供主管核對「新簽約檔案」後登打單筆獎金。</p>
               </div>
             </div>
             <div class="manual-bonus-fields">

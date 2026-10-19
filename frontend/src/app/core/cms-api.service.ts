@@ -276,6 +276,7 @@ export interface BranchPayload {
   bankAccount?: string;
   bankBranch?: string;
   bankAccountName?: string;
+  staffId?: number;
 }
 
 export interface RoleSummary {
@@ -309,6 +310,7 @@ export interface ContractSearchFilters {
   startDateText?: string;
   endDateText?: string;
   leaseStatus?: string;
+  contractId?: number | null;
 }
 
 export interface RentPaymentSearchFilters {
@@ -391,6 +393,8 @@ export interface RefundSummary {
   matched_company_name: string | null;
   tax_id: string | null;
   contract_deposit: number | null;
+  contract_end_date_text: string | null;
+  contract_lease_status: string | null;
   refund_reason: string | null;
   adjustment_amount: number;
   adjustment_note: string | null;
@@ -452,6 +456,13 @@ export interface ImportChargeListResult {
   chargeListId: number;
   baseAmount: number;
   deductionTotal: number;
+}
+
+export interface RefundOverDeductedError {
+  error: string;
+  chargeListId: number | null;
+  customerId: number | null;
+  contractId: number | null;
 }
 
 export interface BonusRule {

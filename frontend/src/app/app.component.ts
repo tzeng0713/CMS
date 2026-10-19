@@ -5,6 +5,7 @@ import { FormsModule } from '@angular/forms';
 import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import html2canvas from 'html2canvas';
 import { forkJoin } from 'rxjs';
+import { BANK_CODES, BankCode } from './core/bank-codes';
 import {
   CmsApiService,
   AuthUser,
@@ -36,6 +37,7 @@ import {
   RefundPayload,
   RefundSearchFilters,
   RefundSummary,
+  RefundOverDeductedError,
   SalesTarget,
   SalesTargetPayload,
   SalesTargetSearchFilters,
@@ -529,6 +531,13 @@ export class AppComponent implements OnInit, AfterViewInit {
   refundCustomerOptions = signal<CustomerSummary[]>([]);
   selectedRefundCustomer = signal<CustomerDetail | null>(null);
   refundImportChargeListId: number | null = null;
+  refundOverDeductedNotice = signal<RefundOverDeductedError | null>(null);
+  newRefundFieldErrors = signal<Record<string, boolean>>({});
+  refundEditFieldErrors = signal<Record<string, boolean>>({});
+  newRefundBankCodeSearch = '';
+  newRefundBankCodeOptions = signal<BankCode[]>([]);
+  refundEditBankCodeSearch = '';
+  refundEditBankCodeOptions = signal<BankCode[]>([]);
   taxNoticeYearMonth = this.currentMonthValue();
   taxNoticeType: TaxBureauNoticeType = 'BOTH';
   taxNoticeGroups = signal<TaxBureauNoticeGroup[]>([]);
@@ -565,7 +574,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     { value: 'COMPANY_REGISTRATION', label: '二、公司登記業績獎金' },
     { value: 'TEAMWORK', label: '三、同心獎金' },
     { value: 'FULL_OCCUPANCY', label: '四、滿租獎金' },
-    { value: 'BUSINESS_AGENT', label: '五、工商代辦獎金（採手動新增）' },
+    { value: 'BUSINESS_AGENT', label: '五、工商代辦獎金（依客戶代辦標記自動結算，亦可手動新增）' },
     { value: 'REGISTRATION_MULTIPLIER', label: '六、公司登記加乘獎金' },
     { value: 'BRANCH_PERFORMANCE', label: '七、分館績效獎金' },
     { value: 'ANNUAL_PAYMENT', label: '八、公司登記年繳獎金' }
@@ -656,7 +665,24 @@ export class AppComponent implements OnInit, AfterViewInit {
   loading = signal(false);
   saving = signal(false);
   editingCustomer = signal(false);
-  error = signal('');
+  /**
+   * 每次呼叫 error.set(...) 都會同步觸發浮動 toast（即使訊息文字跟上次相同），
+   * 讓使用者不會因為錯誤重複出現而看不到提示。用一般的 signal() + effect() 監看
+   * 需要 Angular 注入環境（NG0203），但部分既有單元測試會直接 `new AppComponent(...)`
+   * 略過 DI，因此改用不依賴注入環境的包裝寫法。
+   */
+  private readonly errorSignal = signal('', { equal: () => false });
+  readonly error: { (): string; set(value: string): void } = Object.assign(
+    () => this.errorSignal(),
+    {
+      set: (value: string) => {
+        this.errorSignal.set(value);
+        if (value) {
+          this.showToast(value, 'error');
+        }
+      }
+    }
+  );
   success = signal('');
   toast = signal<Toast | null>(null);
   toastLeaving = signal(false);
@@ -865,7 +891,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.toastLeaving.set(false);
         this.toastExitTimeoutId = null;
       }, 200);
-    }, 3400);
+    }, kind === 'error' ? 4800 : 3400);
   }
 
   clearNewCustomerFieldError(field: string): void {
@@ -1371,6 +1397,7 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.refundTotal.set(0);
     this.editingRefund.set(null);
     this.viewingRefund.set(null);
+    this.refundOverDeductedNotice.set(null);
     this.staffRows.set([]);
     this.myProfileChange.set(null);
     this.pendingProfileChangeRows.set([]);
@@ -1532,7 +1559,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       taxId: form.taxId.trim() || undefined,
       bankAccount: form.bankAccount.trim() || undefined,
       bankBranch: form.bankBranch.trim() || undefined,
-      bankAccountName: form.bankAccountName.trim() || undefined
+      bankAccountName: form.bankAccountName.trim() || undefined,
+      staffId: this.currentStaffId()
     };
   }
 
@@ -3916,7 +3944,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       return;
     }
     this.api.customerLookup(term).subscribe({
-      next: (rows) => this.refundCustomerOptions.set(rows),
+      next: (rows) => this.refundCustomerOptions.set(rows.filter((row) => row.lease_status !== '已解約')),
       error: () => this.error.set('無法查詢客戶資料。')
     });
   }
@@ -3928,16 +3956,36 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.refundCustomerSearch = value.company_name;
         this.refundCustomerOptions.set([]);
         this.newRefundForm.customerId = value.customer_id;
-        const firstContract = value.contracts?.[0] as Record<string, unknown> | undefined;
+        const firstContract = this.activeContracts(value.contracts)[0];
         this.newRefundForm.contractId = firstContract ? Number(firstContract['contract_id']) : null;
       },
       error: () => this.error.set('無法載入客戶租約資料。')
     });
   }
 
+  activeContracts(contracts: Array<Record<string, unknown>> | undefined): Array<Record<string, unknown>> {
+    return (contracts ?? []).filter((contract) => String(contract['lease_status']) !== '已解約');
+  }
+
+  selectedContractEndDate(
+    contracts: Array<Record<string, unknown>> | undefined,
+    contractId: number | null
+  ): string | null {
+    if (!contractId) {
+      return null;
+    }
+    const match = (contracts ?? []).find((contract) => Number(contract['contract_id']) === Number(contractId));
+    const endDate = match ? match['end_date_text'] : null;
+    return endDate ? String(endDate) : null;
+  }
+
+  unsettledChargeLists(chargeLists: Array<Record<string, unknown>> | undefined): Array<Record<string, unknown>> {
+    return (chargeLists ?? []).filter((chargeList) => Number(chargeList['status']) !== 1);
+  }
+
   importChargeListIntoRefund(form: RefundForm): void {
     if (!this.refundImportChargeListId) {
-      this.error.set('請輸入收費清單編號。');
+      this.error.set('請選擇收費清單。');
       return;
     }
     this.api.importChargeListForRefund(this.refundImportChargeListId).subscribe({
@@ -3962,8 +4010,20 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.error.set('請先搜尋並選擇客戶與租約。');
       return;
     }
-    if (!this.newRefundForm.refundReason.trim()) {
-      this.error.set('請填寫退款原因。');
+    const newRefundMissingFields = this.requiredRefundFieldErrors(this.newRefundForm);
+    this.newRefundFieldErrors.set(newRefundMissingFields);
+    if (Object.keys(newRefundMissingFields).length) {
+      this.error.set(
+        newRefundMissingFields['refundReason']
+          ? '請填寫退款原因。'
+          : '請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。'
+      );
+      return;
+    }
+    const newRefundShortfall = this.checkNewRefundOverDeducted();
+    if (newRefundShortfall) {
+      this.refundOverDeductedNotice.set(newRefundShortfall);
+      this.error.set(newRefundShortfall.error);
       return;
     }
     if (!window.confirm('確定要新增這筆退款資料嗎？')) {
@@ -3971,12 +4031,16 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
     this.newRefundForm.staffId = this.currentStaffId();
     this.saving.set(true);
+    this.refundOverDeductedNotice.set(null);
     this.api.createRefund(this.toRefundPayload(this.newRefundForm)).subscribe({
       next: (result) => {
         this.saving.set(false);
         this.error.set('');
         this.success.set(result.message ?? '退款資料已新增。');
         this.newRefundForm = emptyRefundForm();
+        this.newRefundFieldErrors.set({});
+        this.newRefundBankCodeSearch = '';
+        this.newRefundBankCodeOptions.set([]);
         this.refundCustomerSearch = '';
         this.selectedRefundCustomer.set(null);
         this.refundImportChargeListId = null;
@@ -3984,12 +4048,197 @@ export class AppComponent implements OnInit, AfterViewInit {
       },
       error: (err: HttpErrorResponse) => {
         this.saving.set(false);
-        this.error.set(this.branchApiErrorMessage(err, '退款資料新增失敗，請確認必填欄位與金額是否正確。'));
+        this.handleRefundApiError(err, '退款資料新增失敗，請確認必填欄位與金額是否正確。');
       }
     });
   }
 
+  private requiredRefundFieldErrors(form: RefundForm, requireRefundedAt = false): Record<string, boolean> {
+    const errors: Record<string, boolean> = {};
+    if (!form.refundReason.trim()) errors['refundReason'] = true;
+    if (!form.paymentMethod.trim()) errors['paymentMethod'] = true;
+    if (!form.bankCode.trim()) errors['bankCode'] = true;
+    if (!form.bankAccount.trim()) errors['bankAccount'] = true;
+    if (!form.bankAccountName.trim()) errors['bankAccountName'] = true;
+    if (requireRefundedAt && !form.refundedAt.trim()) errors['refundedAt'] = true;
+    return errors;
+  }
+
+  bankCodeMatches(term: string): BankCode[] {
+    const query = term.trim();
+    if (!query) {
+      return BANK_CODES;
+    }
+    const lower = query.toLowerCase();
+    return BANK_CODES.filter(
+      (bank) => bank.code.includes(query) || bank.name.includes(query) || bank.name.toLowerCase().includes(lower)
+    );
+  }
+
+  bankCodeDisplayText(code: string): string {
+    if (!code) {
+      return '';
+    }
+    const match = BANK_CODES.find((bank) => bank.code === code);
+    return match ? `${match.code} ${match.name}` : code;
+  }
+
+  lookupNewRefundBankCode(): void {
+    this.newRefundBankCodeOptions.set(this.bankCodeMatches(this.newRefundBankCodeSearch));
+  }
+
+  selectNewRefundBankCode(option: BankCode): void {
+    this.newRefundForm.bankCode = option.code;
+    this.newRefundBankCodeSearch = `${option.code} ${option.name}`;
+    this.newRefundBankCodeOptions.set([]);
+  }
+
+  lookupRefundEditBankCode(): void {
+    this.refundEditBankCodeOptions.set(this.bankCodeMatches(this.refundEditBankCodeSearch));
+  }
+
+  selectRefundEditBankCode(option: BankCode): void {
+    this.refundEditForm.bankCode = option.code;
+    this.refundEditBankCodeSearch = `${option.code} ${option.name}`;
+    this.refundEditBankCodeOptions.set([]);
+  }
+
+  /**
+   * 與後端 RefundService.refundBaseAmount()/requireNotOverDeducted() 相同的算法，
+   * 讓前端能在送出前（跳出確認視窗前）就提前算出是否會超額扣款，不用等 API 回傳才知道。
+   * 中途解約的押金基準是押金的一半（沒收押金則為 0），月租金額不參與這個判斷。
+   */
+  private computeRefundAmount(
+    deposit: number,
+    midTermTermination: boolean,
+    adjustmentAmount: number,
+    deductionTotal: number
+  ): number {
+    const base = midTermTermination ? deposit / 2 : deposit;
+    return base + (adjustmentAmount || 0) - (deductionTotal || 0);
+  }
+
+  private checkNewRefundOverDeducted(): RefundOverDeductedError | null {
+    const form = this.newRefundForm;
+    const contract = (this.selectedRefundCustomer()?.contracts ?? []).find(
+      (candidate) => Number(candidate['contract_id']) === Number(form.contractId)
+    );
+    if (!contract) {
+      return null;
+    }
+    const deposit = Number(contract['deposit'] ?? 0);
+    const computed = this.computeRefundAmount(deposit, form.midTermTermination, form.adjustmentAmount, form.deductionTotal);
+    if (computed >= 0) {
+      return null;
+    }
+    return {
+      error: '欠款大於可退押金，請先確認收款金額',
+      chargeListId: form.chargeListId,
+      customerId: form.customerId,
+      contractId: form.contractId
+    };
+  }
+
+  private checkEditRefundOverDeducted(): RefundOverDeductedError | null {
+    const row = this.editingRefund();
+    const form = this.refundEditForm;
+    if (!row || row.contract_deposit === null || row.contract_deposit === undefined) {
+      return null;
+    }
+    const computed = this.computeRefundAmount(
+      Number(row.contract_deposit),
+      form.midTermTermination,
+      form.adjustmentAmount,
+      form.deductionTotal
+    );
+    if (computed >= 0) {
+      return null;
+    }
+    return {
+      error: '欠款大於可退押金，請先確認收款金額',
+      chargeListId: form.chargeListId,
+      customerId: form.customerId,
+      contractId: form.contractId
+    };
+  }
+
+  private handleRefundApiError(err: HttpErrorResponse, fallback: string): void {
+    const shortfall = this.extractRefundOverDeducted(err);
+    if (shortfall) {
+      this.refundOverDeductedNotice.set(shortfall);
+      this.error.set(shortfall.error);
+      return;
+    }
+    this.refundOverDeductedNotice.set(null);
+    this.error.set(this.branchApiErrorMessage(err, fallback));
+  }
+
+  private extractRefundOverDeducted(err: HttpErrorResponse): RefundOverDeductedError | null {
+    const body = err?.error;
+    if (
+      body &&
+      typeof body === 'object' &&
+      typeof body.error === 'string' &&
+      ('chargeListId' in body || 'customerId' in body || 'contractId' in body)
+    ) {
+      return {
+        error: body.error,
+        chargeListId: body.chargeListId ?? null,
+        customerId: body.customerId ?? null,
+        contractId: body.contractId ?? null
+      };
+    }
+    return null;
+  }
+
+  goToChargeListForRefundShortfall(): void {
+    const notice = this.refundOverDeductedNotice();
+    if (!notice) {
+      return;
+    }
+    this.chargeListFilters = {
+      chargeListId: notice.chargeListId,
+      customerId: notice.customerId,
+      contractId: notice.contractId,
+      feeMonth: '',
+      status: null,
+      createdBy: null,
+      issuedFrom: '',
+      issuedTo: ''
+    };
+    this.chargeListPage.set(0);
+    this.refundOverDeductedNotice.set(null);
+    this.setView('charges');
+  }
+
+  goToContractManagementForRefund(contractId: number): void {
+    this.contractFilters = {
+      companyName: '',
+      taxId: '',
+      startDateText: '',
+      endDateText: '',
+      leaseStatus: '',
+      contractId
+    };
+    this.contractPage.set(0);
+    this.setView('contract-search');
+    this.api.contracts(this.contractFilters, 0, this.contractPageSize()).subscribe({
+      next: (value) => {
+        this.contracts.set(value.content);
+        this.contractTotal.set(value.totalElements);
+        this.contractPage.set(value.page);
+        const match = value.content.find((row) => Number(row['contract_id']) === contractId) ?? value.content[0] ?? null;
+        if (match) {
+          this.startEditContract(match);
+        }
+      },
+      error: () => this.error.set('無法載入租約清單。')
+    });
+  }
+
   startEditRefund(row: RefundSummary): void {
+    this.refundOverDeductedNotice.set(null);
+    this.refundEditFieldErrors.set({});
     this.editingRefund.set(row);
     this.refundEditForm = {
       customerId: row.customer_id,
@@ -4008,6 +4257,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       refundedAt: row.refunded_at ?? '',
       staffId: this.currentStaffId()
     };
+    this.refundEditBankCodeSearch = this.bankCodeDisplayText(row.bank_code ?? '');
+    this.refundEditBankCodeOptions.set([]);
   }
 
   markRefunded(row: RefundSummary): void {
@@ -4036,6 +4287,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       refundedAt: row.refunded_at ?? '',
       staffId: this.currentStaffId()
     });
+    this.refundOverDeductedNotice.set(null);
     this.api.updateRefund(row.refund_id, payload).subscribe({
       next: (result) => {
         this.error.set('');
@@ -4045,13 +4297,17 @@ export class AppComponent implements OnInit, AfterViewInit {
         }
         this.loadRefunds();
       },
-      error: (err: HttpErrorResponse) => this.error.set(this.branchApiErrorMessage(err, '送交審核失敗。'))
+      error: (err: HttpErrorResponse) => this.handleRefundApiError(err, '送交審核失敗。')
     });
   }
 
   cancelEditRefund(): void {
     this.editingRefund.set(null);
     this.refundEditForm = emptyRefundForm();
+    this.refundOverDeductedNotice.set(null);
+    this.refundEditFieldErrors.set({});
+    this.refundEditBankCodeSearch = '';
+    this.refundEditBankCodeOptions.set([]);
   }
 
   saveRefundEdit(): void {
@@ -4059,11 +4315,33 @@ export class AppComponent implements OnInit, AfterViewInit {
     if (!row) {
       return;
     }
+    const editRefundMissingFields = this.requiredRefundFieldErrors(
+      this.refundEditForm,
+      row.refund_status === '審核通過'
+    );
+    this.refundEditFieldErrors.set(editRefundMissingFields);
+    if (Object.keys(editRefundMissingFields).length) {
+      this.error.set(
+        editRefundMissingFields['refundReason']
+          ? '請填寫退款原因。'
+          : editRefundMissingFields['refundedAt']
+            ? '請填寫退款日期。'
+            : '請填寫退款方式與收款帳戶資訊（銀行代碼／帳號／戶名）。'
+      );
+      return;
+    }
+    const editRefundShortfall = this.checkEditRefundOverDeducted();
+    if (editRefundShortfall) {
+      this.refundOverDeductedNotice.set(editRefundShortfall);
+      this.error.set(editRefundShortfall.error);
+      return;
+    }
     if (!window.confirm('確定要儲存這筆退款資料的修改嗎？')) {
       return;
     }
     this.refundEditForm.staffId = this.currentStaffId();
     this.saving.set(true);
+    this.refundOverDeductedNotice.set(null);
     this.api.updateRefund(row.refund_id, this.toRefundPayload(this.refundEditForm)).subscribe({
       next: (result) => {
         this.saving.set(false);
@@ -4074,7 +4352,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       },
       error: (err: HttpErrorResponse) => {
         this.saving.set(false);
-        this.error.set(this.branchApiErrorMessage(err, '退款資料更新失敗，請確認欄位是否正確。'));
+        this.handleRefundApiError(err, '退款資料更新失敗，請確認欄位是否正確。');
       }
     });
   }

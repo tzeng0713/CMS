@@ -4,9 +4,11 @@ import com.example.cms.dto.TaxBureauNoticeBranchInfo;
 import com.example.cms.dto.TaxBureauNoticeGenerateRequest;
 import com.example.cms.dto.TaxBureauNoticeSelection;
 import com.example.cms.service.support.CmsJdbcSupport;
+import org.apache.poi.ss.usermodel.BorderStyle;
 import org.apache.poi.ss.usermodel.Cell;
 import org.apache.poi.ss.usermodel.CellStyle;
 import org.apache.poi.ss.usermodel.Font;
+import org.apache.poi.ss.usermodel.HorizontalAlignment;
 import org.apache.poi.ss.usermodel.Row;
 import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.ss.usermodel.Workbook;
@@ -35,6 +37,7 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
 
     private static final String MOVE_OUT = "MOVE_OUT";
     private static final String MOVE_IN = "MOVE_IN";
+    private static final int MIN_TABLE_ROWS = 15;
 
     public TaxBureauNoticeService(JdbcTemplate jdbc) {
         super(jdbc);
@@ -131,8 +134,9 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
                                b.branch_code, b.branch_address
                         FROM contracts co
                         JOIN customers c ON c.customer_id = co.customer_id
-                        LEFT JOIN offices o ON o.office_id = co.office_id
-                        LEFT JOIN branches b ON b.branch_id = o.branch_id
+                        LEFT JOIN staff ps ON ps.staff_id = co.partner_staff_id
+                        LEFT JOIN staff ss ON ss.staff_id = co.signer_staff_id
+                        LEFT JOIN branches b ON b.branch_id = COALESCE(ps.branch_id, ss.branch_id)
                         WHERE co.contract_id = ?
                         """).formatted(dateColumn), selection.contractId());
             } catch (EmptyResultDataAccessException e) {
@@ -158,6 +162,8 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
             CellStyle titleStyle = titleStyle(workbook);
             CellStyle bodyStyle = bodyStyle(workbook);
             CellStyle headerStyle = headerStyle(workbook);
+            CellStyle tableCellStyle = tableCellStyle(workbook);
+            CellStyle noCellStyle = noCellStyle(workbook);
             Set<String> usedSheetNames = new LinkedHashSet<>();
 
             for (Map.Entry<String, List<Map<String, Object>>> entry : sheetGroups.entrySet()) {
@@ -168,7 +174,7 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
                 Map<String, Object> first = rows.get(0);
                 long branchId = ((Number) first.get("branch_id")).longValue();
                 TaxBureauNoticeBranchInfo info = branchInfoMap.get(branchId);
-                buildSheet(workbook, rows, info, usedSheetNames, titleStyle, bodyStyle, headerStyle);
+                buildSheet(workbook, rows, info, usedSheetNames, titleStyle, bodyStyle, headerStyle, tableCellStyle, noCellStyle);
             }
 
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -180,7 +186,8 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
     }
 
     private void buildSheet(Workbook workbook, List<Map<String, Object>> rows, TaxBureauNoticeBranchInfo info,
-                             Set<String> usedSheetNames, CellStyle titleStyle, CellStyle bodyStyle, CellStyle headerStyle) {
+                             Set<String> usedSheetNames, CellStyle titleStyle, CellStyle bodyStyle, CellStyle headerStyle,
+                             CellStyle tableCellStyle, CellStyle noCellStyle) {
         Map<String, Object> first = rows.get(0);
         String moveType = (String) first.get("move_type");
         boolean isMoveOut = MOVE_OUT.equals(moveType);
@@ -226,24 +233,28 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
             cell.setCellStyle(headerStyle);
         }
 
-        int no = 1;
-        for (Map<String, Object> row : rows) {
+        int totalRows = Math.max(rows.size(), MIN_TABLE_ROWS);
+        for (int i = 0; i < totalRows; i++) {
             Row dataRow = sheet.createRow(r++);
             Cell noCell = dataRow.createCell(0);
-            noCell.setCellValue(no++);
-            noCell.setCellStyle(bodyStyle);
+            noCell.setCellValue(i + 1);
+            noCell.setCellStyle(noCellStyle);
             Cell dateCell = dataRow.createCell(1);
-            dateCell.setCellValue(rocSlash((LocalDate) row.get("noticeDate")));
-            dateCell.setCellStyle(bodyStyle);
+            dateCell.setCellStyle(tableCellStyle);
             Cell codeCell = dataRow.createCell(2);
-            codeCell.setCellValue(branchCode);
-            codeCell.setCellStyle(bodyStyle);
+            codeCell.setCellStyle(tableCellStyle);
             Cell nameCell = dataRow.createCell(3);
-            nameCell.setCellValue(blankToEmpty((String) row.get("company_name")));
-            nameCell.setCellStyle(bodyStyle);
+            nameCell.setCellStyle(tableCellStyle);
             Cell taxIdCell = dataRow.createCell(4);
-            taxIdCell.setCellValue(blankToEmpty((String) row.get("tax_id")));
-            taxIdCell.setCellStyle(bodyStyle);
+            taxIdCell.setCellStyle(tableCellStyle);
+
+            if (i < rows.size()) {
+                Map<String, Object> row = rows.get(i);
+                dateCell.setCellValue(rocSlash((LocalDate) row.get("noticeDate")));
+                codeCell.setCellValue(branchCode);
+                nameCell.setCellValue(blankToEmpty((String) row.get("company_name")));
+                taxIdCell.setCellValue(blankToEmpty((String) row.get("tax_id")));
+            }
         }
 
         r++;
@@ -287,7 +298,30 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
         font.setFontHeightInPoints((short) 15);
         CellStyle style = workbook.createCellStyle();
         style.setFont(font);
+        applyThinBorder(style);
         return style;
+    }
+
+    private CellStyle tableCellStyle(Workbook workbook) {
+        Font font = workbook.createFont();
+        font.setFontHeightInPoints((short) 15);
+        CellStyle style = workbook.createCellStyle();
+        style.setFont(font);
+        applyThinBorder(style);
+        return style;
+    }
+
+    private CellStyle noCellStyle(Workbook workbook) {
+        CellStyle style = tableCellStyle(workbook);
+        style.setAlignment(HorizontalAlignment.LEFT);
+        return style;
+    }
+
+    private void applyThinBorder(CellStyle style) {
+        style.setBorderTop(BorderStyle.THIN);
+        style.setBorderBottom(BorderStyle.THIN);
+        style.setBorderLeft(BorderStyle.THIN);
+        style.setBorderRight(BorderStyle.THIN);
     }
 
     private String sheetName(String base, boolean isMoveOut, Set<String> usedSheetNames) {
@@ -318,7 +352,9 @@ public class TaxBureauNoticeService extends CmsJdbcSupport {
                 FROM contracts co
                 JOIN customers c ON c.customer_id = co.customer_id
                 LEFT JOIN offices o ON o.office_id = co.office_id
-                LEFT JOIN branches b ON b.branch_id = o.branch_id
+                LEFT JOIN staff ps ON ps.staff_id = co.partner_staff_id
+                LEFT JOIN staff ss ON ss.staff_id = co.signer_staff_id
+                LEFT JOIN branches b ON b.branch_id = COALESCE(ps.branch_id, ss.branch_id)
                 WHERE co.%s IS NOT NULL AND co.%s <> ''
                 """).formatted(dateColumn, dateColumn, dateColumn));
 
