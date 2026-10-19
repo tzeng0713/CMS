@@ -2,6 +2,7 @@ package com.example.cms.service;
 
 import com.example.cms.service.support.CmsJdbcSupport;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -14,12 +15,16 @@ import java.util.Map;
 
 @Service
 public class DashboardService extends CmsJdbcSupport {
+    @Autowired(required = false)
+    private RoleAccess access;
 
     public DashboardService(JdbcTemplate jdbc) {
         super(jdbc);
     }
 
     public Map<String, Object> dashboard() {
+        Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
+        if (ownBranch != null) return branchDashboard(ownBranch);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("customers", count("customers"));
         result.put("activeContracts", countWhere("contracts", "lease_status = '綁約中'"));
@@ -38,6 +43,64 @@ public class DashboardService extends CmsJdbcSupport {
                 """));
         result.put("notifications", dashboardNotifications());
         return result;
+    }
+
+    private Map<String, Object> branchDashboard(long branchId) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("customers", jdbc.queryForObject("""
+                SELECT COUNT(DISTINCT co.customer_id) FROM contracts co
+                JOIN offices o ON o.office_id = co.office_id WHERE o.branch_id = ?
+                """, Integer.class, branchId));
+        result.put("activeContracts", jdbc.queryForObject("""
+                SELECT COUNT(*) FROM contracts co JOIN offices o ON o.office_id = co.office_id
+                WHERE o.branch_id = ? AND co.lease_status = '綁約中'
+                """, Integer.class, branchId));
+        result.put("officeCustomers", branchActiveContractCount(branchId, "辦公室", "登記+辦公室"));
+        result.put("registrationCustomers", branchActiveContractCount(branchId, "登記", "登記+辦公室"));
+        result.put("rentPayments", 0);
+        result.put("refunds", count("refunds"));
+        result.put("monthlyRentAmount", 0);
+        result.put("latestPayments", List.of());
+        result.put("notifications", branchNotifications(branchId));
+        return result;
+    }
+
+    private int branchActiveContractCount(long branchId, String first, String second) {
+        return jdbc.queryForObject("""
+                SELECT COUNT(*) FROM contracts co JOIN offices o ON o.office_id = co.office_id
+                WHERE o.branch_id = ? AND co.lease_status = '綁約中' AND co.rental_status IN (?, ?)
+                  AND co.contract_id = (SELECT MAX(latest.contract_id) FROM contracts latest
+                        JOIN offices latest_office ON latest_office.office_id = latest.office_id
+                        WHERE latest.customer_id = co.customer_id AND latest_office.branch_id = ?)
+                """, Integer.class, branchId, first, second, branchId);
+    }
+
+    private Map<String, Object> branchNotifications(long branchId) {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Taipei"));
+        Map<String, Object> notifications = new LinkedHashMap<>();
+        notifications.put("expiringContracts", jdbc.queryForList("""
+                SELECT c.company_name, co.end_date_text, co.rental_item FROM contracts co
+                JOIN customers c ON c.customer_id = co.customer_id
+                JOIN offices o ON o.office_id = co.office_id
+                WHERE o.branch_id = ? AND co.lease_status = '綁約中'
+                  AND co.end_date_text IS NOT NULL AND co.end_date_text <> ''
+                ORDER BY co.end_date_text, c.company_name
+                """, branchId).stream()
+                .filter(row -> shouldShowExpirationReminder((String) row.get("end_date_text"), today))
+                .toList());
+        notifications.put("unpaidRent", List.of());
+        notifications.put("incompleteContracts", jdbc.queryForList("""
+                SELECT c.customer_id, c.company_name, co.contract_id, co.signed_date_text,
+                       co.start_date_text, co.rent, co.lease_status,
+                       co.signer_staff_id, s.staff_name AS signer_staff_name
+                FROM contracts co JOIN customers c ON c.customer_id = co.customer_id
+                JOIN offices o ON o.office_id = co.office_id
+                LEFT JOIN staff s ON s.staff_id = co.signer_staff_id
+                WHERE o.branch_id = ? AND co.lease_status = '綁約中'
+                  AND NOT EXISTS (SELECT 1 FROM rent_payments rp WHERE rp.contract_id = co.contract_id)
+                ORDER BY co.signed_date_text, co.contract_id DESC
+                """, branchId));
+        return notifications;
     }
 
     private Map<String, Object> dashboardNotifications() {

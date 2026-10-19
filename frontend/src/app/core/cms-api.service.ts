@@ -55,6 +55,7 @@ export interface AuthUser {
   account_status?: 'ACTIVE' | 'PENDING_APPROVAL';
   is_account_approved?: boolean;
   canCreateRent: boolean;
+  canViewRent: boolean;
   canEditRent: boolean;
   canEditStaff: boolean;
   canCreateOffice: boolean;
@@ -89,6 +90,7 @@ export interface BackupLogSummary {
 
 export interface CustomerSummary {
   customer_id: number;
+  can_edit?: boolean;
   company_name: string;
   tax_id: string | null;
   status: number | null;
@@ -110,6 +112,7 @@ export interface CustomerSummary {
   signed_date_text: string | null;
   end_date_text: string | null;
   office_no: string | null;
+  branch_id?: number | null;
   branch_name: string | null;
 }
 
@@ -298,12 +301,6 @@ export interface ContractPayload {
   leaseImagePath?: string;
   leaseStatus?: string;
   updatedBy?: number;
-}
-
-export interface ContractWithFirstPaymentPayload {
-  contract: ContractPayload;
-  firstPaymentAmount?: number | null;
-  firstPaymentDateText?: string;
 }
 
 export interface ContractSearchFilters {
@@ -638,6 +635,10 @@ export class CmsApiService {
     return this.http.post<AuthUser>(`${this.baseUrl}/auth/login`, payload);
   }
 
+  logout(): Observable<void> {
+    return this.http.post<void>(`${this.baseUrl}/auth/logout`, {});
+  }
+
   register(payload: { staffName: string; account: string; email: string; password: string }): Observable<{ message: string }> {
     return this.http.post<{ message: string }>(`${this.baseUrl}/auth/register`, payload);
   }
@@ -773,10 +774,6 @@ export class CmsApiService {
 
   createContract(payload: ContractPayload): Observable<Record<string, unknown>> {
     return this.http.post<Record<string, unknown>>(`${this.baseUrl}/contracts`, payload);
-  }
-
-  createContractWithFirstPayment(payload: ContractWithFirstPaymentPayload): Observable<Record<string, unknown>> {
-    return this.http.post<Record<string, unknown>>(`${this.baseUrl}/contracts/with-first-payment`, payload);
   }
 
   latestContract(customerId: number): Observable<Record<string, unknown>> {

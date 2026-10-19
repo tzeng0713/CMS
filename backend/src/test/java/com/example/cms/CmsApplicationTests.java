@@ -472,26 +472,22 @@ class CmsApplicationTests {
     }
 
     @Test
-    void contractRenewalStoresTheCurrentPaymentAmountAndDate() throws Exception {
-        MvcResult created = mvc.perform(post("/api/contracts/with-first-payment")
+    void contractRenewalDoesNotCreatePaymentRecord() throws Exception {
+        MvcResult created = mvc.perform(post("/api/contracts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "contract": {
-                                    "customerId": 1,
-                                    "rentalItem": "登記",
-                                    "rentalStatus": "登記",
-                                    "signerStaffId": 1,
-                                    "partnerStaffId": 2,
-                                    "paymentMonths": 1,
-                                    "startDateText": "2026-08-01",
-                                    "endDateText": "2026-08-31",
-                                    "rent": 3000,
-                                    "leaseStatus": "綁約中",
-                                    "updatedBy": 1
-                                  },
-                                  "firstPaymentAmount": 3000,
-                                  "firstPaymentDateText": "2026-08-02"
+                                  "customerId": 1,
+                                  "rentalItem": "登記",
+                                  "rentalStatus": "登記",
+                                  "signerStaffId": 1,
+                                  "partnerStaffId": 2,
+                                  "paymentMonths": 1,
+                                  "startDateText": "2026-08-01",
+                                  "endDateText": "2026-08-31",
+                                  "rent": 3000,
+                                  "leaseStatus": "綁約中",
+                                  "updatedBy": 1
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -500,12 +496,10 @@ class CmsApplicationTests {
 
         long contractId = objectMapper.readTree(created.getResponse().getContentAsString())
                 .get("contract_id").asLong();
-        Map<String, Object> payment = jdbc.queryForMap(
-                "SELECT * FROM rent_payments WHERE contract_id = ?", contractId);
+        Integer paymentCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM rent_payments WHERE contract_id = ?", Integer.class, contractId);
 
-        org.junit.jupiter.api.Assertions.assertEquals(3000.0, ((Number) payment.get("AMOUNT")).doubleValue());
-        org.junit.jupiter.api.Assertions.assertEquals("2026-08-02", payment.get("PAYMENT_DATE_TEXT"));
-        org.junit.jupiter.api.Assertions.assertEquals("本次繳款", payment.get("NOTE"));
+        org.junit.jupiter.api.Assertions.assertEquals(0, paymentCount);
     }
 
     @Test

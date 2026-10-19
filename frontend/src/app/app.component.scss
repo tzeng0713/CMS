@@ -277,6 +277,11 @@ router-outlet {
   text-align: center;
 }
 
+.auth-password-help-panel {
+  gap: 8px;
+  padding: 4px 0 8px;
+}
+
 .auth-help-icon {
   display: inline-grid;
   width: 52px;
@@ -291,6 +296,93 @@ router-outlet {
 .auth-help-icon svg {
   width: 24px;
   height: 24px;
+}
+
+.auth-verification-status {
+  gap: 22px;
+}
+
+.auth-verification-icon {
+  background: var(--brand-surface);
+}
+
+.auth-verification-icon.is-complete {
+  border-color: var(--brand-gold);
+  background: var(--brand-gold-soft);
+  color: var(--brand-gold-strong);
+}
+
+.auth-help-panel .auth-verification-copy {
+  max-width: 100%;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.auth-verification-copy span {
+  display: block;
+  text-wrap: pretty;
+}
+
+.auth-verification-icon.is-error {
+  border-color: #e5b5b0;
+  background: #fff0ef;
+  color: #a33b32;
+}
+
+.auth-verification-steps {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auth-verification-steps li {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  color: #6c6862;
+}
+
+.auth-verification-steps li > span {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border: 1px solid var(--brand-border);
+  border-radius: 50%;
+  background: #fff;
+  color: #6c6862;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.auth-verification-steps li.complete > span {
+  border-color: #aebf9b;
+  background: #eef4e8;
+  color: #49633c;
+}
+
+.auth-verification-steps li.current > span {
+  border-color: #d5c397;
+  background: var(--brand-gold-soft);
+  color: var(--brand-gold-strong);
+}
+
+.auth-verification-steps strong,
+.auth-verification-steps small {
+  display: block;
+}
+
+.auth-verification-steps strong {
+  color: var(--brand-charcoal-dark);
+  font-size: 14px;
+}
+
+.auth-verification-steps small {
+  margin-top: 2px;
+  font-size: 13px;
 }
 
 .auth-error {
@@ -1165,24 +1257,57 @@ textarea {
 .related-company-list {
   list-style: none;
   padding: 0;
-  margin: 12px 0 0;
+  margin: 14px 0 0;
   display: grid;
   gap: 8px;
 }
 
 .related-company-list li {
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
   gap: 12px;
-  padding: 10px;
-  border-radius: 8px;
-  background: #f8fafc;
+  min-height: 44px;
+  padding: 9px 11px;
+  border: 1px solid #eee3d0;
+  border-radius: 9px;
+  background: #fffdfa;
 }
 
-.related-company-list button {
+.relation-member-name {
+  min-width: 0;
   padding: 0;
-  color: #0f766e;
+  border: 0;
+  color: var(--brand-ink);
   background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  text-align: left;
+}
+
+.related-company-list button.relation-member-name {
+  cursor: pointer;
+}
+
+.related-company-list button.relation-member-name:hover,
+.related-company-list button.relation-member-name:focus-visible {
+  color: var(--brand-gold-strong);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.relation-member-status {
+  white-space: nowrap;
+  color: #817565;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.relation-member-status.is-resolved {
+  color: var(--brand-gold-strong);
 }
 
 .empty {
@@ -1680,9 +1805,9 @@ input:disabled {
 }
 
 .relation-group-status.is-linked {
-  border-color: #c9dfcf;
-  background: #eef8f0;
-  color: #367453 !important;
+  border-color: #dfceb0;
+  background: var(--brand-gold-soft);
+  color: var(--brand-gold-strong) !important;
 }
 
 .relation-mode-selector {
@@ -1822,9 +1947,9 @@ input:disabled {
   display: grid;
   gap: 10px;
   padding: 14px;
-  border: 1px solid #c9dfcf;
+  border: 1px solid #e6dac3;
   border-radius: 10px;
-  background: #f4fbf5;
+  background: #fdfaf4;
 }
 
 .relation-group-preview > div,
@@ -1835,7 +1960,7 @@ input:disabled {
 
 .relation-group-preview span,
 .relation-group-note-display > span {
-  color: #637064;
+  color: #7b705f;
   font-size: 12px;
   font-weight: 700;
 }
@@ -1843,7 +1968,7 @@ input:disabled {
 .relation-group-preview p,
 .relation-group-note-display p {
   margin: 0;
-  color: #354536;
+  color: var(--brand-charcoal-dark);
   line-height: 1.55;
   white-space: pre-wrap;
 }
@@ -1862,10 +1987,10 @@ input:disabled {
   gap: 5px;
   min-height: 28px;
   padding: 4px 9px;
-  border: 1px solid #cee0d1;
+  border: 1px solid #e5d9c5;
   border-radius: 999px;
   background: #fff;
-  color: #3d6146;
+  color: #5f5138;
   font-size: 12px;
   font-weight: 600;
 }
@@ -1885,13 +2010,45 @@ input:disabled {
 .relation-group-edit-section {
   display: grid;
   gap: 16px;
-  border-color: #c9dfcf;
-  background: #f8fcf8;
+  border-color: #e6dac3;
+  background: #fdfaf4;
 }
 
 .relation-group-detail {
   display: grid;
-  gap: 16px;
+  gap: 14px;
+  border: 1px solid #e6dac3;
+  border-radius: 12px;
+  background: #fffdfa;
+  box-shadow: 0 8px 20px rgba(95, 92, 90, 0.04);
+}
+
+.relation-group-detail .panel-header {
+  align-items: center;
+  margin: 0;
+  padding-bottom: 13px;
+  border-bottom: 1px solid #eee3d0;
+}
+
+.relation-group-detail .panel-header h3 {
+  margin: 0;
+  padding-left: 10px;
+  border-left: 4px solid var(--brand-gold);
+  color: var(--brand-ink);
+  font-size: 18px;
+}
+
+.relation-group-detail .panel-header p {
+  margin: 7px 0 0 14px;
+  color: #817565;
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.relation-group-detail .relation-group-status.is-linked {
+  border-color: #dfceb0;
+  background: var(--brand-gold-soft);
+  color: var(--brand-gold-strong) !important;
 }
 
 .related-company-section .related-company-fields {
@@ -3156,6 +3313,49 @@ $charge-list-slate: #6b6f76;
   gap: 10px;
   padding: 14px 18px;
   border-top: 1px solid #e2e8f0;
+}
+
+.confirmation-overlay {
+  z-index: 70;
+  background: rgba(63, 61, 59, 0.46);
+}
+
+.confirmation-dialog {
+  max-width: 440px;
+  border: 1px solid #e3d5bc;
+  border-radius: 12px;
+  box-shadow: 0 24px 56px rgba(63, 61, 59, 0.22);
+}
+
+.confirmation-dialog .modal-header {
+  padding: 18px 20px 14px;
+  border-bottom-color: #eee3d0;
+  background: #fffdfa;
+}
+
+.confirmation-dialog .modal-header h3 {
+  padding-left: 10px;
+  border-left: 4px solid var(--brand-gold);
+  color: var(--brand-ink);
+  font-size: 18px;
+}
+
+.confirmation-dialog-body {
+  padding: 20px;
+  background: #fffdfa;
+}
+
+.confirmation-dialog-body p {
+  margin: 0;
+  color: var(--brand-charcoal);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.confirmation-dialog .modal-footer {
+  padding: 14px 20px 18px;
+  border-top-color: #eee3d0;
+  background: #fffdfa;
 }
 
 .office-row {

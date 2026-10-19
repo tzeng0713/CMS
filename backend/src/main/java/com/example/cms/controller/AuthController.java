@@ -27,8 +27,17 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public Map<String, Object> login(@RequestBody LoginRequest request) {
-        return service.login(request);
+    public Map<String, Object> login(@RequestBody LoginRequest request, jakarta.servlet.http.HttpServletRequest httpRequest) {
+        Map<String, Object> user = service.login(request);
+        httpRequest.getSession(true).setAttribute(com.example.cms.service.RoleAccess.SESSION_STAFF_ID,
+                ((Number) user.get("staff_id")).longValue());
+        return user;
+    }
+
+    @PostMapping("/logout")
+    public void logout(jakarta.servlet.http.HttpServletRequest request) {
+        jakarta.servlet.http.HttpSession session = request.getSession(false);
+        if (session != null) session.invalidate();
     }
 
     @PostMapping("/register")

@@ -4,6 +4,7 @@ import com.example.cms.dto.OfficeContactRequest;
 import com.example.cms.dto.OfficeRequest;
 import com.example.cms.service.support.CmsJdbcSupport;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,12 +13,17 @@ import java.util.Map;
 
 @Service
 public class OfficeService extends CmsJdbcSupport {
+    @Autowired(required = false)
+    private RoleAccess access;
 
     public OfficeService(JdbcTemplate jdbc) {
         super(jdbc);
     }
 
     public List<Map<String, Object>> offices(Long branchId) {
+        if (access != null && !access.actor().manager()) {
+            branchId = access.actor().branchId();
+        }
         List<Map<String, Object>> rows;
         if (branchId != null) {
             rows = jdbc.queryForList("""
@@ -50,6 +56,7 @@ public class OfficeService extends CmsJdbcSupport {
     @Transactional
     public Map<String, Object> createOffice(OfficeRequest request) {
         requiredId(request.branchId(), "branchId");
+        if (access != null) access.ownBranch(request.branchId());
         Long id = nextId("offices", "office_id");
         jdbc.update("""
                 INSERT INTO offices (office_id, office_no, branch_id, notes)
@@ -66,6 +73,10 @@ public class OfficeService extends CmsJdbcSupport {
     @Transactional
     public Map<String, Object> updateOffice(long id, OfficeRequest request) {
         requiredId(request.branchId(), "branchId");
+        if (access != null) {
+            access.office(id);
+            access.ownBranch(request.branchId());
+        }
         jdbc.update("""
                 UPDATE offices
                 SET office_no = ?,

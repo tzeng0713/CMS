@@ -3,6 +3,7 @@ package com.example.cms.service;
 import com.example.cms.dto.CustomerRequest;
 import com.example.cms.service.support.CmsJdbcSupport;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,6 +16,8 @@ import java.util.Set;
 
 @Service
 public class CustomerService extends CmsJdbcSupport {
+    @Autowired(required = false)
+    private RoleAccess access;
 
     public CustomerService(JdbcTemplate jdbc) {
         super(jdbc);
@@ -32,6 +35,14 @@ public class CustomerService extends CmsJdbcSupport {
                 branchId, officeNo, ownerBirthdayMonth, contactBirthdayMonth);
         StringBuilder where = new StringBuilder(" WHERE 1 = 1 ");
         List<Object> args = new ArrayList<>();
+        if (access != null && access.actor().generalSecretary()) {
+            where.append("""
+                    AND EXISTS (SELECT 1 FROM contracts scoped_contract
+                                JOIN offices scoped_office ON scoped_office.office_id = scoped_contract.office_id
+                                WHERE scoped_contract.customer_id = c.customer_id AND scoped_office.branch_id = ?)
+                    """);
+            args.add(access.actor().branchId());
+        }
         addLikeFilter(where, args, "c.company_name", companyName);
         addLikeFilter(where, args, "c.tax_id", taxId);
         addLikeFilter(where, args, "c.phone", phone);
@@ -94,6 +105,7 @@ public class CustomerService extends CmsJdbcSupport {
         selectArgs.add(offset);
         List<Map<String, Object>> rows = jdbc.queryForList(
                 customerListSql() + where + orderBy + " LIMIT ? OFFSET ?", selectArgs.toArray());
+        rows.forEach(this::addEditPermission);
         Long total = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM customers c" + where, Long.class, args.toArray());
 
@@ -107,7 +119,9 @@ public class CustomerService extends CmsJdbcSupport {
 
     public Map<String, Object> customerDetail(long id) {
         Map<String, Object> detail = jdbc.queryForMap(customerListSql() + " WHERE c.customer_id = ?", id);
+        addEditPermission(detail);
         String ownerName = (String) detail.get("owner_name");
+        Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
         detail.put("contracts", jdbc.queryForList("""
                 SELECT co.*, o.office_no, b.branch_name, s.staff_name AS signer_staff_name,
                        partner.staff_name AS partner_staff_name
@@ -116,13 +130,13 @@ public class CustomerService extends CmsJdbcSupport {
                 LEFT JOIN branches b ON b.branch_id = o.branch_id
                 LEFT JOIN staff s ON s.staff_id = co.signer_staff_id
                 LEFT JOIN staff partner ON partner.staff_id = co.partner_staff_id
-                WHERE co.customer_id = ?
+                WHERE co.customer_id = ? AND (? IS NULL OR o.branch_id = ?)
                 ORDER BY co.contract_id DESC
-                """, id));
+                """, id, ownBranch, ownBranch));
         detail.put("relatedCompanies", relatedCompanies(id));
         detail.put("relationGroup", relationGroupForCustomer(id));
         detail.put("sameOwnerCompanies", sameOwnerCompanies(ownerName, id));
-        detail.put("rentPayments", jdbc.queryForList("""
+        detail.put("rentPayments", ownBranch != null ? List.of() : jdbc.queryForList("""
                 SELECT * FROM rent_payments
                 WHERE customer_id = ?
                 ORDER BY payment_month, rent_payment_id
@@ -143,22 +157,26 @@ public class CustomerService extends CmsJdbcSupport {
     public List<Map<String, Object>> customerLookup(String search) {
         String searchText = search == null ? "" : search.trim();
         String like = "%" + searchText + "%";
+        Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
         return jdbc.queryForList("""
                 SELECT c.customer_id, c.company_name, c.tax_id, c.status, c.owner_name,
                        c.rental_item, c.rental_status, c.owner_birthday,
                        c.contact_person, c.contact_birthday, c.phone, c.registration_type,
                        c.referrer, c.accountant_info, c.account_info, c.is_agent,
                        co.contract_id, co.lease_status, co.rent, co.deposit,
-                       o.office_no, b.branch_name
+                       o.office_no, o.branch_id, b.branch_name
                 FROM customers c
                 LEFT JOIN contracts co ON co.customer_id = c.customer_id
                   AND co.contract_id = (SELECT MAX(latest.contract_id) FROM contracts latest WHERE latest.customer_id = c.customer_id)
                 LEFT JOIN offices o ON o.office_id = co.office_id
                 LEFT JOIN branches b ON b.branch_id = o.branch_id
                 WHERE (? = '%%' OR c.company_name LIKE ?)
+                  AND (? IS NULL OR EXISTS (SELECT 1 FROM contracts scoped_contract
+                        JOIN offices scoped_office ON scoped_office.office_id = scoped_contract.office_id
+                        WHERE scoped_contract.customer_id = c.customer_id AND scoped_office.branch_id = ?))
                 ORDER BY c.company_name
                 LIMIT 20
-                """, like, like);
+                """, like, like, ownBranch, ownBranch);
     }
 
     /**
@@ -303,13 +321,16 @@ public class CustomerService extends CmsJdbcSupport {
         if (ownerName == null || ownerName.isBlank()) {
             return List.of();
         }
+        Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
         return jdbc.queryForList("""
                 SELECT c.customer_id, c.company_name, c.owner_name, c.phone, c.status,
                        c.rental_item, c.rental_status, c.registration_type
                 FROM customers c
                 WHERE c.owner_name = ? AND c.customer_id <> ?
+                  AND (? IS NULL OR EXISTS (SELECT 1 FROM contracts co JOIN offices o ON o.office_id = co.office_id
+                       WHERE co.customer_id = c.customer_id AND o.branch_id = ?))
                 ORDER BY c.company_name
-                """, ownerName, excludeCustomerId);
+                """, ownerName, excludeCustomerId, ownBranch, ownBranch);
     }
 
     String requiredCompanyName(String value) {
@@ -337,13 +358,26 @@ public class CustomerService extends CmsJdbcSupport {
                 SELECT c.*,
                        co.contract_id, co.lease_status, co.rent, co.deposit,
                        co.signed_date_text, co.end_date_text,
-                       o.office_no, b.branch_name
+                       o.office_no, o.branch_id, b.branch_name
                 FROM customers c
                 LEFT JOIN contracts co ON co.customer_id = c.customer_id
                   AND co.contract_id = (SELECT MAX(latest.contract_id) FROM contracts latest WHERE latest.customer_id = c.customer_id)
                 LEFT JOIN offices o ON o.office_id = co.office_id
                 LEFT JOIN branches b ON b.branch_id = o.branch_id
                 """;
+    }
+
+    private void addEditPermission(Map<String, Object> row) {
+        if (access == null || access.actor().manager()) {
+            row.put("can_edit", true);
+            return;
+        }
+        Long customerId = ((Number) row.get("customer_id")).longValue();
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM contracts co JOIN offices o ON o.office_id = co.office_id
+                WHERE co.customer_id = ? AND o.branch_id = ?
+                """, Integer.class, customerId, access.actor().branchId());
+        row.put("can_edit", count != null && count > 0);
     }
 
     private void addLikeFilter(StringBuilder where, List<Object> args, String column, String value) {
@@ -414,8 +448,8 @@ public class CustomerService extends CmsJdbcSupport {
         if (value == null) {
             return 1;
         }
-        if (value < 1 || value > 3) {
-            throw new IllegalArgumentException("rentalStatus must be 1, 2, or 3");
+        if (value < 1 || value > 4) {
+            throw new IllegalArgumentException("rentalStatus must be 1, 2, 3, or 4");
         }
         return value;
     }
@@ -434,14 +468,17 @@ public class CustomerService extends CmsJdbcSupport {
         if (groupId == null) {
             return List.of();
         }
+        Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
         return jdbc.queryForList("""
                 SELECT relation_member_id, customer_id, company_name,
                        CASE WHEN customer_id IS NULL THEN FALSE ELSE TRUE END AS is_resolved
-                FROM customer_relation_members
+                FROM customer_relation_members crm
                 WHERE relation_group_id = ?
                   AND (customer_id IS NULL OR customer_id <> ?)
+                  AND (? IS NULL OR EXISTS (SELECT 1 FROM contracts co JOIN offices o ON o.office_id = co.office_id
+                       WHERE co.customer_id = crm.customer_id AND o.branch_id = ?))
                 ORDER BY company_name
-                """, groupId, customerId);
+                """, groupId, customerId, ownBranch, ownBranch);
     }
 
     private Map<String, Object> relationGroupForCustomer(long customerId) {
@@ -461,6 +498,7 @@ public class CustomerService extends CmsJdbcSupport {
     }
 
     private Map<String, Object> relationGroupSummary(long groupId) {
+        Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
         List<Map<String, Object>> groups = jdbc.queryForList("""
                 SELECT relation_group_id, group_note
                 FROM customer_relation_groups
@@ -473,10 +511,13 @@ public class CustomerService extends CmsJdbcSupport {
         List<Map<String, Object>> members = jdbc.queryForList("""
                 SELECT relation_member_id, customer_id, company_name,
                        CASE WHEN customer_id IS NULL THEN FALSE ELSE TRUE END AS is_resolved
-                FROM customer_relation_members
+                FROM customer_relation_members crm
                 WHERE relation_group_id = ?
+                  AND (? IS NULL OR EXISTS (SELECT 1 FROM contracts co JOIN offices o ON o.office_id = co.office_id
+                       WHERE co.customer_id = crm.customer_id AND o.branch_id = ?))
                 ORDER BY company_name
-                """, groupId);
+                """, groupId, ownBranch, ownBranch);
+        if (ownBranch != null && members.isEmpty()) return null;
         group.put("members", members);
         group.put("member_count", members.size());
         return group;

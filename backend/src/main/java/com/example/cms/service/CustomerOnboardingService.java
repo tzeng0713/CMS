@@ -5,6 +5,7 @@ import com.example.cms.dto.CustomerWithContractRequest;
 import com.example.cms.dto.RentPaymentRequest;
 import com.example.cms.service.support.CmsJdbcSupport;
 import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -16,6 +17,8 @@ import java.util.Map;
 
 @Service
 public class CustomerOnboardingService extends CmsJdbcSupport {
+    @Autowired(required = false)
+    private RoleAccess access;
 
     private final CustomerService customerService;
     private final ContractService contractService;
@@ -34,6 +37,7 @@ public class CustomerOnboardingService extends CmsJdbcSupport {
         if (request == null || request.customer() == null || request.contract() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "customer and contract are required");
         }
+        if (request.firstPaymentAmount() != null && access != null) access.manager();
         validateFirstPayment(request);
         Map<String, Object> customer = customerService.createCustomer(request.customer());
         Long customerId = ((Number) customer.get("customer_id")).longValue();

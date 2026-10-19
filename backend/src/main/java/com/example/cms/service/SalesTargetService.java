@@ -5,6 +5,7 @@ import com.example.cms.service.support.CmsJdbcSupport;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -15,12 +16,15 @@ import java.util.Map;
 
 @Service
 public class SalesTargetService extends CmsJdbcSupport {
+    @Autowired(required = false)
+    private RoleAccess access;
 
     public SalesTargetService(JdbcTemplate jdbc) {
         super(jdbc);
     }
 
     public Map<String, Object> list(Long branchId, Integer targetMonth, String category, Integer page, Integer pageSize) {
+        if (access != null && !access.actor().manager()) branchId = access.actor().branchId();
         String categoryText = blankToNull(category);
 
         String where = """
