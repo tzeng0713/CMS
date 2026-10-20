@@ -1,18 +1,13 @@
 package com.example.cms.service;
 
 import com.example.cms.dto.ContractRequest;
-import com.example.cms.dto.ContractWithFirstPaymentRequest;
-import com.example.cms.dto.RentPaymentRequest;
 import com.example.cms.service.support.CmsJdbcSupport;
-import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.math.BigDecimal;
-import java.time.LocalDate;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,11 +20,10 @@ import java.util.Map;
 
 @Service
 public class ContractService extends CmsJdbcSupport {
-    private final RentPaymentService rentPaymentService;
-
-    public ContractService(JdbcTemplate jdbc, RentPaymentService rentPaymentService) {
+    @Autowired(required = false)
+    private RoleAccess access;
+    public ContractService(JdbcTemplate jdbc) {
         super(jdbc);
-        this.rentPaymentService = rentPaymentService;
     }
 
     public Map<String, Object> contracts(String search, String companyName, String taxId,
@@ -57,6 +51,8 @@ public class ContractService extends CmsJdbcSupport {
                   AND (? = '' OR co.start_date_text IS NULL OR co.start_date_text = '' OR co.start_date_text <= ?)
                   AND (? IS NULL OR co.contract_id = ?)
                 """;
+        Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
+        where += " AND (? IS NULL OR o.branch_id = ?)";
         Object[] filterArguments = {
                 like, like, like, like, like, like,
                 companyLike, companyLike,
@@ -64,7 +60,8 @@ public class ContractService extends CmsJdbcSupport {
                 statusText, statusText,
                 startText, startText,
                 endText, endText,
-                contractId, contractId
+                contractId, contractId,
+                ownBranch, ownBranch
         };
         int size = pageSize == null || pageSize <= 0 ? 20 : Math.min(pageSize, 200);
         int pageNumber = page == null || page < 0 ? 0 : page;
@@ -72,7 +69,7 @@ public class ContractService extends CmsJdbcSupport {
         pageArguments.add(size);
         pageArguments.add(pageNumber * size);
         List<Map<String, Object>> rows = jdbc.queryForList("""
-                SELECT co.*, c.company_name, c.owner_name, c.tax_id, o.office_no, b.branch_name,
+                SELECT co.*, c.company_name, c.owner_name, c.tax_id, o.office_no, o.branch_id, b.branch_name,
                        s.staff_name AS signer_staff_name, partner.staff_name AS partner_staff_name
                 FROM contracts co
                 JOIN customers c ON c.customer_id = co.customer_id
@@ -128,44 +125,6 @@ public class ContractService extends CmsJdbcSupport {
         return contractDetail(id);
     }
 
-    @Transactional
-    public Map<String, Object> createContractWithFirstPayment(ContractWithFirstPaymentRequest request) {
-        if (request == null || request.contract() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "contract is required");
-        }
-        ContractRequest contract = request.contract();
-        validateFirstPayment(contract, request.firstPaymentAmount(), request.firstPaymentDateText());
-        Map<String, Object> createdContract = createContract(contract);
-        if (request.firstPaymentAmount() != null) {
-            Long contractId = ((Number) createdContract.get("contract_id")).longValue();
-            Long updatedBy = contract.updatedBy() == null ? 1L : contract.updatedBy();
-            createFirstPayment(contract.customerId(), contractId, contract, request.firstPaymentAmount(),
-                    request.firstPaymentDateText(), "本次繳款", updatedBy);
-        }
-        return createdContract;
-    }
-
-    private void createFirstPayment(Long customerId, Long contractId, ContractRequest contract,
-                                    BigDecimal amount, String paymentDateText, String note, Long updatedBy) {
-        LocalDate feeStartDate = localDate(contract.startDateText());
-        LocalDate feeEndDate = feeStartDate.plusMonths(contract.paymentMonths()).minusDays(1);
-        LocalDate contractEndDate = localDate(contract.endDateText());
-        if (contractEndDate != null && feeEndDate.isAfter(contractEndDate)) {
-            feeEndDate = contractEndDate;
-        }
-        rentPaymentService.createRentPayment(new RentPaymentRequest(
-                customerId,
-                contractId,
-                paymentMonth(paymentDateText),
-                paymentDateText,
-                feeStartDate.toString(),
-                feeEndDate.toString(),
-                amount,
-                null,
-                note,
-                updatedBy));
-    }
-
     public Map<String, Object> updateContract(long id, ContractRequest request) {
         jdbc.update("""
                 UPDATE contracts
@@ -183,13 +142,14 @@ public class ContractService extends CmsJdbcSupport {
     }
 
     public Map<String, Object> latestContract(long customerId) {
+        Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
         List<Long> ids = jdbc.queryForList("""
-                SELECT contract_id
-                FROM contracts
-                WHERE customer_id = ?
-                ORDER BY contract_id DESC
+                SELECT co.contract_id
+                FROM contracts co LEFT JOIN offices o ON o.office_id = co.office_id
+                WHERE co.customer_id = ? AND (? IS NULL OR o.branch_id = ?)
+                ORDER BY co.contract_id DESC
                 LIMIT 1
-                """, Long.class, customerId);
+                """, Long.class, customerId, ownBranch, ownBranch);
         return ids.isEmpty() ? Map.of() : contractDetail(ids.get(0));
     }
 
@@ -214,7 +174,7 @@ public class ContractService extends CmsJdbcSupport {
 
     private Map<String, Object> contractDetail(long id) {
         return jdbc.queryForMap("""
-                SELECT co.*, c.company_name, c.owner_name, c.tax_id, o.office_no, b.branch_name,
+                SELECT co.*, c.company_name, c.owner_name, c.tax_id, o.office_no, o.branch_id, b.branch_name,
                        s.staff_name AS signer_staff_name, partner.staff_name AS partner_staff_name
                 FROM contracts co
                 JOIN customers c ON c.customer_id = co.customer_id
@@ -269,35 +229,4 @@ public class ContractService extends CmsJdbcSupport {
         }
     }
 
-    private void validateFirstPayment(ContractRequest contract, BigDecimal amount, String dateText) {
-        boolean hasAmount = amount != null;
-        boolean hasDate = blankToNull(dateText) != null;
-        if (hasAmount != hasDate) {
-            throw new IllegalArgumentException("firstPaymentAmount and firstPaymentDateText must be provided together");
-        }
-        if (hasAmount && amount.signum() <= 0) {
-            throw new IllegalArgumentException("firstPaymentAmount must be greater than zero");
-        }
-        if (hasDate && localDate(dateText) == null) {
-            throw new IllegalArgumentException("firstPaymentDateText must be a valid date");
-        }
-        if (hasAmount) {
-            LocalDate contractStart = localDate(contract.startDateText());
-            LocalDate contractEnd = localDate(contract.endDateText());
-            if (contractStart == null) {
-                throw new IllegalArgumentException("contract startDateText is required for the first payment");
-            }
-            if (contractEnd != null && contractEnd.isBefore(contractStart)) {
-                throw new IllegalArgumentException("contract endDateText must not be before startDateText");
-            }
-            if (contract.paymentMonths() == null || contract.paymentMonths() <= 0) {
-                throw new IllegalArgumentException("contract paymentMonths is required for the first payment");
-            }
-        }
-    }
-
-    private Integer paymentMonth(String dateText) {
-        LocalDate date = localDate(dateText);
-        return date == null ? null : date.getYear() * 100 + date.getMonthValue();
-    }
 }

@@ -296,7 +296,7 @@ public class SeedDataLoader implements CommandLineRunner {
 
     private Integer rentalStatus(Map<String, Object> row) {
         Long value = n(row, "rentalStatus");
-        if (value != null && value >= 1 && value <= 3) {
+        if (value != null && value >= 1 && value <= 4) {
             return value.intValue();
         }
         String item = rentalItem(row);

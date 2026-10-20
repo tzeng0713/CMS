@@ -23,6 +23,8 @@ public record CustomerRequest(
         List<String> relatedCompanyNames,
         String notes,
         String registrationType,
+        Long relationGroupId,
+        String relationGroupNote,
         Long updatedBy
 ) {
 }

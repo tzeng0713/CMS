@@ -1,7 +1,6 @@
 package com.example.cms.controller;
 
 import com.example.cms.dto.ContractRequest;
-import com.example.cms.dto.ContractWithFirstPaymentRequest;
 import com.example.cms.service.ContractService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -39,11 +38,6 @@ public class ContractController {
     @PostMapping
     public Map<String, Object> createContract(@RequestBody ContractRequest request) {
         return service.createContract(request);
-    }
-
-    @PostMapping("/with-first-payment")
-    public Map<String, Object> createContractWithFirstPayment(@RequestBody ContractWithFirstPaymentRequest request) {
-        return service.createContractWithFirstPayment(request);
     }
 
     @PutMapping("/{id}")

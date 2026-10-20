@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
@@ -29,6 +30,8 @@ import java.util.regex.Pattern;
 
 @Service
 public class PerformanceBonusService extends CmsJdbcSupport {
+    @Autowired(required = false)
+    private RoleAccess access;
 
     private static final Pattern PERIOD_PATTERN = Pattern.compile("^(\\d{4})-P([123])$");
     private static final Pattern YEAR_MONTH_PATTERN = Pattern.compile("^(\\d{4})-(\\d{2})$");
@@ -49,6 +52,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
 
     public Map<String, Object> list(String ruleType, String excludeRuleType, String period, Long branchId, Long staffId, Long contractId,
                                      Integer page, Integer pageSize) {
+        if (access != null && !access.actor().manager()) branchId = access.actor().branchId();
         String ruleTypeText = blankToNull(ruleType);
         String excludeRuleTypeText = blankToNull(excludeRuleType);
         String periodText = blankToNull(period);
@@ -57,7 +61,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
                  WHERE (? IS NULL OR pb.rule_type = ?)
                    AND (? IS NULL OR pb.rule_type <> ?)
                    AND (? IS NULL OR pb.period = ?)
-                   AND (? IS NULL OR pb.branch_id = ?)
+                   AND (? IS NULL OR COALESCE(pb.branch_id, (SELECT branch_id FROM staff WHERE staff_id = pb.staff_id)) = ?)
                    AND (? IS NULL OR pb.staff_id = ?)
                    AND (? IS NULL OR pb.contract_id = ?)
                 """;

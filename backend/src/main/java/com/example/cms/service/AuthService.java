@@ -7,6 +7,8 @@ import com.example.cms.dto.PasswordResetConfirmationRequest;
 import com.example.cms.dto.PasswordResetRequest;
 import com.example.cms.dto.RegisterRequest;
 import com.example.cms.service.support.CmsJdbcSupport;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.EmptyResultDataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -28,6 +30,7 @@ import java.util.Map;
 
 @Service
 public class AuthService extends CmsJdbcSupport {
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
     private static final String NOOP_PREFIX = "{noop}";
     private static final String PASSWORD_RESET_MESSAGE = "重設連結已寄送至註冊信箱。";
     private static final String EMAIL_VERIFICATION_MESSAGE = "驗證連結已寄送至註冊信箱。";
@@ -283,8 +286,9 @@ public class AuthService extends CmsJdbcSupport {
                 java.sql.Timestamp.from(Instant.now().plusSeconds(emailVerificationTokenTtlMinutes * 60L)));
         try {
             passwordResetMailService.sendEmailVerificationLink(email, verificationLink(rawToken));
-        } catch (RuntimeException ignored) {
+        } catch (RuntimeException ex) {
             // Keep registration and re-send responses generic even if SMTP delivery fails.
+            log.warn("Email verification could not be sent to {}", email, ex);
         }
     }
 
@@ -337,11 +341,12 @@ public class AuthService extends CmsJdbcSupport {
         user.put("account_status", accountApproved ? "ACTIVE" : "PENDING_APPROVAL");
         user.put("is_account_approved", accountApproved);
         user.put("canCreateRent", accountApproved && "主管".equals(roleName));
-        user.put("canEditRent", accountApproved && !"一般秘書".equals(roleName));
+        user.put("canViewRent", accountApproved && !"一般秘書".equals(roleName));
+        user.put("canEditRent", accountApproved && "主管".equals(roleName));
         user.put("canEditStaff", accountApproved && "主管".equals(roleName));
         user.put("canCreateOffice", accountApproved);
         user.put("canEditAllBranches", accountApproved && "主管".equals(roleName));
-        user.put("canViewAllOffices", accountApproved && !"一般秘書".equals(roleName));
+        user.put("canViewAllOffices", accountApproved && "主管".equals(roleName));
         user.put("canManageBranch", accountApproved && "主管".equals(roleName));
         user.put("canReviewRefund", accountApproved && "主管".equals(roleName));
         user.put("canManageBonusRules", accountApproved && "主管".equals(roleName));

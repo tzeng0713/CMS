@@ -67,6 +67,16 @@ public class CustomerController {
         return service.customerLookup(search);
     }
 
+    @GetMapping("/relation-groups")
+    public List<Map<String, Object>> relationGroupLookup(@RequestParam(required = false) String search) {
+        return service.relationGroupLookup(search);
+    }
+
+    @GetMapping("/relation-groups/pending-match")
+    public List<Map<String, Object>> pendingRelationGroupMatches(@RequestParam String companyName) {
+        return service.pendingRelationGroupMatches(companyName);
+    }
+
     @PostMapping
     public Map<String, Object> createCustomer(@RequestBody CustomerRequest request) {
         return service.createCustomer(request);

@@ -18,12 +18,12 @@
     {
       "rolePermissionId": 2,
       "roleName": "督導秘書",
-      "scope": "客戶、合約、租金與退款"
+      "scope": "跨館查詢客戶與租約；所屬分館編輯；可查對帳"
     },
     {
       "rolePermissionId": 3,
       "roleName": "一般秘書",
-      "scope": "查詢與新增租金紀錄"
+      "scope": "所屬分館客戶、租約及業績；不可查對帳"
     }
   ],
   "staff": [

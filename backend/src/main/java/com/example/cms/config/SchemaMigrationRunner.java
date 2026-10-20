@@ -44,6 +44,8 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
     private void migrateRoleNames() {
         jdbc.update("UPDATE role_permissions SET role_name = '督導秘書' WHERE role_name = '管理人員'");
         jdbc.update("UPDATE role_permissions SET role_name = '一般秘書' WHERE role_name = '一般人員'");
+        jdbc.update("UPDATE role_permissions SET scope = '跨館查詢客戶與租約；所屬分館編輯；可查對帳' WHERE role_name = '督導秘書'");
+        jdbc.update("UPDATE role_permissions SET scope = '所屬分館客戶、租約及業績；不可查對帳' WHERE role_name = '一般秘書'");
         jdbc.update("UPDATE staff SET staff_name = '督導秘書' WHERE staff_name = '管理人員'");
         jdbc.update("UPDATE staff SET staff_name = '一般秘書' WHERE staff_name = '一般人員'");
     }
@@ -149,9 +151,11 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         jdbc.execute("""
                 CREATE TABLE IF NOT EXISTS customer_relation_groups (
                   relation_group_id BIGINT PRIMARY KEY,
+                  group_note VARCHAR(1000),
                   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
                 """);
+        addColumnIfMissing("customer_relation_groups", "group_note", "VARCHAR(1000)");
         jdbc.execute("""
                 CREATE TABLE IF NOT EXISTS customer_relation_members (
                   relation_member_id BIGINT PRIMARY KEY,

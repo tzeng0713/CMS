@@ -2,7 +2,7 @@ import { TestBed, fakeAsync, tick } from '@angular/core/testing';
 import { HttpErrorResponse } from '@angular/common/http';
 import { provideRouter, Router } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { AuthUser, CmsApiService, Dashboard } from './core/cms-api.service';
+import { AuthUser, BranchSummary, CmsApiService, Dashboard } from './core/cms-api.service';
 import { AppComponent } from './app.component';
 
 describe('new customer flow', () => {
@@ -25,13 +25,74 @@ describe('new customer flow', () => {
     component = new AppComponent(api, router);
   });
 
+  it('uses the same four rental status labels as the contract form', () => {
+    expect(component.rentalStatusOptions.map((option) => option.label)).toEqual([
+      '登記',
+      '辦公室',
+      '登記+辦公室',
+      '個人名義'
+    ]);
+  });
+
+  it('shows reconciliation by role and lets secretaries edit only their own branch', () => {
+    const supervisor: AuthUser = {
+      ...testUser(), role_name: '督導秘書', branch_id: 1,
+      canCreateRent: false, canViewRent: true, canEditRent: false,
+      canEditAllBranches: false, canViewAllOffices: false,
+      canManageBranch: false, canManageBackup: false
+    };
+    component.currentUser.set(supervisor);
+    const supervisorViews = component.navGroups().flatMap((group) => group.children.map((item) => item.key));
+    expect(supervisorViews).toContain('rent-search');
+    expect(supervisorViews).not.toContain('rent-new');
+    expect(component.canEditBranch({ branch_id: 1 } as BranchSummary)).toBeTrue();
+    expect(component.canEditBranch({ branch_id: 2 } as BranchSummary)).toBeFalse();
+
+    component.currentUser.set({ ...supervisor, role_name: '一般秘書', canViewRent: false });
+    const generalViews = component.navGroups().flatMap((group) => group.children.map((item) => item.key));
+    expect(generalViews).not.toContain('rent-search');
+  });
+
   it('moves to the contract step without clearing customer entries', () => {
     component.newCustomerForm.companyName = '測試客戶有限公司';
+    const scrollTo = spyOn(window, 'scrollTo');
 
     component.goToNewCustomerStep(2);
 
     expect(component.customerNewStep()).toBe(2);
     expect(component.newCustomerForm.companyName).toBe('測試客戶有限公司');
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+  });
+
+  it('returns to the top when moving back to customer details', () => {
+    component.newCustomerForm.companyName = '測試客戶有限公司';
+    component.customerNewStep.set(2);
+    const scrollTo = spyOn(window, 'scrollTo');
+
+    component.goToNewCustomerStep(1);
+
+    expect(component.customerNewStep()).toBe(1);
+    expect(scrollTo).toHaveBeenCalledWith(0, 0);
+  });
+
+  it('joins a selected relation group and uses its shared note', () => {
+    const group = {
+      relation_group_id: 48,
+      group_note: '關聯公司共用 XXX',
+      member_count: 3,
+      members: [
+        { relation_member_id: 1, customer_id: 10, company_name: 'A 公司', is_resolved: true },
+        { relation_member_id: 2, customer_id: null, company_name: 'B 公司', is_resolved: false },
+        { relation_member_id: 3, customer_id: null, company_name: 'C 公司', is_resolved: false }
+      ]
+    };
+
+    component.selectRelationGroup(group);
+
+    expect(component.newCustomerForm.relationMode).toBe('join');
+    expect(component.newCustomerForm.relationGroupId).toBe(48);
+    expect(component.newCustomerForm.relationGroupNote).toBe('關聯公司共用 XXX');
+    expect(component.newCustomerForm.relatedCompanyNames).toEqual([]);
   });
 
   it('opens the password recovery form from login', () => {
@@ -92,6 +153,19 @@ describe('new customer flow', () => {
     expect(component.newCustomerFieldErrors()).toEqual({});
   });
 
+  it('marks an existing company name as invalid and does not offer it for selection', () => {
+    const api = {
+      customerLookup: () => of([{ company_name: '既有客戶有限公司' }])
+    } as unknown as CmsApiService;
+    const duplicateComponent = new AppComponent(api, {} as Router);
+    duplicateComponent.newCustomerForm.companyName = '  既有客戶有限公司  ';
+
+    duplicateComponent.validateNewCustomerCompanyName();
+
+    expect(duplicateComponent.newCustomerFieldErrors()['companyName']).toBe('公司名稱已存在，請改用其他名稱。');
+    expect(duplicateComponent.newCustomerOptions()).toEqual([]);
+  });
+
   it('keeps registration validation beside the specific invalid field', () => {
     component.registerForm = {
       account: '',
@@ -134,6 +208,53 @@ describe('new customer flow', () => {
     expect(registrationComponent.error()).toBe('');
   });
 
+  it('clears unfinished registration fields whenever the registration screen opens', () => {
+    component.registerForm = {
+      account: 'unfinished-account',
+      password: 'unfinished-password',
+      staffName: '未送出職員',
+      email: 'unfinished@example.com'
+    };
+    component.registrationFieldErrors.set({ email: '請輸入有效的信箱格式。' });
+
+    component.openRegistration();
+
+    expect(component.authMode()).toBe('register');
+    expect(component.registerForm).toEqual({
+      account: '',
+      password: '',
+      staffName: '',
+      email: ''
+    });
+    expect(component.registrationFieldErrors()).toEqual({});
+  });
+
+  it('moves to the approval status after email verification succeeds', () => {
+    const api = {
+      verifyEmail: () => of(void 0)
+    } as unknown as CmsApiService;
+    const verificationComponent = new AppComponent(api, {} as Router);
+    verificationComponent.emailVerificationForm.token = 'valid-token';
+
+    verificationComponent.completeEmailVerification();
+
+    expect(verificationComponent.authMode()).toBe('verification-complete');
+    expect(verificationComponent.emailVerificationForm.token).toBe('');
+  });
+
+  it('shows recovery guidance when an email verification link is invalid', () => {
+    const api = {
+      verifyEmail: () => throwError(() => new Error('expired token'))
+    } as unknown as CmsApiService;
+    const verificationComponent = new AppComponent(api, {} as Router);
+    verificationComponent.emailVerificationForm.token = 'expired-token';
+
+    verificationComponent.completeEmailVerification();
+
+    expect(verificationComponent.authMode()).toBe('verification-error');
+    expect(verificationComponent.error()).toContain('驗證連結無效或已過期');
+  });
+
   it('clears stale new customer validation when re-entering the page', () => {
     spyOn(component, 'loadActiveViewData');
     component.activeView.set('customer-search');
@@ -143,6 +264,97 @@ describe('new customer flow', () => {
     activateView.call(component, 'customer-new');
 
     expect(component.newCustomerFieldErrors()).toEqual({});
+  });
+
+  it('restores the customer search to its initial state after visiting another page', () => {
+    spyOn(component, 'loadActiveViewData');
+    component.activeView.set('contract-search');
+    component.customerFilters.companyName = '吉';
+    component.customerFilters.phone = '0912';
+    component.customerPage.set(2);
+    component.customerPageSize.set(50);
+    component.advancedFiltersOpen.set(false);
+
+    const activateView = (component as unknown as { activateView: (view: 'customer-search') => void }).activateView;
+    activateView.call(component, 'customer-search');
+
+    expect(component.customerFilters).toEqual({
+      companyName: '',
+      taxId: '',
+      phone: '',
+      accountInfo: '',
+      ownerName: '',
+      branchId: null,
+      officeNo: '',
+      ownerBirthdayMonth: null,
+      contactBirthdayMonth: null
+    });
+    expect(component.customerPage()).toBe(0);
+    expect(component.customerPageSize()).toBe(20);
+    expect(component.advancedFiltersOpen()).toBeTrue();
+  });
+
+  it('keeps customer search conditions when returning from a customer detail', () => {
+    spyOn(component, 'loadActiveViewData');
+    component.activeView.set('customer-detail');
+    component.customerFilters.companyName = '吉';
+    component.backToCustomerList();
+
+    const activateView = (component as unknown as { activateView: (view: 'customer-search') => void }).activateView;
+    activateView.call(component, 'customer-search');
+
+    expect(component.customerFilters.companyName).toBe('吉');
+  });
+
+  it('uses the in-app confirmation dialog before saving a changed shared group note', () => {
+    component.selectedCustomer.set({
+      customer_id: 108,
+      relationGroup: {
+        relation_group_id: 48,
+        group_note: '原始備註',
+        member_count: 4,
+        members: []
+      }
+    } as never);
+    component.customerEditForm.relationGroupNote = '更新後的共用備註';
+    const saveSpy = spyOn(
+      component as unknown as { saveCustomer: (id: number, form: unknown, message: string) => void },
+      'saveCustomer'
+    );
+
+    component.saveCustomerEdit();
+
+    expect(component.confirmationDialog()?.title).toBe('確認儲存共用備註');
+    expect(component.confirmationDialog()?.message).toContain('4 間關聯公司');
+    expect(saveSpy).not.toHaveBeenCalled();
+
+    component.confirmDialog();
+
+    expect(saveSpy).toHaveBeenCalled();
+    expect(component.confirmationDialog()).toBeNull();
+  });
+
+  it('returns to the customer list after a customer and contract are created', () => {
+    const api = {
+      createCustomerWithContract: () => of({ customer_id: 108 }),
+      customers: () => of({ content: [], totalElements: 0, page: 0, pageSize: 20 })
+    } as unknown as CmsApiService;
+    const createdComponent = new AppComponent(api, {
+      navigateByUrl: (url: string) => {
+        navigations.push(url);
+        return Promise.resolve(true);
+      }
+    } as unknown as Router);
+    createdComponent.newCustomerForm.companyName = '測試新增客戶';
+    spyOn(createdComponent, 'loadDashboard');
+
+    createdComponent.createCustomer();
+
+    expect(navigations).toEqual(['/customers']);
+  });
+
+  it('shows a neutral no-contract status instead of a customer rental status', () => {
+    expect(component.customerLeaseStatus({ contracts: [], lease_status: null })).toBe('尚無租約');
   });
 
   it('stores operation feedback as a toast', () => {
@@ -262,6 +474,24 @@ describe('new customer flow', () => {
     fixture.destroy();
   });
 
+  it('shows the approval status without a second verification button', () => {
+    const fixture = TestBed.configureTestingModule({
+      imports: [AppComponent],
+      providers: [provideRouter([]), { provide: CmsApiService, useValue: {} }]
+    }).createComponent(AppComponent);
+    const view = fixture.componentInstance;
+    view.currentUser.set(null);
+    view.authMode.set('verification-complete');
+    fixture.detectChanges();
+
+    const page = fixture.nativeElement as HTMLElement;
+    expect(page.querySelector('#email-verification-complete')?.textContent).toContain('Email 已驗證');
+    expect(page.querySelector('.auth-verification-copy')?.textContent).toContain('你的申請已送交主管開通。');
+    expect(page.querySelector('.auth-verification-steps')).toBeNull();
+    expect(page.querySelector('button.auth-submit')?.textContent?.trim()).toBe('返回登入');
+    fixture.destroy();
+  });
+
   it('switches the login password between masked and visible text', () => {
     const fixture = TestBed.configureTestingModule({
       imports: [AppComponent],
@@ -298,6 +528,7 @@ describe('new customer flow', () => {
     fixture.detectChanges();
 
     expect(page.querySelector('.auth-help-panel')?.textContent).toContain('輸入帳號或信箱後，我們會寄送重設連結。');
+    expect(page.querySelector('.auth-password-help-panel .auth-help-icon')).toBeNull();
     expect(page.querySelector('button.auth-back-action')?.textContent?.trim()).toBe('返回登入');
     fixture.destroy();
   });
@@ -509,6 +740,10 @@ describe('new customer flow', () => {
     };
 
     expect(customerSearchStatus.displayCustomerLeaseStatus('有效中')).toBe('續約中');
+  });
+
+  it('labels customers without a contract clearly in the search results', () => {
+    expect(component.customerListLeaseStatus({ contract_id: null, lease_status: null })).toBe('尚無租約');
   });
 
   it('toggles advanced customer filters without clearing the query', () => {
@@ -1013,6 +1248,7 @@ describe('new customer flow', () => {
       role_name: '主管',
       scope: 'all',
       canCreateRent: true,
+      canViewRent: true,
       canEditRent: true,
       canEditStaff: true,
       canCreateOffice: true,
@@ -1292,14 +1528,9 @@ describe('new customer flow', () => {
     const option = page.querySelector<HTMLButtonElement>('#contract-customer-options button');
     expect(option?.textContent?.trim()).toBe('測試客戶有限公司');
     expect(option?.textContent).not.toContain('負責人');
+    expect(page.querySelector('input[name="newContractFirstPaymentAmount"]')).toBeNull();
+    expect(page.querySelector('input[name="newContractFirstPaymentDate"]')).toBeNull();
     fixture.destroy();
-  });
-
-  it('requires renewal payment amount and date to be provided together', () => {
-    component.newContractFirstPaymentAmount = 12000;
-
-    expect(component.hasValidNewContractPayment()).toBeFalse();
-    expect(component.error()).toBe('本次繳款金額與繳款日期必須一起填寫。');
   });
 });
 
@@ -1340,6 +1571,7 @@ function testUser(): AuthUser {
     role_name: '主管',
     scope: 'all',
     canCreateRent: true,
+    canViewRent: true,
     canEditRent: true,
     canEditStaff: true,
     canCreateOffice: true,

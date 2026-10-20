@@ -392,26 +392,102 @@ class CmsApplicationTests {
     }
 
     @Test
-    void contractRenewalStoresTheCurrentPaymentAmountAndDate() throws Exception {
-        MvcResult created = mvc.perform(post("/api/contracts/with-first-payment")
+    void relationGroupSharesNotesAcrossPendingAndNewMembers() throws Exception {
+        MvcResult alphaResult = mvc.perform(post("/api/customers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
-                                  "contract": {
-                                    "customerId": 1,
-                                    "rentalItem": "登記",
-                                    "rentalStatus": "登記",
-                                    "signerStaffId": 1,
-                                    "partnerStaffId": 2,
-                                    "paymentMonths": 1,
-                                    "startDateText": "2026-08-01",
-                                    "endDateText": "2026-08-31",
-                                    "rent": 3000,
-                                    "leaseStatus": "綁約中",
-                                    "updatedBy": 1
-                                  },
-                                  "firstPaymentAmount": 3000,
-                                  "firstPaymentDateText": "2026-08-02"
+                                  "companyName": "Shared Group Alpha Co",
+                                  "relatedCompanyNames": ["Shared Group Beta Co", "Shared Group Gamma Co"],
+                                  "relationGroupNote": "集團共用 XXX",
+                                  "updatedBy": 1
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relationGroup.group_note", is("集團共用 XXX")))
+                .andExpect(jsonPath("$.relationGroup.members[*].company_name",
+                        hasItems("Shared Group Alpha Co", "Shared Group Beta Co", "Shared Group Gamma Co")))
+                .andReturn();
+        long alphaId = objectMapper.readTree(alphaResult.getResponse().getContentAsString())
+                .get("customer_id").asLong();
+        long groupId = objectMapper.readTree(alphaResult.getResponse().getContentAsString())
+                .path("relationGroup").path("relation_group_id").asLong();
+
+        mvc.perform(get("/api/customers/relation-groups/pending-match")
+                        .param("companyName", "Shared Group Beta Co"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].relation_group_id", is((int) groupId)))
+                .andExpect(jsonPath("$[0].group_note", is("集團共用 XXX")));
+
+        MvcResult betaResult = mvc.perform(post("/api/customers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "Shared Group Beta Co",
+                                  "relationGroupId": %d,
+                                  "relationGroupNote": "集團共用 XXX",
+                                  "updatedBy": 1
+                                }
+                                """.formatted(groupId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relationGroup.group_note", is("集團共用 XXX")))
+                .andExpect(jsonPath("$.relatedCompanies[*].company_name",
+                        hasItems("Shared Group Alpha Co", "Shared Group Gamma Co")))
+                .andReturn();
+        long betaId = objectMapper.readTree(betaResult.getResponse().getContentAsString())
+                .get("customer_id").asLong();
+
+        mvc.perform(post("/api/customers")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "Shared Group Delta Co",
+                                  "relationGroupId": %d,
+                                  "relationGroupNote": "集團共用 XXX",
+                                  "updatedBy": 1
+                                }
+                                """.formatted(groupId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relatedCompanies[*].company_name",
+                        hasItems("Shared Group Alpha Co", "Shared Group Beta Co", "Shared Group Gamma Co")));
+
+        mvc.perform(put("/api/customers/{id}", betaId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "companyName": "Shared Group Beta Co",
+                                  "relationGroupId": %d,
+                                  "relationGroupNote": "已更新的集團備註",
+                                  "updatedBy": 1
+                                }
+                                """.formatted(groupId)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relationGroup.group_note", is("已更新的集團備註")));
+
+        mvc.perform(get("/api/customers/{id}", alphaId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.relationGroup.group_note", is("已更新的集團備註")))
+                .andExpect(jsonPath("$.relatedCompanies[*].company_name",
+                        hasItems("Shared Group Beta Co", "Shared Group Gamma Co", "Shared Group Delta Co")));
+    }
+
+    @Test
+    void contractRenewalDoesNotCreatePaymentRecord() throws Exception {
+        MvcResult created = mvc.perform(post("/api/contracts")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "customerId": 1,
+                                  "rentalItem": "登記",
+                                  "rentalStatus": "登記",
+                                  "signerStaffId": 1,
+                                  "partnerStaffId": 2,
+                                  "paymentMonths": 1,
+                                  "startDateText": "2026-08-01",
+                                  "endDateText": "2026-08-31",
+                                  "rent": 3000,
+                                  "leaseStatus": "綁約中",
+                                  "updatedBy": 1
                                 }
                                 """))
                 .andExpect(status().isOk())
@@ -420,12 +496,10 @@ class CmsApplicationTests {
 
         long contractId = objectMapper.readTree(created.getResponse().getContentAsString())
                 .get("contract_id").asLong();
-        Map<String, Object> payment = jdbc.queryForMap(
-                "SELECT * FROM rent_payments WHERE contract_id = ?", contractId);
+        Integer paymentCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM rent_payments WHERE contract_id = ?", Integer.class, contractId);
 
-        org.junit.jupiter.api.Assertions.assertEquals(3000.0, ((Number) payment.get("AMOUNT")).doubleValue());
-        org.junit.jupiter.api.Assertions.assertEquals("2026-08-02", payment.get("PAYMENT_DATE_TEXT"));
-        org.junit.jupiter.api.Assertions.assertEquals("本次繳款", payment.get("NOTE"));
+        org.junit.jupiter.api.Assertions.assertEquals(0, paymentCount);
     }
 
     @Test
@@ -1256,6 +1330,28 @@ class CmsApplicationTests {
                 .andExpect(jsonPath("$.contracts[0].signed_date_text", is("2026-06-01")))
                 .andExpect(jsonPath("$.contracts[0].signer_staff_id", is(1)))
                 .andExpect(jsonPath("$.contracts[0].signer_staff_name").exists());
+    }
+
+    @Test
+    void customersCannotShareCompanyNamesIgnoringWhitespaceOrCase() throws Exception {
+        insertDashboardCustomer("Duplicate Guard Customer", "1980-01-01");
+
+        mvc.perform(post("/api/customers")
+                        .contentType("application/json")
+                        .content("""
+                                {
+                                  "companyName": "  duplicate guard customer  ",
+                                  "updatedBy": 1
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error", is("companyName already exists")));
+
+        Integer count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM customers WHERE LOWER(TRIM(company_name)) = LOWER(?)",
+                Integer.class,
+                "Duplicate Guard Customer");
+        org.junit.jupiter.api.Assertions.assertEquals(1, count);
     }
 
     @Test

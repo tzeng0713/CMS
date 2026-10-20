@@ -1,5 +1,5 @@
 import { bootstrapApplication } from '@angular/platform-browser';
-import { provideHttpClient } from '@angular/common/http';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideRouter, Routes } from '@angular/router';
 import { AppComponent } from './app/app.component';
 import { RouteSinkComponent } from './app/route-sink.component';
@@ -29,5 +29,5 @@ const routes: Routes = [
 ];
 
 bootstrapApplication(AppComponent, {
-  providers: [provideHttpClient(), provideRouter(routes)]
+  providers: [provideHttpClient(withInterceptors([(request, next) => next(request.clone({ withCredentials: true }))])), provideRouter(routes)]
 }).catch((err) => console.error(err));

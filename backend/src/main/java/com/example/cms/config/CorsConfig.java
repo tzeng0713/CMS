@@ -7,6 +7,12 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @Configuration
 public class CorsConfig {
+    private final RoleAccessInterceptor roleAccessInterceptor;
+
+    public CorsConfig(org.springframework.beans.factory.ObjectProvider<RoleAccessInterceptor> roleAccessInterceptor) {
+        this.roleAccessInterceptor = roleAccessInterceptor.getIfAvailable();
+    }
+
     @Bean
     WebMvcConfigurer corsConfigurer() {
         return new WebMvcConfigurer() {
@@ -20,7 +26,13 @@ public class CorsConfig {
                                 "http://127.0.0.1:4301"
                         )
                         .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-                        .allowedHeaders("*");
+                        .allowedHeaders("*")
+                        .allowCredentials(true);
+            }
+
+            @Override
+            public void addInterceptors(org.springframework.web.servlet.config.annotation.InterceptorRegistry registry) {
+                if (roleAccessInterceptor != null) registry.addInterceptor(roleAccessInterceptor);
             }
         };
     }

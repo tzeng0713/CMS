@@ -5,7 +5,6 @@
       <ng-container *ngIf="authMode() === 'login'">
         <span class="auth-eyebrow">Customer Operations</span>
         <h1 id="auth-heading">客戶管理資訊系統</h1>
-        <p>請登入後使用客戶與租金作業。</p>
       </ng-container>
     </header>
 
@@ -56,7 +55,7 @@
       <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '登入中…' : '登入' }}</button>
 
       <div class="auth-support-actions" aria-label="帳號協助">
-        <button type="button" class="auth-support-action" [disabled]="authBusy()" (click)="setAuthMode('register')">申請帳號</button>
+        <button type="button" class="auth-support-action" [disabled]="authBusy()" (click)="openRegistration()">申請帳號</button>
         <span aria-hidden="true"></span>
         <button type="button" class="auth-support-action" [disabled]="authBusy()" (click)="setAuthMode('forgot')">忘記密碼</button>
       </div>
@@ -147,13 +146,7 @@
     </form>
 
     <form class="auth-form" *ngIf="authMode() === 'forgot'" (ngSubmit)="requestPasswordReset()">
-      <section class="auth-help-panel" aria-labelledby="password-help-heading">
-          <span class="auth-help-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24">
-              <path d="M7.5 10.5a4.5 4.5 0 1 1 8.3 2.4L10.7 18H7v-3.7l5.1-5.1a1.6 1.6 0 0 1 2.3 2.3l-1.1 1.1" />
-              <path d="m6.5 18.5-2 2" />
-            </svg>
-          </span>
+      <section class="auth-help-panel auth-password-help-panel" aria-labelledby="password-help-heading">
           <h2 id="password-help-heading">忘記密碼？</h2>
           <p>輸入帳號或信箱後，我們會寄送重設連結。</p>
       </section>
@@ -171,11 +164,40 @@
       <button type="button" class="auth-back-action" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
     </form>
 
-    <form class="auth-form" *ngIf="authMode() === 'verify'" (ngSubmit)="completeEmailVerification()">
-      <div class="auth-panel-intro"><h2>完成 Email 驗證</h2><p>驗證後會送交主管開通；此連結只能使用一次。</p></div>
-      <button class="auth-submit" type="submit" [disabled]="authBusy()">{{ authBusy() ? '驗證中…' : '完成驗證' }}</button>
-      <button type="button" class="auth-back-action" [disabled]="authBusy()" (click)="returnToLogin()">返回登入</button>
-    </form>
+    <section class="auth-form auth-verification-status" *ngIf="authMode() === 'verify'" aria-labelledby="email-verification-progress">
+      <div class="auth-help-panel">
+        <span class="auth-help-icon auth-verification-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3.5v3M12 17.5v3M5.99 5.99l2.12 2.12M15.89 15.89l2.12 2.12M3.5 12h3M17.5 12h3M5.99 18.01l2.12-2.12M15.89 8.11l2.12-2.12" /></svg>
+        </span>
+        <h2 id="email-verification-progress">正在驗證你的 Email</h2>
+        <p role="status">系統正在確認驗證連結，請稍候。</p>
+      </div>
+    </section>
+
+    <section class="auth-form auth-verification-status" *ngIf="authMode() === 'verification-complete'" aria-labelledby="email-verification-complete">
+      <div class="auth-help-panel">
+        <span class="auth-help-icon auth-verification-icon is-complete" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="m5.5 12.5 4.1 4.1L18.8 7.4" /></svg>
+        </span>
+        <h2 id="email-verification-complete">Email 已驗證</h2>
+        <p class="auth-verification-copy">
+          <span>你的申請已送交主管開通。</span>
+          <span>核准後，請返回登入頁重新登入。</span>
+        </p>
+      </div>
+      <button type="button" class="auth-submit" (click)="returnToLogin()">返回登入</button>
+    </section>
+
+    <section class="auth-form auth-verification-status" *ngIf="authMode() === 'verification-error'" aria-labelledby="email-verification-error">
+      <div class="auth-help-panel">
+        <span class="auth-help-icon auth-verification-icon is-error" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="m8 8 8 8M16 8l-8 8" /></svg>
+        </span>
+        <h2 id="email-verification-error">驗證連結已失效</h2>
+        <p>請使用最新一封驗證信中的連結；若仍無法完成，返回登入頁後可重新寄送驗證信。</p>
+      </div>
+      <button type="button" class="auth-back-action" (click)="returnToLogin()">返回登入</button>
+    </section>
 
     <form class="auth-form" *ngIf="authMode() === 'reset'" (ngSubmit)="completePasswordReset()">
       <div class="auth-panel-intro"><h2>設定新密碼</h2><p>請使用至少 8 個字元、未曾使用過的安全密碼。</p></div>
@@ -350,7 +372,6 @@
                 </div>
                 <div class="notification-action">
                   <small>{{ money(item.suggested_amount) }}</small>
-                  <button type="button" class="ghost compact-button" (click)="openReconciliation(item)">新增對帳</button>
                 </div>
               </article>
             </div>
@@ -380,7 +401,6 @@
                 </div>
                 <div class="notification-action">
                   <small>{{ money(item.rent) }}</small>
-                  <button type="button" class="ghost compact-button" (click)="openReconciliation(item)">新增對帳</button>
                 </div>
               </article>
             </div>
@@ -544,8 +564,8 @@
             <span>{{ customer.owner_name || '-' }}</span>
             <span>{{ customer.rental_item || customer.registration_type || '-' }}</span>
             <span>
-              <span class="lease-status" [class.terminated]="displayCustomerLeaseStatus(customer.lease_status) === '已解約'">
-                {{ displayCustomerLeaseStatus(customer.lease_status) }}
+              <span class="lease-status" [class.terminated]="customerListLeaseStatus(customer) === '已解約'" [class.no-contract]="customerListLeaseStatus(customer) === '尚無租約'">
+                {{ customerListLeaseStatus(customer) }}
               </span>
             </span>
             <span>{{ customer.office_no || '-' }}</span>
@@ -567,11 +587,17 @@
             <button type="button" class="ghost compact-button back-button" (click)="backToCustomerList()">返回列表</button>
             <p class="customer-detail-eyebrow">Customer Profile</p>
             <h2>{{ c.company_name }}</h2>
-            <p class="customer-detail-summary">負責人 {{ c.owner_name || '-' }} / {{ c.branch_name || '未指定分館' }} / 房號 {{ c.office_no || '-' }}</p>
           </div>
           <div class="header-actions customer-detail-header-actions">
-            <span class="status">{{ displayLeaseStatus(c.lease_status || displayRentalStatus(c.rental_status)) }}</span>
-            <button type="button" class="ghost" *ngIf="!editingCustomer()" (click)="startEditCustomer()">修改</button>
+            <span
+              class="customer-detail-status"
+              [class.terminated]="customerLeaseStatus(c) === '已解約'"
+              [class.no-contract]="customerLeaseStatus(c) === '尚無租約'"
+              [attr.aria-label]="'租約狀態：' + customerLeaseStatus(c)"
+            >
+              {{ customerLeaseStatus(c) }}
+            </span>
+            <button type="button" class="ghost" *ngIf="!editingCustomer() && c.can_edit !== false" (click)="startEditCustomer()">修改</button>
           </div>
         </header>
 
@@ -661,10 +687,28 @@
               代辦
             </label>
             <label class="wide">
-              備註
+                  客戶備註
               <textarea name="editNotes" rows="3" [(ngModel)]="customerEditForm.notes"></textarea>
+              <small>僅套用於 {{ c.company_name }}；若要更新所有關聯公司的共用內容，請修改下方的共用備註。</small>
             </label>
               </div>
+            </section>
+            <section class="customer-form-section relation-group-edit-section" *ngIf="c.relationGroup as group">
+              <div class="customer-section-heading relation-group-heading">
+                <div>
+                  <h3>關聯公司</h3>
+                </div>
+                <span class="relation-group-status is-linked">共用資料</span>
+              </div>
+              <div class="relation-group-member-list" aria-label="關聯公司成員">
+                <span *ngFor="let member of group.members" [class.current]="member.customer_id === c.customer_id">
+                  {{ member.company_name }}<small *ngIf="member.customer_id === c.customer_id">目前公司</small>
+                </span>
+              </div>
+              <label class="wide relation-note-field">
+                共用備註
+                <textarea name="editRelationGroupNote" rows="3" [(ngModel)]="customerEditForm.relationGroupNote" placeholder="請輸入所有關聯公司共用的備註"></textarea>
+              </label>
             </section>
             <footer class="customer-detail-actions">
               <button type="submit" [disabled]="saving()">儲存修改</button>
@@ -697,54 +741,49 @@
                   <div><span>會計師資訊</span><strong>{{ c.accountant_info || c.referrer || '-' }}</strong></div>
                   <div><span>帳戶資訊</span><strong>{{ c.account_info || '-' }}</strong></div>
                   <div class="wide"><span>代辦</span><strong>{{ c.is_agent ? '是' : '否' }}</strong></div>
-                  <div class="wide"><span>備註</span><strong>{{ c.notes || '-' }}</strong></div>
+                  <div class="wide"><span>客戶備註</span><strong>{{ c.notes || '-' }}</strong></div>
                 </div>
               </section>
             </div>
           </ng-template>
 
-        <section class="panel" *ngIf="relatedCompanies().length">
-          <h3>相關公司</h3>
-          <ul class="same-owner related-company-list">
-            <li *ngFor="let company of relatedCompanies()">
-              <button
-                type="button"
-                *ngIf="company.customer_id; else unresolvedCompany"
-                (click)="openCustomerDetail(company.customer_id!)"
-              >
-                {{ company.company_name }}
-              </button>
-              <ng-template #unresolvedCompany>
-                <strong>{{ company.company_name }}</strong>
-              </ng-template>
-              <span>{{ company.is_resolved ? '已建立客戶資料' : '尚未建立客戶資料' }}</span>
-            </li>
-          </ul>
-        </section>
-
-        <section class="panel split">
-          <div>
-            <h3>同負責人公司</h3>
-            <p class="muted">依客戶資料的負責人欄位連動。</p>
-            <ul class="same-owner">
-              <li *ngFor="let company of sameOwnerCompanies()">
-                <button type="button" (click)="openCustomerDetail(company.customer_id)">
+        <div class="customer-detail-lower-grid" [class.customer-detail-lower-grid-single]="!c.relationGroup">
+          <section class="panel relation-group-detail" *ngIf="c.relationGroup as group">
+            <div class="panel-header">
+              <div>
+                <h3>關聯公司</h3>
+                <p>共 {{ group.member_count }} 間成員；共用備註與成員名單會同步更新。</p>
+              </div>
+              <span class="relation-group-status is-linked">共用資料</span>
+            </div>
+            <div class="relation-group-note-display">
+              <span>共用備註</span>
+              <p>{{ group.group_note || '尚未填寫共用備註' }}</p>
+            </div>
+            <ul class="related-company-list">
+              <li *ngFor="let company of relatedCompanies()">
+                <button
+                  type="button"
+                  class="relation-member-name"
+                  *ngIf="company.customer_id; else unresolvedCompany"
+                  (click)="openCustomerDetail(company.customer_id!)"
+                >
                   {{ company.company_name }}
                 </button>
-                <span>{{ company.rental_item || company.registration_type || '-' }}</span>
+                <ng-template #unresolvedCompany>
+                  <span class="relation-member-name">{{ company.company_name }}</span>
+                </ng-template>
+                <span class="relation-member-status" [class.is-resolved]="company.is_resolved">
+                  {{ company.is_resolved ? '已建立客戶資料' : '尚未建立客戶資料' }}
+                </span>
               </li>
-              <li *ngIf="!sameOwnerCompanies().length" class="empty">目前沒有其他同負責人公司</li>
             </ul>
-          </div>
+          </section>
 
-          <div>
+          <section class="panel customer-contract-panel">
             <h3>租約資料</h3>
             <div class="contract-cards" *ngIf="c.contracts.length; else noCustomerContracts">
               <article *ngFor="let contract of c.contracts">
-                <div class="contract-card-title">
-                  <strong>{{ value(contract, 'rental_item') }}</strong>
-                  <span>{{ displayLeaseStatus(contract['lease_status']) }}</span>
-                </div>
                 <div class="info-grid compact">
                   <div><span>承租狀態</span><strong>{{ value(contract, 'rental_status') }}</strong></div>
                   <div><span>簽約日期</span><strong>{{ value(contract, 'signed_date_text') }}</strong></div>
@@ -766,19 +805,9 @@
             <ng-template #noCustomerContracts>
               <p class="empty-state">目前沒有租約資料</p>
             </ng-template>
-          </div>
-        </section>
+          </section>
+        </div>
 
-        <section class="panel">
-          <h3>近期租金紀錄</h3>
-          <div class="records">
-            <div class="record" *ngFor="let p of c.rentPayments | slice:0:12">
-              <span>{{ formatPaymentMonth(p['payment_month']) }}</span>
-              <strong>{{ money(p['amount']) }}</strong>
-              <small>{{ value(p, 'receipt_no') }}</small>
-            </div>
-          </div>
-        </section>
         </div>
       </section>
     </section>
@@ -799,11 +828,11 @@
               <li [class.active]="customerNewStep() === 2">
                 <button type="button" (click)="goToNewCustomerStep(2)" [attr.aria-current]="customerNewStep() === 2 ? 'step' : null">
                   <span class="step-index">2</span>
-                  <span>租約與首筆繳款</span>
+                  <span>{{ canCreateRent() ? '租約與首筆繳款' : '租約資料' }}</span>
                 </button>
               </li>
             </ol>
-            <p>先建立客戶基本資料，再完成租約與首筆繳款設定。</p>
+            <p>先建立客戶基本資料，再完成租約{{ canCreateRent() ? '與首筆繳款' : '' }}設定。</p>
           </div>
         </header>
 
@@ -819,7 +848,8 @@
                       #newCompanyNameInput
                       name="newCompanyName"
                       [(ngModel)]="newCustomerForm.companyName"
-                      (ngModelChange)="lookupNewCustomerSuggestions(); clearNewCustomerFieldError('companyName')"
+                      (ngModelChange)="validateNewCustomerCompanyName()"
+                      (blur)="detectPendingRelationForNewCustomer()"
                       placeholder="請輸入公司名稱"
                       [class.field-invalid]="newCustomerFieldErrors()['companyName']"
                       [attr.aria-invalid]="newCustomerFieldErrors()['companyName'] ? 'true' : null"
@@ -829,12 +859,6 @@
                       {{ newCustomerFieldErrors()['companyName'] }}
                     </span>
                   </label>
-                  <div class="lookup-list" *ngIf="newCustomerOptions().length">
-                    <button type="button" *ngFor="let option of newCustomerOptions()" (click)="fillExistingCustomerName(option)">
-                      <strong>{{ option.company_name }}</strong>
-                      <span>負責人 {{ option.owner_name || '-' }} / 統編 {{ option.tax_id || '-' }}</span>
-                    </button>
-                  </div>
                 </div>
                 <label>
                   統一編號
@@ -887,27 +911,81 @@
                   代辦
                 </label>
                 <label class="wide">
-                  備註
+                  客戶備註
                   <textarea name="newNotes" rows="3" [(ngModel)]="newCustomerForm.notes" placeholder="請輸入備註"></textarea>
+                  <small>僅套用於此公司；關聯公司的共用資訊請填寫下方的共用備註。</small>
                 </label>
               </div>
             </section>
 
             <section class="customer-form-section related-company-section">
-              <div class="customer-section-heading">
-                <h3>相關公司</h3>
-                <span>若有關聯公司，請逐筆新增。</span>
-              </div>
-              <div class="related-company-fields">
-                <div class="repeatable-field" *ngFor="let relatedName of newCustomerForm.relatedCompanyNames; let i = index; trackBy: trackByIndex">
-                  <input
-                    [name]="'newRelatedCompany' + i"
-                    [(ngModel)]="newCustomerForm.relatedCompanyNames[i]"
-                    placeholder="輸入相關公司名稱"
-                  />
-                  <button type="button" class="icon-button remove" title="移除相關公司" aria-label="移除相關公司" (click)="removeRelatedCompany(i)">×</button>
+              <div class="customer-section-heading relation-group-heading">
+                <div>
+                  <h3>關聯公司</h3>
+                  <span>共用備註與成員名單由同一筆資料維護，避免逐家公司重複修改。</span>
                 </div>
-                <button type="button" class="add-related-company" (click)="addRelatedCompany()">新增相關公司</button>
+                <span class="relation-group-status" [class.is-linked]="newCustomerForm.relationMode === 'join'">
+                  {{ newCustomerForm.relationMode === 'join' ? '已關聯' : newCustomerForm.relationMode === 'create' ? '建立關聯公司' : '未設定' }}
+                </span>
+              </div>
+
+              <div class="relation-mode-selector" role="group" aria-label="關聯公司設定方式">
+                <button type="button" class="relation-mode-button" [class.active]="newCustomerForm.relationMode === 'none'" [attr.aria-pressed]="newCustomerForm.relationMode === 'none'" (click)="setNewCustomerRelationMode('none')">
+                  <strong>暫不設定</strong><span>此公司暫不設定關聯公司</span>
+                </button>
+                <button type="button" class="relation-mode-button" [class.active]="newCustomerForm.relationMode === 'create'" [attr.aria-pressed]="newCustomerForm.relationMode === 'create'" (click)="setNewCustomerRelationMode('create')">
+                  <strong>建立關聯公司</strong><span>先登錄待建立的關聯公司</span>
+                </button>
+                <button type="button" class="relation-mode-button" [class.active]="newCustomerForm.relationMode === 'join'" [attr.aria-pressed]="newCustomerForm.relationMode === 'join'" (click)="setNewCustomerRelationMode('join')">
+                  <strong>加入既有關聯公司</strong><span>搜尋 A、B 或 C 公司加入</span>
+                </button>
+              </div>
+
+              <p class="relation-group-empty" *ngIf="newCustomerForm.relationMode === 'none'">日後若有新公司加入，可在新增該公司時選擇任一既有關聯公司。</p>
+
+              <div class="relation-group-editor" *ngIf="newCustomerForm.relationMode === 'create'">
+                <p class="relation-group-helper">輸入預計建立的關聯公司。之後建立同名客戶時，系統會提示建立關聯。</p>
+                <div class="related-company-fields">
+                  <div class="repeatable-field" *ngFor="let relatedName of newCustomerForm.relatedCompanyNames; let i = index; trackBy: trackByIndex">
+                    <input
+                      [name]="'newRelatedCompany' + i"
+                      [(ngModel)]="newCustomerForm.relatedCompanyNames[i]"
+                      placeholder="輸入相關公司名稱"
+                    />
+                    <button type="button" class="icon-button remove" title="移除相關公司" aria-label="移除相關公司" (click)="removeRelatedCompany(i)">×</button>
+                  </div>
+                  <button type="button" class="add-related-company" (click)="addRelatedCompany()">新增相關公司</button>
+                </div>
+                <label class="relation-note-field">
+                  共用備註
+                  <textarea name="newRelationGroupNote" rows="3" [(ngModel)]="newCustomerForm.relationGroupNote" placeholder="例如：XXX；此內容將由所有關聯公司共用"></textarea>
+                  <small>建立後可由任一關聯公司修改「共用備註」，所有成員會同步顯示。</small>
+                </label>
+              </div>
+
+              <div class="relation-group-editor" *ngIf="newCustomerForm.relationMode === 'join'">
+                <label class="relation-search-field">
+                  搜尋既有關聯公司
+                  <input name="relationGroupSearch" [(ngModel)]="relationGroupSearch" (input)="lookupRelationGroups()" placeholder="輸入任一成員名稱，例如 A 公司" autocomplete="off" />
+                </label>
+                <div class="relation-group-option-list" *ngIf="relationGroupOptions().length">
+                  <button type="button" *ngFor="let group of relationGroupOptions()" (click)="selectRelationGroup(group)">
+                    <strong>{{ relationGroupLabel(group) }}</strong>
+                    <span>{{ group.member_count }} 間成員 · {{ group.group_note || '尚未填寫共用備註' }}</span>
+                  </button>
+                </div>
+                <div class="relation-group-option-list pending" *ngIf="pendingRelationGroupOptions().length > 1">
+                  <p>找到多組待建立的關聯公司，請選擇正確的一組：</p>
+                  <button type="button" *ngFor="let group of pendingRelationGroupOptions()" (click)="selectRelationGroup(group)">
+                    <strong>{{ relationGroupLabel(group) }}</strong>
+                    <span>{{ group.member_count }} 間成員</span>
+                  </button>
+                </div>
+                <article class="relation-group-preview" *ngIf="selectedNewCustomerRelationGroup() as group">
+                  <div><span>已選擇關聯公司</span><strong>共 {{ group.member_count }} 間成員</strong></div>
+                  <div><span>共用備註</span><p>{{ group.group_note || '尚未填寫共用備註' }}</p></div>
+                  <div class="relation-member-chips"><span *ngFor="let member of group.members">{{ member.company_name }}</span></div>
+                </article>
               </div>
             </section>
           </section>
@@ -997,7 +1075,7 @@
             </section>
 
             <section class="customer-form-section customer-form-section-muted">
-              <h3>首筆繳款</h3>
+              <h3>{{ canCreateRent() ? '首筆繳款' : '租金與押金' }}</h3>
               <div class="customer-new-grid customer-new-grid-three">
                 <label>
                   租金
@@ -1007,11 +1085,11 @@
                   押金
                   <input type="number" name="newCustomerContractDeposit" [(ngModel)]="newCustomerContractForm.deposit" />
                 </label>
-                <label>
+                <label *ngIf="canCreateRent()">
                   本次繳款金額
                   <input type="number" min="0" name="newCustomerFirstPaymentAmount" [(ngModel)]="newCustomerFirstPaymentAmount" />
                 </label>
-                <label>
+                <label *ngIf="canCreateRent()">
                   繳款日期
                   <input type="date" name="newCustomerFirstPaymentDate" [(ngModel)]="newCustomerFirstPaymentDateText" />
                 </label>
@@ -1023,7 +1101,7 @@
             <div class="customer-new-actions-right">
               <button type="button" class="ghost" *ngIf="customerNewStep() === 2" (click)="goToNewCustomerStep(1)">上一步：客戶資料</button>
               <button type="button" class="next-step-button" *ngIf="customerNewStep() === 1" (click)="goToNewCustomerStep(2)">
-                下一步：租約與首筆繳款 <span aria-hidden="true">›</span>
+                下一步：{{ canCreateRent() ? '租約與首筆繳款' : '租約資料' }} <span aria-hidden="true">›</span>
               </button>
               <button type="submit" *ngIf="customerNewStep() === 2" [disabled]="saving()">新增客戶與租約</button>
             </div>
@@ -1145,7 +1223,7 @@
             <span>{{ money(row['deposit']) }}</span>
             <span>{{ displayLeaseStatus(row['lease_status']) }}</span>
             <span>
-              <button type="button" class="ghost compact-button table-action-button" (click)="startEditContract(row)">修改</button>
+              <button type="button" class="ghost compact-button table-action-button" *ngIf="canEditContract(row)" (click)="startEditContract(row)">修改</button>
             </span>
           </div>
         </div>
@@ -1268,14 +1346,6 @@
           <label>
             押金
             <input type="number" name="newContractDeposit" [(ngModel)]="newContractForm.deposit" />
-          </label>
-          <label>
-            本次繳款金額
-            <input type="number" min="0" name="newContractFirstPaymentAmount" [(ngModel)]="newContractFirstPaymentAmount" />
-          </label>
-          <label>
-            繳款日期
-            <input type="date" name="newContractFirstPaymentDate" [(ngModel)]="newContractFirstPaymentDateText" />
           </label>
           <label>
             租約狀態
@@ -1539,7 +1609,7 @@
         <div class="panel-header">
           <div>
             <h2>查詢辦公室</h2>
-            <p>可依分館篩選；主管可直接在列表中修改辦公室資料。</p>
+            <p>主管可查詢及修改全部分館；其他角色可查詢及修改所屬分館的辦公室。</p>
           </div>
           <label class="inline-filter" *ngIf="canViewAllOffices()">
             分館
@@ -3838,5 +3908,30 @@
     </section>
   </main>
   <router-outlet></router-outlet>
+</div>
+
+<div
+  class="modal-overlay confirmation-overlay"
+  *ngIf="confirmationDialog() as dialog"
+  (click)="closeConfirmationDialog()"
+>
+  <section
+    class="modal-dialog confirmation-dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="confirmation-dialog-title"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal-header">
+      <h3 id="confirmation-dialog-title">{{ dialog.title }}</h3>
+    </header>
+    <div class="confirmation-dialog-body">
+      <p>{{ dialog.message }}</p>
+    </div>
+    <footer class="modal-footer">
+      <button type="button" class="ghost" (click)="closeConfirmationDialog()">取消</button>
+      <button type="button" (click)="confirmDialog()" [disabled]="saving()">{{ dialog.confirmLabel }}</button>
+    </footer>
+  </section>
 </div>
 </ng-template>
