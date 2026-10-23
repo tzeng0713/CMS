@@ -15,7 +15,7 @@ Angular + Spring Boot + MySQL 的客戶、租約、租金管理系統。
 
 - Java 17
 - Maven 3.9+
-- Node.js 18+
+- Node.js 22+（18、20 已停止支援）
 - MySQL 8+
 
 ## 建立資料庫
