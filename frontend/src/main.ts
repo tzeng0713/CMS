@@ -1,3 +1,4 @@
+import { provideZoneChangeDetection } from "@angular/core";
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideRouter, Routes } from '@angular/router';
@@ -29,5 +30,5 @@ const routes: Routes = [
 ];
 
 bootstrapApplication(AppComponent, {
-  providers: [provideHttpClient(withInterceptors([(request, next) => next(request.clone({ withCredentials: true }))])), provideRouter(routes)]
+  providers: [provideZoneChangeDetection(),provideHttpClient(withInterceptors([(request, next) => next(request.clone({ withCredentials: true }))])), provideRouter(routes)]
 }).catch((err) => console.error(err));

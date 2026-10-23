@@ -1,4 +1,4 @@
-import { CommonModule } from '@angular/common';
+
 import { HttpErrorResponse } from '@angular/common/http';
 import { AfterViewInit, Component, ElementRef, HostListener, OnInit, ViewChild, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -342,11 +342,10 @@ const emptyContractForm = (): ContractForm => ({
 });
 
 @Component({
-  selector: 'cms-root',
-  standalone: true,
-  imports: [CommonModule, FormsModule, RouterOutlet],
-  templateUrl: './app.component.html',
-  styleUrl: './app.component.scss'
+    selector: 'cms-root',
+    imports: [FormsModule, RouterOutlet],
+    templateUrl: './app.component.html',
+    styleUrl: './app.component.scss'
 })
 export class AppComponent implements OnInit, AfterViewInit {
   readonly chargeListLogoPath = CHARGE_LIST_LOGO_PATH;
