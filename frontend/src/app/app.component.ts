@@ -209,6 +209,7 @@ type RefundForm = {
   adjustmentNote: string;
   deductionTotal: number;
   midTermTermination: boolean;
+  terminationDateText: string;
   paymentMethod: string;
   bankCode: string;
   bankAccount: string;
@@ -227,6 +228,7 @@ const emptyRefundForm = (): RefundForm => ({
   adjustmentNote: '',
   deductionTotal: 0,
   midTermTermination: false,
+  terminationDateText: '',
   paymentMethod: '',
   bankCode: '',
   bankAccount: '',
@@ -791,12 +793,10 @@ export class AppComponent implements OnInit, AfterViewInit {
   customerNewStep = signal<1 | 2>(1);
   customerEditForm: CustomerForm = emptyCustomerForm();
   newContractForm: ContractForm = emptyContractForm();
-  contractEditForm: ContractForm = emptyContractForm();
   newOfficeForm: OfficeForm = emptyOfficeForm();
   officeEditForm: OfficeForm = emptyOfficeForm();
   newBranchForm: BranchForm = emptyBranchForm();
   branchEditForm: BranchForm = emptyBranchForm();
-  editingContract = signal<Record<string, unknown> | null>(null);
   editingRentPayment = signal<Record<string, unknown> | null>(null);
   rentEditForm: Partial<RentPaymentPayload> = {};
   rentForm: Partial<RentPaymentPayload> = {
@@ -1617,11 +1617,6 @@ export class AppComponent implements OnInit, AfterViewInit {
     const user = this.currentUser();
     if (!user) return false;
     return user.canEditAllBranches || office.branch_id === user.branch_id;
-  }
-
-  canEditContract(contract: Record<string, unknown>): boolean {
-    const user = this.currentUser();
-    return !!user && (user.canEditAllBranches || Number(contract['branch_id']) === user.branch_id);
   }
 
   loadOfficeRows(): void {
@@ -3059,31 +3054,10 @@ export class AppComponent implements OnInit, AfterViewInit {
       this.error.set('請先選擇客戶。');
       return;
     }
-    this.saveContract(null, this.newContractForm, '租約已續約。');
+    this.saveContract(this.newContractForm, '租約已續約。');
   }
 
-  startEditContract(row: Record<string, unknown>): void {
-    if (!this.canEditContract(row)) return;
-    this.editingContract.set(row);
-    this.contractEditForm = this.formFromContract(row);
-    this.loadOffices();
-  }
-
-  cancelEditContract(): void {
-    this.editingContract.set(null);
-    this.contractEditForm = emptyContractForm();
-  }
-
-  saveContractEdit(): void {
-    const row = this.editingContract();
-    const id = Number(row?.['contract_id']);
-    if (!id) {
-      return;
-    }
-    this.saveContract(id, this.contractEditForm, '租約已更新。');
-  }
-
-  private saveContract(id: number | null, form: ContractForm, message: string): void {
+  private saveContract(form: ContractForm, message: string): void {
     if (!form.customerId) {
       this.error.set('請先選擇客戶。');
       return;
@@ -3093,25 +3067,17 @@ export class AppComponent implements OnInit, AfterViewInit {
     }
     form.updatedBy = this.currentStaffId();
     this.saving.set(true);
-    const request = id
-      ? this.api.updateContract(id, this.toContractPayload(form))
-      : this.api.createContract(this.toContractPayload(form));
-
-    request.subscribe({
+    this.api.createContract(this.toContractPayload(form)).subscribe({
       next: () => {
         this.saving.set(false);
         this.error.set('');
         this.showToast(message);
-        if (id) {
-          this.cancelEditContract();
-        } else {
-          this.newContractForm = { ...emptyContractForm(), updatedBy: this.currentStaffId() };
-          this.contractCustomerSearch = '';
-          this.contractCustomerOptions.set([]);
-          this.contractCustomerDropdownOpen.set(false);
-          this.newContractFieldErrors.set({});
-          this.setView('contract-search');
-        }
+        this.newContractForm = { ...emptyContractForm(), updatedBy: this.currentStaffId() };
+        this.contractCustomerSearch = '';
+        this.contractCustomerOptions.set([]);
+        this.contractCustomerDropdownOpen.set(false);
+        this.newContractFieldErrors.set({});
+        this.setView('contract-search');
         this.loadDashboard();
         this.loadContracts();
       },
@@ -4026,6 +3992,23 @@ export class AppComponent implements OnInit, AfterViewInit {
     return endDate ? String(endDate) : null;
   }
 
+  /**
+   * 跟後端 RefundService.resolveMidTermTermination() 相同的規則，純粹讓勾選框跟試算金額
+   * 在送出前就能即時反映系統會自動判定的結果；最終是否中途解約仍由後端重新計算為準。
+   */
+  syncNewRefundMidTermTermination(): void {
+    const endDate = this.selectedContractEndDate(this.selectedRefundCustomer()?.contracts, this.newRefundForm.contractId);
+    if (this.newRefundForm.terminationDateText && endDate) {
+      this.newRefundForm.midTermTermination = this.newRefundForm.terminationDateText < endDate;
+    }
+  }
+
+  syncEditRefundMidTermTermination(endDateText: string | null | undefined): void {
+    if (this.refundEditForm.terminationDateText && endDateText) {
+      this.refundEditForm.midTermTermination = this.refundEditForm.terminationDateText < endDateText;
+    }
+  }
+
   unsettledChargeLists(chargeLists: Array<Record<string, unknown>> | undefined): Array<Record<string, unknown>> {
     return (chargeLists ?? []).filter((chargeList) => Number(chargeList['status']) !== 1);
   }
@@ -4274,10 +4257,6 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.contracts.set(value.content);
         this.contractTotal.set(value.totalElements);
         this.contractPage.set(value.page);
-        const match = value.content.find((row) => Number(row['contract_id']) === contractId) ?? value.content[0] ?? null;
-        if (match) {
-          this.startEditContract(match);
-        }
       },
       error: () => this.error.set('無法載入租約清單。')
     });
@@ -4296,6 +4275,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       adjustmentNote: row.adjustment_note ?? '',
       deductionTotal: Number(row.deduction_total ?? 0),
       midTermTermination: Boolean(row.mid_term_termination),
+      terminationDateText: row.termination_date_text ?? '',
       paymentMethod: row.payment_method ?? '',
       bankCode: row.bank_code ?? '',
       bankAccount: row.bank_account ?? '',
@@ -4326,6 +4306,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       adjustmentNote: row.adjustment_note ?? '',
       deductionTotal: Number(row.deduction_total ?? 0),
       midTermTermination: Boolean(row.mid_term_termination),
+      terminationDateText: row.termination_date_text ?? '',
       paymentMethod: row.payment_method ?? '',
       bankCode: row.bank_code ?? '',
       bankAccount: row.bank_account ?? '',
@@ -4456,6 +4437,7 @@ export class AppComponent implements OnInit, AfterViewInit {
       adjustmentNote: form.adjustmentNote,
       deductionTotal: form.deductionTotal,
       midTermTermination: form.midTermTermination,
+      terminationDateText: form.terminationDateText || undefined,
       paymentMethod: form.paymentMethod,
       bankCode: form.bankCode,
       bankAccount: form.bankAccount,
@@ -4683,28 +4665,6 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   private textValue(value: unknown): string {
     return value === null || value === undefined ? '' : String(value);
-  }
-
-  private formFromContract(row: Record<string, unknown>): ContractForm {
-    return {
-      customerId: row['customer_id'] === null || row['customer_id'] === undefined ? null : Number(row['customer_id']),
-      officeId: row['office_id'] === null || row['office_id'] === undefined ? null : Number(row['office_id']),
-      rentalItem: this.textValue(row['rental_item']) || '登記',
-      rentalStatus: this.textValue(row['rental_status']) || '登記',
-      signedDateText: this.textValue(row['signed_date_text']),
-      signerStaffId: row['signer_staff_id'] === null || row['signer_staff_id'] === undefined ? null : Number(row['signer_staff_id']),
-      partnerStaffId:
-        row['partner_staff_id'] === null || row['partner_staff_id'] === undefined ? null : Number(row['partner_staff_id']),
-      sourceText: this.textValue(row['source_text']),
-      paymentMonths: row['payment_months'] === null || row['payment_months'] === undefined ? null : Number(row['payment_months']),
-      startDateText: this.textValue(row['start_date_text']),
-      endDateText: this.textValue(row['end_date_text']),
-      terminationDateText: this.textValue(row['termination_date_text']),
-      rent: row['rent'] === null || row['rent'] === undefined ? null : Number(row['rent']),
-      deposit: row['deposit'] === null || row['deposit'] === undefined ? null : Number(row['deposit']),
-      leaseStatus: this.textValue(row['lease_status']) || '綁約中',
-      updatedBy: this.currentStaffId()
-    };
   }
 
   private toContractPayload(form: ContractForm): ContractPayload {

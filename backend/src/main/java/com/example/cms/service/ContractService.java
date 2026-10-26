@@ -125,22 +125,6 @@ public class ContractService extends CmsJdbcSupport {
         return contractDetail(id);
     }
 
-    public Map<String, Object> updateContract(long id, ContractRequest request) {
-        jdbc.update("""
-                UPDATE contracts
-                SET lease_status = ?,
-                    termination_date_text = ?,
-                    updated_by = ?,
-                    updated_at = CURRENT_TIMESTAMP
-                WHERE contract_id = ?
-                """,
-                normalizeContractStatus(request.leaseStatus()),
-                blankToNull(request.terminationDateText()),
-                request.updatedBy() == null ? 1L : request.updatedBy(),
-                id);
-        return contractDetail(id);
-    }
-
     public Map<String, Object> latestContract(long customerId) {
         Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
         List<Long> ids = jdbc.queryForList("""

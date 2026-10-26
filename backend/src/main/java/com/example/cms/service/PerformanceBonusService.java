@@ -353,7 +353,7 @@ public class PerformanceBonusService extends CmsJdbcSupport {
             for (Map<String, Object> contractRow : jdbc.queryForList("""
                     SELECT c.office_id, c.start_date_text, c.termination_date_text
                     FROM contracts c JOIN offices o ON o.office_id = c.office_id
-                    WHERE o.branch_id = ? AND c.lease_status = '綁約中'
+                    WHERE o.branch_id = ?
                     """, branchId)) {
                 Integer startNum = dateNumber((String) contractRow.get("start_date_text"));
                 Integer terminationNum = dateNumber((String) contractRow.get("termination_date_text"));

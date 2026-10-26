@@ -1241,43 +1241,6 @@
                 </div>
               </div>
             </form>
-            @if (editingContract(); as editing) {
-              <div class="rent-edit-panel contract-edit-panel">
-                <div class="panel-header">
-                  <div>
-                    <h3>{{ value(editing, 'company_name') }}</h3>
-                  </div>
-                </div>
-                <form class="customer-form contract-edit-form" (ngSubmit)="saveContractEdit()">
-                  <div class="info-grid wide">
-                    <div><span>辦公室</span><strong>{{ value(editing, 'office_no') }}</strong></div>
-                    <div><span>付款週期</span><strong>{{ value(editing, 'payment_months') }}</strong></div>
-                    <div><span>起租日期</span><strong>{{ value(editing, 'start_date_text') }}</strong></div>
-                    <div><span>到期日期</span><strong>{{ value(editing, 'end_date_text') }}</strong></div>
-                    <div><span>租金</span><strong>{{ money(editing['rent']) }}</strong></div>
-                    <div><span>押金</span><strong>{{ money(editing['deposit']) }}</strong></div>
-                  </div>
-                  <div class="contract-edit-footer wide">
-                    <label class="contract-edit-status">
-                      租約狀態
-                      <select name="editContractLeaseStatus" [(ngModel)]="contractEditForm.leaseStatus">
-                        @for (status of contractStatusOptions; track status) {
-                          <option [ngValue]="status">{{ displayLeaseStatus(status) }}</option>
-                        }
-                      </select>
-                    </label>
-                    <label class="contract-edit-status">
-                      退租日期
-                      <input type="date" name="editContractTerminationDate" [(ngModel)]="contractEditForm.terminationDateText" />
-                    </label>
-                    <div class="form-actions">
-                      <button type="submit" [disabled]="saving()">儲存修改</button>
-                      <button type="button" class="ghost" (click)="cancelEditContract()">取消</button>
-                    </div>
-                  </div>
-                </form>
-              </div>
-            }
             <div class="customer-results-toolbar contract-results-toolbar">
               <p>搜尋結果：共 {{ contractTotal() }} 筆</p>
               @if (contractTotal()) {
@@ -1325,11 +1288,6 @@
                     <span>{{ money(row['rent']) }}</span>
                     <span>{{ money(row['deposit']) }}</span>
                     <span>{{ displayLeaseStatus(row['lease_status']) }}</span>
-                    <span>
-                      @if (canEditContract(row)) {
-                        <button type="button" class="ghost compact-button table-action-button" (click)="startEditContract(row)">修改</button>
-                      }
-                    </span>
                   </div>
                 }
               </div>
@@ -3005,34 +2963,40 @@
                           />
                       </label>
                       <label>
-                        扣款總額
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          name="editRefundDeductionTotal"
-                          [(ngModel)]="refundEditForm.deductionTotal"
-                          [readonly]="editing.refund_status === '審核通過' || refundEditForm.chargeListId !== null"
-                          />
-                        @if (editing.refund_status !== '審核通過' && refundEditForm.chargeListId !== null) {
-                          <span class="hint">
-                            已由收費清單帶入，金額唯讀
-                          </span>
-                        }
+                        扣款總額（僅能由匯入的收費清單帶入，未匯入則為 0）
+                        <input type="number" name="editRefundDeductionTotal" [(ngModel)]="refundEditForm.deductionTotal" readonly />
                       </label>
                       @if (editing.contract_end_date_text) {
                         <p class="hint">
                           租約到期日參考：{{ editing.contract_end_date_text }}（供核對是否為中途解約）
                         </p>
                       }
-                      <label class="checkbox-label">
+                      <label>
+                        <span>退租日期<span class="required-mark">*</span></span>
                         <input
-                          type="checkbox"
-                          name="editRefundMidTermTermination"
-                          [(ngModel)]="refundEditForm.midTermTermination"
-                          [disabled]="editing.refund_status === '審核通過'"
+                          type="date"
+                          name="editRefundTerminationDate"
+                          [(ngModel)]="refundEditForm.terminationDateText"
+                          (ngModelChange)="syncEditRefundMidTermTermination(editing.contract_end_date_text)"
+                          required
+                          [readonly]="editing.refund_status === '審核通過'"
                           />
-                        中途解約（可退押金為押金的一半；未勾選視為合約到期解約，全額退還押金）
+                        @if (refundEditForm.terminationDateText && editing.contract_end_date_text) {
+                          <span class="hint">
+                            {{ refundEditForm.midTermTermination ? '（中途解約，可退押金為押金的一半）' : '（合約到期解約，全額退還押金）' }}
+                          </span>
+                        }
+                        @if (refundEditForm.terminationDateText && !editing.contract_end_date_text) {
+                          <span class="checkbox-label-inline">
+                            <input
+                              type="checkbox"
+                              name="editRefundMidTermTermination"
+                              [(ngModel)]="refundEditForm.midTermTermination"
+                              [disabled]="editing.refund_status === '審核通過'"
+                              />
+                            中途解約（合約無到期日可比對，請自行判斷勾選）
+                          </span>
+                        }
                       </label>
                       <label>
                         <span>退款方式<span class="required-mark">*</span></span>
@@ -3162,12 +3126,13 @@
                       (keydown.enter)="$event.preventDefault()"
                       >
                       <label>
-                        公司名稱（不可修改）
-                        <input type="text" [value]="refundCustomer.company_name" readonly />
-                      </label>
-                      <label>
                         租約
-                        <select name="newRefundContract" [(ngModel)]="newRefundForm.contractId" required>
+                        <select
+                          name="newRefundContract"
+                          [(ngModel)]="newRefundForm.contractId"
+                          (ngModelChange)="syncNewRefundMidTermTermination()"
+                          required
+                          >
                           <option [ngValue]="null">請選擇租約</option>
                           @for (contract of activeContracts(refundCustomer.contracts); track contract) {
                             <option [ngValue]="contract['contract_id']">
@@ -3181,7 +3146,38 @@
                           租約到期日參考：{{ endDate }}（供核對是否為中途解約）
                         </p>
                       }
-                      <label class="wide">
+                      <label>
+                        <span>退租日期<span class="required-mark">*</span></span>
+                        <input
+                          type="date"
+                          name="newRefundTerminationDate"
+                          [(ngModel)]="newRefundForm.terminationDateText"
+                          (ngModelChange)="syncNewRefundMidTermTermination()"
+                          required
+                          />
+                        @if (newRefundForm.terminationDateText && selectedContractEndDate(refundCustomer.contracts, newRefundForm.contractId)) {
+                          <span class="hint">
+                            {{ newRefundForm.midTermTermination ? '（中途解約，可退押金為押金的一半）' : '（合約到期解約，全額退還押金）' }}
+                          </span>
+                        }
+                        @if (newRefundForm.terminationDateText && !selectedContractEndDate(refundCustomer.contracts, newRefundForm.contractId)) {
+                          <span class="checkbox-label-inline">
+                            <input type="checkbox" name="newRefundMidTermTermination" [(ngModel)]="newRefundForm.midTermTermination" />
+                            中途解約（合約無到期日可比對，請自行判斷勾選）
+                          </span>
+                        }
+                      </label>
+                      <label>
+                        <span>退款方式<span class="required-mark">*</span></span>
+                        <input
+                          type="text"
+                          name="newRefundPaymentMethod"
+                          [(ngModel)]="newRefundForm.paymentMethod"
+                          required
+                          [class.field-invalid]="newRefundFieldErrors()['paymentMethod']"
+                          />
+                      </label>
+                      <label class="import-charge-list">
                         匯入收費清單（選填）
                         <select name="refundImportChargeListId" [(ngModel)]="refundImportChargeListId">
                           <option [ngValue]="null">不匯入</option>
@@ -3194,6 +3190,11 @@
                         <button type="button" class="ghost compact-button" (click)="importChargeListIntoRefund(newRefundForm)">
                           帶入扣款金額
                         </button>
+                      </label>
+                      <label>
+                        扣款總額
+                        <input type="number" name="newRefundDeductionTotal" [(ngModel)]="newRefundForm.deductionTotal" readonly />
+                        <span class="hint">（僅能由匯入的收費清單帶入，未匯入則為 0）</span>
                       </label>
                       <label>
                         <span>退款原因<span class="required-mark">*</span></span>
@@ -3212,34 +3213,6 @@
                       <label>
                         調整金額備註
                         <input type="text" name="newRefundAdjustmentNote" [(ngModel)]="newRefundForm.adjustmentNote" />
-                      </label>
-                      <label>
-                        扣款總額
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          name="newRefundDeductionTotal"
-                          [(ngModel)]="newRefundForm.deductionTotal"
-                          [readonly]="newRefundForm.chargeListId !== null"
-                          />
-                        @if (newRefundForm.chargeListId !== null) {
-                          <span class="hint">已由收費清單帶入，金額唯讀</span>
-                        }
-                      </label>
-                      <label class="checkbox-label">
-                        <input type="checkbox" name="newRefundMidTermTermination" [(ngModel)]="newRefundForm.midTermTermination" />
-                        中途解約（可退押金為押金的一半；未勾選視為合約到期解約，全額退還押金）
-                      </label>
-                      <label>
-                        <span>退款方式<span class="required-mark">*</span></span>
-                        <input
-                          type="text"
-                          name="newRefundPaymentMethod"
-                          [(ngModel)]="newRefundForm.paymentMethod"
-                          required
-                          [class.field-invalid]="newRefundFieldErrors()['paymentMethod']"
-                          />
                       </label>
                       <label class="bank-code-lookup">
                         <span>收款銀行代碼<span class="required-mark">*</span></span>

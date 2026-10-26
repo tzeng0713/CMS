@@ -91,12 +91,14 @@ public class RefundService extends CmsJdbcSupport {
         requireExistingCustomer(request.customerId());
         requireExistingContract(request.contractId());
         requireContractBelongsToCustomer(request.contractId(), request.customerId());
+        requireNoInFlightRefund(request.contractId());
         requirePaymentInfo(request);
-        BigDecimal deductionTotal = zeroIfNull(request.deductionTotal());
-        requireNonNegative(deductionTotal, "deductionTotal");
+        requireNonBlank(request.terminationDateText(), "terminationDateText");
+        String terminationDateText = blankToNull(request.terminationDateText());
+        BigDecimal deductionTotal = resolveDeductionTotal(request.chargeListId(), request.customerId(), request.contractId());
         BigDecimal adjustmentAmount = zeroIfNull(request.adjustmentAmount());
 
-        boolean midTermTermination = Boolean.TRUE.equals(request.midTermTermination());
+        boolean midTermTermination = resolveMidTermTermination(request.contractId(), terminationDateText, request.midTermTermination());
         RefundBase refundBase = refundBaseAmount(request.contractId(), midTermTermination);
         BigDecimal refundAmount = refundBase.amount().add(adjustmentAmount).subtract(deductionTotal);
         requireNotOverDeducted(refundAmount, request.chargeListId(), request.customerId(), request.contractId());
@@ -107,21 +109,27 @@ public class RefundService extends CmsJdbcSupport {
         String status = "待審核".equals(blankToNull(request.refundStatus())) ? "待審核" : "草稿";
         Long id = nextId("refunds", "refund_id");
         Long staffId = request.staffId() == null ? 1L : request.staffId();
+        String preRefundTerminationDateText = contractTerminationDateText(request.contractId());
 
         jdbc.update("""
                 INSERT INTO refunds (
                     refund_id, customer_id, contract_id, charge_list_id, company_name, refund_reason,
-                    adjustment_amount, adjustment_note, deduction_total, refund_amount, mid_term_termination, refund_status,
+                    adjustment_amount, adjustment_note, deduction_total, refund_amount, mid_term_termination,
+                    termination_date_text, pre_refund_termination_date_text, refund_status,
                     payment_method, bank_code, bank_account, bank_account_name,
                     created_by, created_at, updated_by, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?, CURRENT_TIMESTAMP)
                 """,
                 id, request.customerId(), request.contractId(), request.chargeListId(), companyName,
                 blankToNull(request.refundReason()), adjustmentAmount, blankToNull(request.adjustmentNote()),
-                deductionTotal, refundAmount, midTermTermination, status,
+                deductionTotal, refundAmount, midTermTermination,
+                terminationDateText, preRefundTerminationDateText, status,
                 blankToNull(request.paymentMethod()), blankToNull(request.bankCode()),
                 blankToNull(request.bankAccount()), blankToNull(request.bankAccountName()),
                 staffId, staffId);
+
+        jdbc.update("UPDATE contracts SET termination_date_text = ? WHERE contract_id = ?",
+                terminationDateText, request.contractId());
 
         Map<String, Object> result = refundDetail(id);
         String message = refundMessage(refundBase);
@@ -159,17 +167,22 @@ public class RefundService extends CmsJdbcSupport {
             if (current.get("charge_list_id") != null) {
                 markChargeListSettled(((Number) current.get("charge_list_id")).longValue(), staffId);
             }
+            if (current.get("contract_id") != null) {
+                jdbc.update("UPDATE contracts SET lease_status = '已解約' WHERE contract_id = ?",
+                        current.get("contract_id"));
+            }
             return refundDetail(id);
         }
 
         requireExistingCustomer(request.customerId());
         requireExistingContract(request.contractId());
         requireContractBelongsToCustomer(request.contractId(), request.customerId());
-        BigDecimal deductionTotal = zeroIfNull(request.deductionTotal());
-        requireNonNegative(deductionTotal, "deductionTotal");
+        requireNonBlank(request.terminationDateText(), "terminationDateText");
+        String terminationDateText = blankToNull(request.terminationDateText());
+        BigDecimal deductionTotal = resolveDeductionTotal(request.chargeListId(), request.customerId(), request.contractId());
         BigDecimal adjustmentAmount = zeroIfNull(request.adjustmentAmount());
 
-        boolean midTermTermination = Boolean.TRUE.equals(request.midTermTermination());
+        boolean midTermTermination = resolveMidTermTermination(request.contractId(), terminationDateText, request.midTermTermination());
         RefundBase refundBase = refundBaseAmount(request.contractId(), midTermTermination);
         BigDecimal refundAmount = refundBase.amount().add(adjustmentAmount).subtract(deductionTotal);
         requireNotOverDeducted(refundAmount, request.chargeListId(), request.customerId(), request.contractId());
@@ -183,15 +196,18 @@ public class RefundService extends CmsJdbcSupport {
                 UPDATE refunds
                 SET customer_id = ?, contract_id = ?, charge_list_id = ?, refund_reason = ?,
                     adjustment_amount = ?, adjustment_note = ?, deduction_total = ?, refund_amount = ?,
-                    mid_term_termination = ?, refund_status = ?, payment_method = ?, bank_code = ?,
+                    mid_term_termination = ?, termination_date_text = ?, refund_status = ?, payment_method = ?, bank_code = ?,
                     bank_account = ?, bank_account_name = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE refund_id = ?
                 """,
                 request.customerId(), request.contractId(), request.chargeListId(), blankToNull(request.refundReason()),
                 adjustmentAmount, blankToNull(request.adjustmentNote()), deductionTotal, refundAmount,
-                midTermTermination, nextStatus, blankToNull(request.paymentMethod()), blankToNull(request.bankCode()),
+                midTermTermination, terminationDateText, nextStatus, blankToNull(request.paymentMethod()), blankToNull(request.bankCode()),
                 blankToNull(request.bankAccount()), blankToNull(request.bankAccountName()),
                 staffId, id);
+
+        jdbc.update("UPDATE contracts SET termination_date_text = ? WHERE contract_id = ?",
+                terminationDateText, request.contractId());
 
         Map<String, Object> result = refundDetail(id);
         String message = refundMessage(refundBase);
@@ -211,6 +227,12 @@ public class RefundService extends CmsJdbcSupport {
             throw new IllegalArgumentException("退款單已是取消狀態");
         }
         Long staffId = request.staffId() == null ? 1L : request.staffId();
+
+        if (current.get("contract_id") != null) {
+            jdbc.update("UPDATE contracts SET termination_date_text = ? WHERE contract_id = ?",
+                    current.get("pre_refund_termination_date_text"), current.get("contract_id"));
+        }
+
         jdbc.update("""
                 UPDATE refunds SET refund_status = '已取消', updated_by = ?, updated_at = CURRENT_TIMESTAMP
                 WHERE refund_id = ?
@@ -299,8 +321,8 @@ public class RefundService extends CmsJdbcSupport {
     }
 
     /**
-     * 秘書於退款申請勾選「中途解約」時，押金基準為押金的一半（若合約未收押金，押金為 0，基準也是 0，等於沒有可退的押金）；
-     * 未勾選（合約到期解約）則維持全額押金。月租金額不參與這個判斷。
+     * 中途解約時，押金基準為押金的一半（若合約未收押金，押金為 0，基準也是 0，等於沒有可退的押金）；
+     * 到期解約則維持全額押金。月租金額不參與這個判斷。
      */
     private RefundBase refundBaseAmount(Long contractId, boolean midTermTermination) {
         BigDecimal deposit = zeroIfNull(jdbc.queryForObject(
@@ -316,6 +338,65 @@ public class RefundService extends CmsJdbcSupport {
         BigDecimal deposit = jdbc.queryForObject("SELECT deposit FROM contracts WHERE contract_id = ?",
                 BigDecimal.class, contractId);
         return zeroIfNull(deposit);
+    }
+
+    /**
+     * 中途解約由秘書於退款單上填寫的退租日，跟合約到期日（end_date_text）比對自動判定：
+     * 退租日早於到期日才算中途解約。若合約沒有到期日可比對，退回使用手動勾選值（manualFallback）。
+     */
+    private boolean resolveMidTermTermination(Long contractId, String terminationDateText, Boolean manualFallback) {
+        String endDateText = jdbc.queryForObject(
+                "SELECT end_date_text FROM contracts WHERE contract_id = ?", String.class, contractId);
+        Integer terminationNum = dateNumber(terminationDateText);
+        Integer endNum = dateNumber(endDateText);
+        if (terminationNum != null && endNum != null) {
+            return terminationNum < endNum;
+        }
+        return Boolean.TRUE.equals(manualFallback);
+    }
+
+    /**
+     * 扣款總額只能來自匯入的收費清單，不採信前端送來的 deductionTotal：
+     * 有 chargeListId 就重新查該收費清單的 total_amount，沒有就固定為 0。
+     * 同時驗證這張收費清單確實屬於這次退款的客戶與合約，避免誤用別人客戶的收費清單
+     * （金額算錯、或退款完成時誤把不相干客戶的收費清單標記為已結清）。
+     */
+    private BigDecimal resolveDeductionTotal(Long chargeListId, Long customerId, Long contractId) {
+        if (chargeListId == null) {
+            return BigDecimal.ZERO;
+        }
+        Map<String, Object> chargeList;
+        try {
+            chargeList = jdbc.queryForMap(
+                    "SELECT total_amount, customer_id, contract_id FROM charge_lists WHERE charge_list_id = ?", chargeListId);
+        } catch (EmptyResultDataAccessException e) {
+            throw new IllegalArgumentException("chargeListId not found");
+        }
+        Long chargeListCustomerId = ((Number) chargeList.get("customer_id")).longValue();
+        Long chargeListContractId = ((Number) chargeList.get("contract_id")).longValue();
+        if (!chargeListCustomerId.equals(customerId) || !chargeListContractId.equals(contractId)) {
+            throw new IllegalArgumentException("chargeListId does not belong to this customer/contract");
+        }
+        return zeroIfNull((BigDecimal) chargeList.get("total_amount"));
+    }
+
+    private String contractTerminationDateText(Long contractId) {
+        return jdbc.queryForObject(
+                "SELECT termination_date_text FROM contracts WHERE contract_id = ?", String.class, contractId);
+    }
+
+    /**
+     * 退租日只能透過退款流程回壓，所以同一份合約同一時間只能有一張進行中（非已取消、非已退款）的退款單，
+     * 避免兩張退款單互相覆蓋對方寫入合約的退租日。
+     */
+    private void requireNoInFlightRefund(Long contractId) {
+        Integer count = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM refunds
+                WHERE contract_id = ? AND refund_status NOT IN ('已退款', '已取消')
+                """, Integer.class, contractId);
+        if (count != null && count > 0) {
+            throw new IllegalArgumentException("此租約已有進行中的退款單，請先完成或取消後再新增");
+        }
     }
 
     private String refundMessage(RefundBase refundBase) {
@@ -368,12 +449,6 @@ public class RefundService extends CmsJdbcSupport {
         Long actualCustomerId = jdbc.queryForObject("SELECT customer_id FROM contracts WHERE contract_id = ?", Long.class, contractId);
         if (actualCustomerId == null || !actualCustomerId.equals(customerId)) {
             throw new IllegalArgumentException("contractId does not belong to customerId");
-        }
-    }
-
-    private void requireNonNegative(BigDecimal value, String fieldName) {
-        if (value != null && value.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException(fieldName + " must not be negative");
         }
     }
 

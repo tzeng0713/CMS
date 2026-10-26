@@ -1346,12 +1346,17 @@ textarea {
 .customer-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
   gap: 12px;
 }
 
 .customer-form label.wide,
 .customer-form .wide {
   grid-column: 1 / -1;
+}
+
+.customer-form label.import-charge-list {
+  grid-column: 1 / -2;
 }
 
 .customer-form label.checkbox-label {
@@ -1366,6 +1371,27 @@ textarea {
 .checkbox-label input {
   width: 18px;
   height: 18px;
+  min-width: 0;
+  padding: 0;
+}
+
+.checkbox-label-inline {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin-top: 4px;
+  color: #475569;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.checkbox-label-inline input {
+  width: 16px;
+  height: 16px;
+  min-width: 0;
+  padding: 0;
+  margin-top: 1px;
+  flex-shrink: 0;
 }
 
 .related-company-fields {
@@ -3993,7 +4019,7 @@ $charge-list-slate: #6b6f76;
   align-items: baseline;
   gap: 10px;
   max-width: none;
-  margin: 10px 0 0 14px;
+  margin: 0 0 10px 0;
   padding: 8px 14px;
   border: 0;
   border-radius: 999px;
@@ -4011,9 +4037,9 @@ $charge-list-slate: #6b6f76;
   font-size: 12.5px;
 }
 
-.charge-list-view .lookup,
-.refund-view .lookup {
-  padding-left: 14px;
+.charge-list-view .gold-card .panel-header p,
+.refund-view .gold-card .panel-header p {
+  padding-left: 0;
 }
 
 .charge-list-view .modal-header,

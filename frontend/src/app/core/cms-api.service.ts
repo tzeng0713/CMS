@@ -401,6 +401,8 @@ export interface RefundSummary {
   deduction_total: number;
   refund_amount: number;
   mid_term_termination: boolean;
+  termination_date_text: string | null;
+  pre_refund_termination_date_text: string | null;
   refund_status: string;
   payment_method: string | null;
   bank_code: string | null;
@@ -429,6 +431,7 @@ export interface RefundPayload {
   adjustmentNote?: string;
   deductionTotal?: number;
   midTermTermination?: boolean;
+  terminationDateText?: string;
   paymentMethod?: string;
   bankCode?: string;
   bankAccount?: string;
@@ -784,10 +787,6 @@ export class CmsApiService {
 
   latestContract(customerId: number): Observable<Record<string, unknown>> {
     return this.http.get<Record<string, unknown>>(`${this.baseUrl}/customers/${customerId}/latest-contract`);
-  }
-
-  updateContract(id: number, payload: ContractPayload): Observable<Record<string, unknown>> {
-    return this.http.put<Record<string, unknown>>(`${this.baseUrl}/contracts/${id}`, payload);
   }
 
   staff(
