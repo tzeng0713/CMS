@@ -2905,7 +2905,7 @@
                                 class="ghost compact-button"
                                 (click)="cancelRefund(detail)"
                                 >
-                                取消
+                                取消退款
                               </button>
                             }
                           </div>
@@ -2915,7 +2915,7 @@
                   </div>
                 }
                 @if (editingRefund(); as editing) {
-                  <div class="gold-card">
+                  <div class="gold-card" id="refund-edit-panel">
                     <div class="panel-header">
                       <div>
                         <h3>{{ editing.refund_status === '審核通過' ? '辦理退款' : '修改退款資料' }}</h3>
@@ -2966,7 +2966,7 @@
                         扣款總額（僅能由匯入的收費清單帶入，未匯入則為 0）
                         <input type="number" name="editRefundDeductionTotal" [(ngModel)]="refundEditForm.deductionTotal" readonly />
                       </label>
-                      @if (editing.contract_end_date_text) {
+                      @if (editing.contract_end_date_text && editing.refund_status !== '審核通過') {
                         <p class="hint">
                           租約到期日參考：{{ editing.contract_end_date_text }}（供核對是否為中途解約）
                         </p>
@@ -3005,6 +3005,7 @@
                           name="editRefundPaymentMethod"
                           [(ngModel)]="refundEditForm.paymentMethod"
                           required
+                          [readonly]="editing.refund_status === '審核通過'"
                           [class.field-invalid]="refundEditFieldErrors()['paymentMethod']"
                           />
                       </label>
@@ -3018,6 +3019,7 @@
                           (ngModelChange)="lookupRefundEditBankCode()"
                           (focus)="lookupRefundEditBankCode()"
                           required
+                          [readonly]="editing.refund_status === '審核通過'"
                           [class.field-invalid]="refundEditFieldErrors()['bankCode']"
                           />
                         @if (refundEditBankCodeOptions().length) {
@@ -3038,6 +3040,7 @@
                           name="editRefundBankAccount"
                           [(ngModel)]="refundEditForm.bankAccount"
                           required
+                          [readonly]="editing.refund_status === '審核通過'"
                           [class.field-invalid]="refundEditFieldErrors()['bankAccount']"
                           />
                       </label>
@@ -3048,6 +3051,7 @@
                           name="editRefundBankAccountName"
                           [(ngModel)]="refundEditForm.bankAccountName"
                           required
+                          [readonly]="editing.refund_status === '審核通過'"
                           [class.field-invalid]="refundEditFieldErrors()['bankAccountName']"
                           />
                       </label>
@@ -3141,13 +3145,13 @@
                           }
                         </select>
                       </label>
-                      @if (selectedContractEndDate(refundCustomer.contracts, newRefundForm.contractId); as endDate) {
-                        <p class="hint">
-                          租約到期日參考：{{ endDate }}（供核對是否為中途解約）
-                        </p>
-                      }
                       <label>
-                        <span>退租日期<span class="required-mark">*</span></span>
+                        <span>
+                          退租日期<span class="required-mark">*</span>
+                          @if (selectedContractEndDate(refundCustomer.contracts, newRefundForm.contractId); as endDate) {
+                            （租約到期日參考：{{ endDate }}）
+                          }
+                        </span>
                         <input
                           type="date"
                           name="newRefundTerminationDate"

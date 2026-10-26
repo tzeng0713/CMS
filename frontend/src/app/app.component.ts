@@ -4291,6 +4291,9 @@ export class AppComponent implements OnInit, AfterViewInit {
   markRefunded(row: RefundSummary): void {
     this.startEditRefund(row);
     this.refundEditForm.refundStatus = '已退款';
+    setTimeout(() => {
+      document.getElementById('refund-edit-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   }
 
   submitRefundForReview(row: RefundSummary): void {
