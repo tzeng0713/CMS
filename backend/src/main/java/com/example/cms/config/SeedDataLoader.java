@@ -207,8 +207,8 @@ public class SeedDataLoader implements CommandLineRunner {
 
     private void insertSalesTargets(List<Map<String, Object>> rows) {
         rows.forEach(r -> jdbc.update(
-                "INSERT INTO sales_targets (sales_target_id, branch_id, target_month, category, target_count) VALUES (?, ?, ?, ?, ?)",
-                n(r, "salesTargetId"), n(r, "branchId"), n(r, "month"), s(r, "category"), n(r, "targetCount")));
+                "INSERT INTO sales_targets (sales_target_id, staff_id, target_month, category, target_count) VALUES (?, ?, ?, ?, ?)",
+                n(r, "salesTargetId"), n(r, "staffId"), n(r, "month"), s(r, "category"), n(r, "targetCount")));
     }
 
     private void insertBonusRules(List<Map<String, Object>> rows) {

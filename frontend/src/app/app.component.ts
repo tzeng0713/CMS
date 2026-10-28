@@ -374,6 +374,7 @@ export class AppComponent implements OnInit, AfterViewInit {
   ];
   readonly contractRentalStatusOptions = ['登記', '辦公室', '登記+辦公室', '個人名義'];
   readonly contractStatusOptions = ['綁約中', '已解約'];
+  readonly salesTargetCategoryOptions = ['辦公室', '座位', '登記', '聯絡處', '停業'];
 
   private formatTodayLabel(): string {
     const today = new Date();
@@ -559,8 +560,13 @@ export class AppComponent implements OnInit, AfterViewInit {
   salesTargetTotal = signal(0);
   salesTargetPage = signal(0);
   readonly salesTargetPageSize = 20;
-  salesTargetFilters: SalesTargetSearchFilters = { branchId: null, targetMonth: null, category: '' };
-  newSalesTargetForm: SalesTargetPayload = { branchId: 0, targetMonth: 0, category: '', targetCount: 0, staffId: 0 };
+  salesTargetFilters: SalesTargetSearchFilters = { staffId: null, targetMonth: null, category: '' };
+  newSalesTargetForm: SalesTargetPayload = {
+    targetStaffId: 0,
+    targetMonth: 0,
+    entries: [{ category: '', targetCount: 0 }],
+    staffId: 0
+  };
   creatingSalesTarget = signal(false);
 
   bonusRuleRows = signal<BonusRule[]>([]);
@@ -2310,10 +2316,9 @@ export class AppComponent implements OnInit, AfterViewInit {
 
   startCreateSalesTarget(): void {
     this.newSalesTargetForm = {
-      branchId: this.currentUser()?.branch_id ?? 0,
+      targetStaffId: 0,
       targetMonth: 0,
-      category: '',
-      targetCount: 0,
+      entries: [{ category: '', targetCount: 0 }],
       staffId: this.currentStaffId()
     };
     this.creatingSalesTarget.set(true);
@@ -2323,9 +2328,27 @@ export class AppComponent implements OnInit, AfterViewInit {
     this.creatingSalesTarget.set(false);
   }
 
+  addSalesTargetEntry(): void {
+    this.newSalesTargetForm.entries = [...this.newSalesTargetForm.entries, { category: '', targetCount: 0 }];
+  }
+
+  removeSalesTargetEntry(index: number): void {
+    this.newSalesTargetForm.entries = this.newSalesTargetForm.entries.filter((_, i) => i !== index);
+  }
+
   createSalesTarget(): void {
-    if (!this.newSalesTargetForm.branchId || !this.newSalesTargetForm.targetMonth || !this.newSalesTargetForm.category) {
-      this.error.set('分館、月份、類別為必填欄位。');
+    if (!this.newSalesTargetForm.targetStaffId || !this.newSalesTargetForm.targetMonth) {
+      this.error.set('秘書、月份為必填欄位。');
+      return;
+    }
+    const entries = this.newSalesTargetForm.entries;
+    if (!entries.length || entries.some((entry) => !entry.category)) {
+      this.error.set('請至少新增一筆類別與目標數，且每筆都要選擇類別。');
+      return;
+    }
+    const categories = entries.map((entry) => entry.category);
+    if (new Set(categories).size !== categories.length) {
+      this.error.set('同一批次不能重複新增同一個類別。');
       return;
     }
     this.saving.set(true);
@@ -4630,6 +4653,22 @@ export class AppComponent implements OnInit, AfterViewInit {
       currency: 'TWD',
       maximumFractionDigits: 0
     }).format(n);
+  }
+
+  achievementRateText(value: unknown): string {
+    if (value === null || value === undefined || value === '') {
+      return '-';
+    }
+    const rate = Number(value);
+    if (!Number.isFinite(rate)) {
+      return '-';
+    }
+    return `${(rate * 100).toFixed(0)}%`;
+  }
+
+  isAchievementMet(value: unknown): boolean {
+    const rate = Number(value);
+    return Number.isFinite(rate) && rate >= 1;
   }
 
   printMoney(value: unknown): string {

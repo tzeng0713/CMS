@@ -2,8 +2,8 @@
 
 本文件說明業績管理（業績目標／業績獎金規則／業績結算）功能的資料模型、業務邏輯、API 與前端操作流程，作為後續維護與驗收的依據。對應程式碼位置：
 
-- 後端：`backend/src/main/java/com/example/cms/controller/{BonusRuleController,SalesTargetController,PerformanceBonusController}.java`、`.../service/{BonusRuleService,SalesTargetService,PerformanceBonusService}.java`
-- 資料庫：`backend/src/main/resources/schema.sql`（`bonus_rules`、`performance_bonuses`、`sales_targets`）、`.../config/SchemaMigrationRunner.java`（`migratePerformanceManagementTables()`）、`.../config/SeedDataLoader.java`（`insertBonusRules()`）
+- 後端：`backend/src/main/java/com/example/cms/controller/{BonusRuleController,SalesTargetController,PerformanceBonusController}.java`、`.../service/{BonusRuleService,SalesTargetService,PerformanceBonusService}.java`、`.../dto/{SalesTargetRequest,SalesTargetEntry}.java`
+- 資料庫：`backend/src/main/resources/schema.sql`（`bonus_rules`、`performance_bonuses`、`sales_targets`）、`.../config/SchemaMigrationRunner.java`（`migratePerformanceManagementTables()`、`migrateSalesTargetsBranchNullable()`）、`.../config/SeedDataLoader.java`（`insertBonusRules()`、`insertSalesTargets()`）、`.../resources/data/seed-data.json`（`salesTargets` 區塊）
 - 前端：`frontend/src/app/app.component.ts`、`app.component.html`（`activeView() === 'targets' / 'bonus-rules' / 'performance-bonuses'` 區塊）、`frontend/src/app/core/cms-api.service.ts`
 
 依據來源：使用者提供之《獎金計算規則說明》PDF，列出 8 種業績獎金規則。
@@ -15,8 +15,8 @@
 | 功能 | 說明 |
 |---|---|
 | 新增業績獎金規則（主管權限） | 定義獎金規則的名稱、類型、金額／比例／級距、是否啟用，作為結算計算的依據 |
-| 新增當月業績目標（主管權限） | 依分館、月份、類別設定業績目標數量 |
-| 查詢業績目標資料 | 依分館／月份／類別篩選查詢已設定的業績目標 |
+| 新增當月業績目標（主管權限，一次可新增多筆類別） | 依**秘書**、月份，一次可同時新增多個類別各自的目標數量（例如同一人同月辦公室 3、登記 1），整批驗證過才整批寫入 |
+| 查詢業績目標與達成率 | 依秘書／月份／類別篩選查詢，每筆即時算出當月實際達成數與達成率，不另外落地存檔 |
 | 查詢業績結算資料 | 依規則類型／期間／分館／祕書篩選查詢已結算的業績獎金明細 |
 | 業績獎金結算（主管權限，四種自動觸發＋一種手動新增） | 依規則類型分為「逐筆合約／收款觸發」「按月觸發」「每 4 個月期間觸發」三種自動結算入口，皆可重複執行且不會對同一筆事件重複入帳；規則五另外改用客戶「代辦」標記自動判斷（詳見下方說明），仍保留「手動新增」作為備援／覆寫 |
 
@@ -78,9 +78,31 @@
 
 `rent_payment_id` 僅規則八使用，作為冪等性判斷鍵與追溯依據（FK 指向 `rent_payments`）。規則一／二／三／八的 `period` 是結算當下才換算補上的（見第 5 節），冪等性判斷鍵不變（仍是 `contract_id`／`rent_payment_id`），純粹是多存一個月份歸屬供查詢彙總用；日期缺漏或格式無法解析時該筆會被跳過、不入帳（計入 `sync-transactions` 回傳的 `skippedMissingDate`）。
 
-### 2.3 既有表擴充：`sales_targets`
+### 2.3 既有表擴充：`sales_targets`（改為跟著秘書走，不再是分館）
 
-新增稽核欄位 `created_by`、`created_at`。既有 `sales_target_id, branch_id, target_month, category, target_count` 不動。
+業績目標原本的維度是「分館＋月份＋類別」，後來改成「**秘書**＋月份＋類別」——理由是業績獎金規則一二三（辦公室出租／公司登記／同心獎金）本來就是算到簽約人身上的個人論件計酬，業績目標改成跟著秘書走才能對應到「這個秘書這個月做得好不好」，而不是只能看到整個分館的團體數字。
+
+| 欄位 | 型別 | 說明 |
+|---|---|---|
+| `sales_target_id` | BIGINT | 主鍵 |
+| `staff_id` | BIGINT | **新欄位**，目標歸屬的秘書，FK → `staff.staff_id`，必填 |
+| `branch_id` | BIGINT | **舊欄位，保留但新流程不再寫入**。既有資料庫此欄位原本是 `NOT NULL`；新的新增流程完全不填這欄，所以 `SchemaMigrationRunner.migrateSalesTargetsBranchNullable()`（比照既有 `migrateContractOfficeNullable()` 的寫法，僅 MySQL 需要，H2 測試資料庫是全新建表不受影響）會在啟動時解除這個 `NOT NULL` 限制，否則新增業績目標會直接撞資料庫約束噴出沒有攔截的 500 錯誤 |
+| `target_month` | INT | `YYYYMM` 格式 |
+| `category` | VARCHAR(50) | 固定 5 選一：`辦公室`／`座位`／`登記`／`聯絡處`／`停業`，跟 `contracts.rental_item` 的合法值完全對齊（`ContractService.normalizeContractRentalItem()`），Java 端用 `SalesTargetService.VALID_CATEGORIES` 驗證 |
+| `target_count` | INT | 目標數量，必須 ≥ 0 |
+| `created_by`／`created_at` | — | 稽核欄位 |
+
+同一位秘書、同一個月份、同一個類別不可重複建立（查詢去重，非資料庫唯一索引）。
+
+**種子資料跟著調整**：`backend/src/main/resources/data/seed-data.json` 的 `salesTargets` 區塊、`SeedDataLoader.insertSalesTargets()` 的 INSERT 語句都已經從 `branchId` 改成 `staffId`，否則全新資料庫第一次啟動載入 demo 資料時這兩筆種子資料會插入失敗。
+
+#### 實際達成數與達成率計算邏輯
+
+`SalesTargetService` 查詢列表（`list()`）時，**每一筆都即時算一次**「實際達成數」跟「達成率」，不落地存檔：
+
+- **實際達成數**（`actualCount(staffId, targetMonth, category)`）：`contracts.rental_item = 該類別` 且 `contracts.signer_staff_id = 該秘書` 且 `start_date_text` 落在目標月份內的相異合約數（`COUNT(DISTINCT contract_id)`）。
+- **雙秘書合作簽約時，業績目標只算在簽約秘書（`signer_staff_id`）身上，不算協辦秘書（`partner_staff_id`）**——這跟業績獎金規則一（辦公室出租獎金）雙秘書對半分錢是兩件不同的事：錢可以依規則一的設定對半分給 signer 跟 partner，但業績目標的「件數」只認簽約人一人，不會讓同一筆合約的業績被算在兩個人頭上。
+- **達成率**：`實際達成數 ÷ 目標數`（`BigDecimal`，4 位小數，`HALF_UP` 四捨五入）；目標數為 0 時不計算，回傳 `null`（避免除以零），前端對應顯示「-」。
 
 ### 2.4 沒有新增的表／欄位
 
@@ -181,8 +203,8 @@ COALESCE(o.branch_id, st.branch_id)
 | GET | `/api/bonus-rules` | 查詢所有業績獎金規則（不分權限） |
 | POST | `/api/bonus-rules` | 新增業績獎金規則（主管限定，body 含 `staffId`） |
 | PUT | `/api/bonus-rules/{id}` | 修改業績獎金規則（主管限定，驗證規則與新增相同；規則不存在回 404） |
-| GET | `/api/sales-targets?branchId=&targetMonth=&category=&page=&pageSize=` | 分頁查詢業績目標 |
-| POST | `/api/sales-targets` | 新增業績目標（主管限定，body 含 `staffId`；同分館＋月份＋類別重複會擋） |
+| GET | `/api/sales-targets?staffId=&targetMonth=&category=&page=&pageSize=` | 分頁查詢業績目標，每筆都附上即時算出的 `actual_count`（實際達成數）與 `achievement_rate`（達成率，`target_count=0` 時為 `null`）；非主管登入時忽略 `staffId` 參數、強制只查自己的（`access.actor().staffId()`） |
+| POST | `/api/sales-targets` | **一次新增多筆業績目標**（主管限定）。body：`{targetStaffId, targetMonth, entries: [{category, targetCount}, ...], staffId}`，同一個秘書＋月份，一次可帶多筆不同類別各自的目標數；整批先驗證（類別合法、目標數非負、批次內類別不重複、資料庫內同秘書＋月份＋類別不重複）才整批寫入（`@Transactional`），任何一筆有問題就全部不寫入；回傳新增成功的業績目標清單（陣列，非單筆物件） |
 | GET | `/api/performance-bonuses?ruleType=&period=&branchId=&staffId=&contractId=&page=&pageSize=` | 分頁查詢業績結算明細 |
 | POST | `/api/performance-bonuses/sync-transactions` | 結算規則一二三五八（逐筆合約／收款觸發，body：`{staffId}`） |
 | POST | `/api/performance-bonuses/settle-monthly` | 結算規則四＋規則六（同一入口同時觸發，body：`{yearMonth, staffId}`，`yearMonth` 格式 `YYYY-MM`） |
@@ -196,7 +218,10 @@ COALESCE(o.branch_id, st.branch_id)
 ## 8. 前端操作流程
 
 - 導覽列新增「業績管理」分組，含「業績目標」「業績獎金規則」「業績結算」三個頁籤（原「業績目標」從「其他查詢」分組移過來）。
-- **業績目標**頁：篩選＋列表＋新增表單（主管限定）。
+- **業績目標**頁：
+  - 篩選列跟列表都改成以「秘書」為維度（下拉選單列出所有秘書，`姓名／所屬分館`），不再是分館；非主管登入時只會看到自己的資料（後端強制覆蓋 `staffId` 參數，前端篩選器即使能選別人也查不到）。
+  - 新增表單（主管限定）：選秘書、選月份，「類別與目標數」是**可重複新增的清單**（沿用辦公室聯絡人那套 `.repeatable-field` UI 模式）——每列一個類別下拉（固定 5 選一）＋目標數輸入＋移除按鈕，下方「新增類別」按鈕可以加更多列，一次送出整批。送出前前端會先檢查：秘書／月份必填、至少一筆、每筆都要選類別、同一批次不能選重複類別，跟後端的檢查邏輯對齊，避免打到 API 才被拒絕。
+  - 列表新增「實際數」「達成率」兩欄（達成率 ≥ 100% 會變綠色粗體標出來），資料直接來自查詢 API 即時算好的結果，不是另外呼叫別的端點。
 - **業績獎金規則**頁：規則列表（`BUSINESS_AGENT` 選項標籤顯示「依客戶代辦標記自動結算，亦可手動新增」）＋新增／修改表單（主管限定，依規則類型填寫 `unitAmount`／`percentage`／`tierConfig` 其中之一）：
   - `periodType`（結算週期）為下拉選單（`bonusRulePeriodTypeOptions`），選項與中文標籤為「逐筆合約／收款觸發」`PER_TRANSACTION`、「按月結算」`MONTHLY`、「每 4 個月期間結算」`FOUR_MONTH`；規則列表的「結算週期」欄位也用同一份對照表（`bonusRulePeriodTypeLabel()`）顯示中文，不顯示原始代碼。
   - `tierConfig`（規則六專用）不再是原始 JSON 輸入框，改為「達成數量門檻／獎金金額」成對輸入列，可用「新增級距」／「刪除」增減列數；既有資料由 `parseBonusRuleTiers()` 解析回填，送出前由 `serializeBonusRuleTiers()` 依門檻由小到大排序、過濾空列後組回 `[{"threshold":n,"amount":n}, ...]` 字串，資料庫欄位格式與後端驗證邏輯不變。
@@ -231,3 +256,7 @@ COALESCE(o.branch_id, st.branch_id)
 - **規則四採「月底時點快照」判斷是否全滿租**：非「整月每一天都滿租」，若辦公室在月中曾短暫空置但月底已補上，仍視為滿租。
 - **沒有專屬單元測試**：驗證方式為手動以 H2 seed data 啟動後端，以 `curl` 呼叫各 API 確認回傳內容、冪等性與權限行為正確；前端以 `ng build` 確認型別檢查通過；未納入自動化測試套件。
 - **「各祕書可獲得獎金一覽」是前端彙總，非後端 API**：一次取回 `pageSize=200`（`GET /api/performance-bonuses` 允許的上限）筆資料在瀏覽器端加總，若同一組篩選條件下的結算明細超過 200 筆，彙總金額會不完整；後續若資料量成長，應改為後端提供依祕書分組加總的專屬端點。
+- **業績目標的「實際達成數」「達成率」是查詢當下即時算出來的，沒有落地存檔**：`GET /api/sales-targets` 每次回傳都會對清單裡每一筆各跑一次 `COUNT(DISTINCT contract_id)` 查詢（非一次性 JOIN 彙總），單頁最多 200 筆，正常使用量沒有效能疑慮；但若未來資料量大幅成長、或想讓其他模組（例如業績結算）直接引用「目標 vs 實際」的結果，需要考慮改成排程計算後落地存表。
+- **業績目標沒有編輯／刪除 API**：`SalesTargetController` 只有 `GET`（查詢）跟 `POST`（新增，可批次），建錯的目標目前只能靠直接調整資料庫修正，這是既有限制、非這次異動範圍。
+- **業績目標的 `branch_id` 舊欄位保留未刪除**：資料庫裡還看得到這個欄位，但新流程完全不讀不寫，純粹是沿用專案既有「只加欄位、不刪欄位」的 migration 慣例（參考 `branch_code`／`branches.branch_code` 的前例），避免對既有資料做破壞性異動。
+- **批次新增業績目標的「同一批次不能重複類別」是應用層檢查，不是資料庫唯一索引**：資料庫沒有 `(staff_id, target_month, category)` 的唯一鍵約束，去重完全依賴 `SalesTargetService.create()` 裡的查詢跟 `Set` 檢查；如果日後新增其他寫入路徑（例如另一支批次匯入工具）繞過這個 Service，理論上可能寫出重複資料。

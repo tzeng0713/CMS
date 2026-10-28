@@ -234,13 +234,13 @@ CREATE TABLE IF NOT EXISTS refunds (
 
 CREATE TABLE IF NOT EXISTS sales_targets (
   sales_target_id BIGINT PRIMARY KEY,
-  branch_id BIGINT NOT NULL,
+  staff_id BIGINT NOT NULL,
   target_month INT,
   category VARCHAR(50),
   target_count INT,
   created_by BIGINT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT fk_sales_targets_branch FOREIGN KEY (branch_id) REFERENCES branches(branch_id),
+  CONSTRAINT fk_sales_targets_staff FOREIGN KEY (staff_id) REFERENCES staff(staff_id),
   CONSTRAINT fk_sales_targets_created_by FOREIGN KEY (created_by) REFERENCES staff(staff_id)
 );
 

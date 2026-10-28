@@ -267,6 +267,20 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         });
     }
 
+    /**
+     * sales_targets 原本的 branch_id 是 NOT NULL；業績目標改成跟著秘書（staff_id）走之後，
+     * 新增業績目標不再填 branch_id，既有資料庫上這個舊欄位的 NOT NULL 限制要先解除，否則新增會直接撞到資料庫限制噴 500。
+     */
+    private void migrateSalesTargetsBranchNullable() {
+        jdbc.execute((ConnectionCallback<Void>) connection -> {
+            String database = connection.getMetaData().getDatabaseProductName().toLowerCase();
+            if (database.contains("mysql")) {
+                jdbc.execute("ALTER TABLE sales_targets MODIFY branch_id BIGINT NULL");
+            }
+            return null;
+        });
+    }
+
     private void migrateRefundsTable() {
         // rename note → adjustment_note, reason → refund_reason (MySQL only; H2 gets clean schema from schema.sql)
         jdbc.execute((ConnectionCallback<Void>) connection -> {
@@ -490,6 +504,9 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         addColumnIfMissing("sales_targets", "created_by", "BIGINT");
         addColumnIfMissing("sales_targets", "created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
         addForeignKeyIfMissing("sales_targets", "fk_sales_targets_created_by", "created_by", "staff", "staff_id");
+        addColumnIfMissing("sales_targets", "staff_id", "BIGINT");
+        addForeignKeyIfMissing("sales_targets", "fk_sales_targets_staff", "staff_id", "staff", "staff_id");
+        migrateSalesTargetsBranchNullable();
 
         addColumnIfMissing("performance_bonuses", "bonus_rule_id", "BIGINT");
         addColumnIfMissing("performance_bonuses", "rule_type", "VARCHAR(50)");

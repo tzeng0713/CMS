@@ -522,14 +522,14 @@
   "salesTargets": [
     {
       "salesTargetId": 1,
-      "branchId": 1,
+      "staffId": 1,
       "month": 202607,
       "category": "登記",
       "targetCount": 5
     },
     {
       "salesTargetId": 2,
-      "branchId": 1,
+      "staffId": 1,
       "month": 202607,
       "category": "辦公室",
       "targetCount": 2

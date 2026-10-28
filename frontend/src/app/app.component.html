@@ -3315,7 +3315,7 @@
                 <div class="panel-header">
                   <div>
                     <h2>業績目標</h2>
-                    <p>各分館與類別的當月業績目標。</p>
+                    <p>各秘書與類別的當月業績目標；雙秘書合作簽約時，業績算在簽約秘書上。</p>
                   </div>
                   @if (canManageBonusRules() && !creatingSalesTarget()) {
                     <button type="button" (click)="startCreateSalesTarget()">新增業績目標</button>
@@ -3328,11 +3328,13 @@
                     </div>
                     <form class="customer-form" (ngSubmit)="createSalesTarget()">
                       <label>
-                        分館
-                        <select name="newSalesTargetBranchId" [(ngModel)]="newSalesTargetForm.branchId" required>
-                          <option [ngValue]="0" disabled>請選擇分館</option>
-                          @for (branch of branches(); track branch) {
-                            <option [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+                        秘書
+                        <select name="newSalesTargetStaffId" [(ngModel)]="newSalesTargetForm.targetStaffId" required>
+                          <option [ngValue]="0" disabled>請選擇秘書</option>
+                          @for (staff of staffOptions(); track staff) {
+                            <option [ngValue]="staff['staff_id']">
+                              {{ value(staff, 'staff_name') }} / {{ value(staff, 'branch_name') }}
+                            </option>
                           }
                         </select>
                       </label>
@@ -3341,14 +3343,31 @@
                         <input type="month" name="newSalesTargetMonth" [ngModel]="monthNumberToInputValue(newSalesTargetForm.targetMonth)"
                           (ngModelChange)="newSalesTargetForm.targetMonth = monthInputValueToNumber($event)" required />
                       </label>
-                      <label>
-                        類別
-                        <input name="newSalesTargetCategory" [(ngModel)]="newSalesTargetForm.category" required maxlength="50" placeholder="例如：辦公室、登記" />
-                      </label>
-                      <label>
-                        目標數
-                        <input type="number" name="newSalesTargetCount" [(ngModel)]="newSalesTargetForm.targetCount" required min="0" />
-                      </label>
+                      <div class="wide related-company-fields">
+                        <span class="field-title-row">類別與目標數（可一次新增多筆不同類別）</span>
+                        @for (entry of newSalesTargetForm.entries; track trackByIndex(i); let i = $index) {
+                          <div class="repeatable-field">
+                            <select [name]="'newSalesTargetCategory' + i" [(ngModel)]="newSalesTargetForm.entries[i].category" required>
+                              <option value="" disabled>請選擇類別</option>
+                              @for (option of salesTargetCategoryOptions; track option) {
+                                <option [value]="option">{{ option }}</option>
+                              }
+                            </select>
+                            <input
+                              type="number"
+                              [name]="'newSalesTargetCount' + i"
+                              [(ngModel)]="newSalesTargetForm.entries[i].targetCount"
+                              required
+                              min="0"
+                              placeholder="目標數"
+                              />
+                            @if (newSalesTargetForm.entries.length > 1) {
+                              <button type="button" class="icon-button remove" title="移除這筆類別" aria-label="移除這筆類別" (click)="removeSalesTargetEntry(i)">×</button>
+                            }
+                          </div>
+                        }
+                        <button type="button" class="add-related-company" (click)="addSalesTargetEntry()">新增類別</button>
+                      </div>
                       <div class="form-actions wide">
                         <button type="submit" [disabled]="saving()">新增</button>
                         <button type="button" class="ghost" (click)="cancelCreateSalesTarget()">取消</button>
@@ -3358,11 +3377,13 @@
                 }
                 <section class="filter-bar sales-target-filter-bar">
                   <label>
-                    分館
-                    <select name="salesTargetFilterBranchId" [(ngModel)]="salesTargetFilters.branchId">
+                    秘書
+                    <select name="salesTargetFilterStaffId" [(ngModel)]="salesTargetFilters.staffId">
                       <option [ngValue]="null">全部</option>
-                      @for (branch of branches(); track branch) {
-                        <option [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+                      @for (staff of staffOptions(); track staff) {
+                        <option [ngValue]="staff['staff_id']">
+                          {{ value(staff, 'staff_name') }} / {{ value(staff, 'branch_name') }}
+                        </option>
                       }
                     </select>
                   </label>
@@ -3373,7 +3394,12 @@
                   </label>
                   <label>
                     類別
-                    <input name="salesTargetFilterCategory" [(ngModel)]="salesTargetFilters.category" />
+                    <select name="salesTargetFilterCategory" [(ngModel)]="salesTargetFilters.category">
+                      <option value="">全部</option>
+                      @for (option of salesTargetCategoryOptions; track option) {
+                        <option [value]="option">{{ option }}</option>
+                      }
+                    </select>
                   </label>
                   <div class="filter-actions">
                     <button type="button" (click)="searchSalesTargets()">搜尋</button>
@@ -3384,18 +3410,20 @@
                 }
                 @if (salesTargetRows().length) {
                   <div class="simple-table">
-                    <div class="simple-row header five">
-                      <span>分館</span>
+                    <div class="simple-row header seven">
+                      <span>秘書</span>
                       <span>月份</span>
                       <span>類別</span>
                       <span class="amount-cell">目標數</span>
+                      <span class="amount-cell">實際數</span>
+                      <span class="amount-cell">達成率</span>
                       <span>建立人</span>
                     </div>
                     @for (row of salesTargetRows(); track row) {
-                      <div class="simple-row five">
+                      <div class="simple-row seven">
                         <span class="stacked-field">
-                          <span class="stacked-field-label">分館</span>
-                          {{ row.branch_name }}
+                          <span class="stacked-field-label">秘書</span>
+                          {{ row.staff_name }}{{ row.branch_name ? '（' + row.branch_name + '）' : '' }}
                         </span>
                         <span class="stacked-field">
                           <span class="stacked-field-label">月份</span>
@@ -3408,6 +3436,14 @@
                         <span class="stacked-field amount-cell">
                           <span class="stacked-field-label">目標數</span>
                           {{ row.target_count }}
+                        </span>
+                        <span class="stacked-field amount-cell">
+                          <span class="stacked-field-label">實際數</span>
+                          {{ row.actual_count }}
+                        </span>
+                        <span class="stacked-field amount-cell">
+                          <span class="stacked-field-label">達成率</span>
+                          <span [class.achievement-met]="isAchievementMet(row.achievement_rate)">{{ achievementRateText(row.achievement_rate) }}</span>
                         </span>
                         <span class="stacked-field">
                           <span class="stacked-field-label">建立人</span>

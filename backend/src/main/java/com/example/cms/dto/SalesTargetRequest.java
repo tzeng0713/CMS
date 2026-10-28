@@ -1,10 +1,11 @@
 package com.example.cms.dto;
 
+import java.util.List;
+
 public record SalesTargetRequest(
-        Long branchId,
+        Long targetStaffId,
         Integer targetMonth,
-        String category,
-        Integer targetCount,
+        List<SalesTargetEntry> entries,
         Long staffId
 ) {
 }

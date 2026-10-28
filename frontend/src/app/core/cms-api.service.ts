@@ -503,26 +503,33 @@ export interface BonusRulePayload {
 
 export interface SalesTarget {
   sales_target_id: number;
-  branch_id: number;
-  branch_name: string;
+  staff_id: number;
+  staff_name: string;
+  branch_name: string | null;
   target_month: number;
   category: string;
   target_count: number;
+  actual_count: number;
+  achievement_rate: number | null;
   created_by: number | null;
   created_by_name: string | null;
   created_at: string | null;
 }
 
-export interface SalesTargetPayload {
-  branchId: number;
-  targetMonth: number;
+export interface SalesTargetEntryPayload {
   category: string;
   targetCount: number;
+}
+
+export interface SalesTargetPayload {
+  targetStaffId: number;
+  targetMonth: number;
+  entries: SalesTargetEntryPayload[];
   staffId: number;
 }
 
 export interface SalesTargetSearchFilters {
-  branchId?: number | null;
+  staffId?: number | null;
   targetMonth?: number | null;
   category?: string;
   page?: number;
@@ -922,8 +929,8 @@ export class CmsApiService {
     return this.http.get<PagedResult<SalesTarget>>(`${this.baseUrl}/sales-targets`, { params });
   }
 
-  createSalesTarget(payload: SalesTargetPayload): Observable<SalesTarget> {
-    return this.http.post<SalesTarget>(`${this.baseUrl}/sales-targets`, payload);
+  createSalesTarget(payload: SalesTargetPayload): Observable<SalesTarget[]> {
+    return this.http.post<SalesTarget[]>(`${this.baseUrl}/sales-targets`, payload);
   }
 
   performanceBonuses(filters: PerformanceBonusSearchFilters = {}): Observable<PagedResult<PerformanceBonus>> {

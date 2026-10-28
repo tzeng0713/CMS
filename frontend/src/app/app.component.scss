@@ -2724,6 +2724,10 @@ textarea.field-invalid:focus {
   grid-template-columns: minmax(200px, 1.2fr) minmax(200px, 1fr) minmax(140px, 0.8fr) minmax(140px, 0.8fr) minmax(90px, 0.5fr) minmax(220px, 1.4fr);
 }
 
+.simple-row.seven {
+  grid-template-columns: minmax(180px, 1.1fr) minmax(90px, 0.5fr) minmax(100px, 0.6fr) minmax(80px, 0.4fr) minmax(80px, 0.4fr) minmax(90px, 0.5fr) minmax(140px, 0.8fr);
+}
+
 .bonus-rule-row {
   grid-template-columns: minmax(260px, 1.8fr) minmax(110px, 0.6fr) minmax(140px, 0.7fr) minmax(90px, 0.5fr) minmax(90px, 0.5fr);
 }
@@ -3820,6 +3824,11 @@ $charge-list-slate: #6b6f76;
 .amount-cell {
   text-align: center;
   font-variant-numeric: tabular-nums;
+}
+
+.achievement-met {
+  color: #15803d;
+  font-weight: 700;
 }
 
 .bonus-branch-group h4 {
@@ -5066,6 +5075,15 @@ $charge-list-slate: #6b6f76;
   }
 
   .simple-row.five {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .simple-row.seven.header {
+    display: none;
+  }
+
+  .simple-row.seven {
     grid-template-columns: 1fr;
     gap: 0;
   }
