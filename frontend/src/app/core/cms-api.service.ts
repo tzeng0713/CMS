@@ -265,6 +265,8 @@ export interface BranchSummary {
   bank_account: string | null;
   bank_branch: string | null;
   bank_account_name: string | null;
+  tax_office_name: string | null;
+  responsible_person: string | null;
 }
 
 export interface BranchPayload {
@@ -276,6 +278,8 @@ export interface BranchPayload {
   bankAccount?: string;
   bankBranch?: string;
   bankAccountName?: string;
+  taxOfficeName?: string;
+  responsiblePerson?: string;
   staffId?: number;
 }
 

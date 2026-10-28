@@ -266,6 +266,8 @@ type BranchForm = {
   bankAccount: string;
   bankBranch: string;
   bankAccountName: string;
+  taxOfficeName: string;
+  responsiblePerson: string;
 };
 
 const emptyBranchForm = (): BranchForm => ({
@@ -276,7 +278,9 @@ const emptyBranchForm = (): BranchForm => ({
   taxId: '',
   bankAccount: '',
   bankBranch: '',
-  bankAccountName: ''
+  bankAccountName: '',
+  taxOfficeName: '',
+  responsiblePerson: ''
 });
 
 const emptyCustomerForm = (): CustomerForm => ({
@@ -1499,7 +1503,9 @@ export class AppComponent implements OnInit, AfterViewInit {
       taxId: branch.tax_id ?? '',
       bankAccount: branch.bank_account ?? '',
       bankBranch: branch.bank_branch ?? '',
-      bankAccountName: branch.bank_account_name ?? ''
+      bankAccountName: branch.bank_account_name ?? '',
+      taxOfficeName: branch.tax_office_name ?? '',
+      responsiblePerson: branch.responsible_person ?? ''
     };
   }
 
@@ -1559,6 +1565,8 @@ export class AppComponent implements OnInit, AfterViewInit {
       bankAccount: form.bankAccount.trim() || undefined,
       bankBranch: form.bankBranch.trim() || undefined,
       bankAccountName: form.bankAccountName.trim() || undefined,
+      taxOfficeName: form.taxOfficeName.trim() || undefined,
+      responsiblePerson: form.responsiblePerson.trim() || undefined,
       staffId: this.currentStaffId()
     };
   }
@@ -1576,8 +1584,16 @@ export class AppComponent implements OnInit, AfterViewInit {
       return '公司名稱長度不可超過 100 個字元。';
     }
     const code = form.branchCode.trim();
-    if (code && (!/^\d+$/.test(code) || code.length > 50)) {
-      return '分館編號僅限數字，長度不可超過 50 個字元。';
+    if (code.length > 50) {
+      return '分館代號長度不可超過 50 個字元。';
+    }
+    const taxOfficeName = form.taxOfficeName.trim();
+    if (taxOfficeName.length > 100) {
+      return '受文者長度不可超過 100 個字元。';
+    }
+    const responsiblePerson = form.responsiblePerson.trim();
+    if (responsiblePerson.length > 100) {
+      return '負責人長度不可超過 100 個字元。';
     }
     const address = form.branchAddress.trim();
     if (address.length > 255) {

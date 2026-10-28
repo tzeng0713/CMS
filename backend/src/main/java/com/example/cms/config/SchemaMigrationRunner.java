@@ -462,6 +462,8 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
         addColumnIfMissing("branches", "bank_account",      "VARCHAR(50)");
         addColumnIfMissing("branches", "bank_branch",       "VARCHAR(100)");
         addColumnIfMissing("branches", "bank_account_name", "VARCHAR(100)");
+        addColumnIfMissing("branches", "tax_office_name",   "VARCHAR(100)");
+        addColumnIfMissing("branches", "responsible_person", "VARCHAR(100)");
     }
 
     private void migratePerformanceManagementTables() {

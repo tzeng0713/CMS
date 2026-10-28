@@ -1840,8 +1840,8 @@
                         <input name="newBranchCompanyName" [(ngModel)]="newBranchForm.companyName" maxlength="100" placeholder="通報公文用之公司全名" />
                       </label>
                       <label>
-                        分館編號
-                        <input name="newBranchCode" [ngModel]="newBranchForm.branchCode" (ngModelChange)="newBranchForm.branchCode = digitsOnly($event, 50)" inputmode="numeric" maxlength="50" pattern="\d*" />
+                        分館代號
+                        <input name="newBranchCode" [(ngModel)]="newBranchForm.branchCode" maxlength="50" />
                       </label>
                       <label>
                         分館地址
@@ -1862,6 +1862,14 @@
                       <label>
                         戶名
                         <input name="newBranchBankAccountName" [(ngModel)]="newBranchForm.bankAccountName" maxlength="100" />
+                      </label>
+                      <label>
+                        受文者
+                        <input name="newBranchTaxOfficeName" [(ngModel)]="newBranchForm.taxOfficeName" maxlength="100" placeholder="國稅局通報文件用" />
+                      </label>
+                      <label>
+                        負責人
+                        <input name="newBranchResponsiblePerson" [(ngModel)]="newBranchForm.responsiblePerson" maxlength="100" />
                       </label>
                       <div class="form-actions wide">
                         <button type="submit" [disabled]="saving()">新增</button>
@@ -1888,8 +1896,8 @@
                         <input name="editBranchCompanyName" [(ngModel)]="branchEditForm.companyName" maxlength="100" placeholder="通報公文用之公司全名" />
                       </label>
                       <label>
-                        分館編號
-                        <input name="editBranchCode" [ngModel]="branchEditForm.branchCode" (ngModelChange)="branchEditForm.branchCode = digitsOnly($event, 50)" inputmode="numeric" maxlength="50" pattern="\d*" />
+                        分館代號
+                        <input name="editBranchCode" [(ngModel)]="branchEditForm.branchCode" maxlength="50" />
                       </label>
                       <label>
                         分館地址
@@ -1911,6 +1919,14 @@
                         戶名
                         <input name="editBranchBankAccountName" [(ngModel)]="branchEditForm.bankAccountName" maxlength="100" />
                       </label>
+                      <label>
+                        受文者
+                        <input name="editBranchTaxOfficeName" [(ngModel)]="branchEditForm.taxOfficeName" maxlength="100" placeholder="國稅局通報文件用" />
+                      </label>
+                      <label>
+                        負責人
+                        <input name="editBranchResponsiblePerson" [(ngModel)]="branchEditForm.responsiblePerson" maxlength="100" />
+                      </label>
                       <div class="form-actions wide">
                         <button type="submit" [disabled]="saving()">儲存修改</button>
                         <button type="button" class="ghost" (click)="cancelEditBranch()">取消</button>
@@ -1921,7 +1937,7 @@
                 <div class="simple-table">
                   <div class="simple-row header branch-row">
                     <span>分館名稱</span>
-                    <span>分館編號</span>
+                    <span>分館代號</span>
                     <span>分館地址</span>
                     <span>操作</span>
                   </div>
@@ -1932,7 +1948,7 @@
                         {{ row.branch_name }}
                       </span>
                       <span class="stacked-field">
-                        <span class="stacked-field-label">分館編號</span>
+                        <span class="stacked-field-label">分館代號</span>
                         {{ row.branch_code || '-' }}
                       </span>
                       <span class="stacked-field">
@@ -1979,7 +1995,7 @@
                               <dd>{{ detail.company_name || '-' }}</dd>
                             </div>
                             <div>
-                              <dt>分館編號</dt>
+                              <dt>分館代號</dt>
                               <dd>{{ detail.branch_code || '-' }}</dd>
                             </div>
                             <div>
@@ -2001,6 +2017,14 @@
                             <div>
                               <dt>戶名</dt>
                               <dd>{{ detail.bank_account_name || '-' }}</dd>
+                            </div>
+                            <div>
+                              <dt>受文者</dt>
+                              <dd>{{ detail.tax_office_name || '-' }}</dd>
+                            </div>
+                            <div>
+                              <dt>負責人</dt>
+                              <dd>{{ detail.responsible_person || '-' }}</dd>
                             </div>
                           </dl>
                         </div>

@@ -13,7 +13,9 @@ CREATE TABLE IF NOT EXISTS branches (
   tax_id VARCHAR(30),
   bank_account VARCHAR(50),
   bank_branch VARCHAR(100),
-  bank_account_name VARCHAR(100)
+  bank_account_name VARCHAR(100),
+  tax_office_name VARCHAR(100),
+  responsible_person VARCHAR(100)
 );
 
 CREATE TABLE IF NOT EXISTS offices (

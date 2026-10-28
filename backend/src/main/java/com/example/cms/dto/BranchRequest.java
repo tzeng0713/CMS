@@ -9,4 +9,6 @@ public record BranchRequest(
         String bankAccount,
         String bankBranch,
         String bankAccountName,
+        String taxOfficeName,
+        String responsiblePerson,
         Long staffId) {}
