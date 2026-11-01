@@ -19,7 +19,6 @@ public class MetadataService extends CmsJdbcSupport {
 
     public Map<String, Object> metadata() {
         Long ownBranch = access != null && access.actor().generalSecretary() ? access.actor().branchId() : null;
-        Long ownPerformanceBranch = access != null && !access.actor().manager() ? access.actor().branchId() : null;
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("branches", jdbc.queryForList("SELECT * FROM branches ORDER BY branch_id"));
         result.put("owners", jdbc.queryForList("""
@@ -39,13 +38,6 @@ public class MetadataService extends CmsJdbcSupport {
                 LEFT JOIN branches b ON b.branch_id = s.branch_id
                 ORDER BY s.staff_id
                 """));
-        result.put("salesTargets", jdbc.queryForList("""
-                SELECT st.sales_target_id, st.branch_id, st.target_month AS `month`,
-                       st.category, st.target_count, b.branch_name
-                FROM sales_targets st JOIN branches b ON b.branch_id = st.branch_id
-                WHERE (? IS NULL OR st.branch_id = ?)
-                ORDER BY st.target_month, st.category
-                """, ownPerformanceBranch, ownPerformanceBranch));
         return result;
     }
 }
