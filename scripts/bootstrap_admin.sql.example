@@ -6,6 +6,12 @@
 -- 這份腳本補上角色資料與一個真正的管理員帳號，執行前請確認後端已經啟動過一次
 -- （讓 schema.sql 建好資料表），且 customers 表仍是空的（代表還沒跑過 demo seed）。
 --
+-- 執行時務必指定 utf8mb4，否則中文姓名/分館名稱會在資料庫裡被雙重編碼存成亂碼
+-- （不是顯示問題，是實際存錯，之後要修只能重新 INSERT）：
+--   docker compose exec -T mysql mysql --default-character-set=utf8mb4 -uroot -p你的root密碼 cms < scripts/bootstrap_admin.sql
+-- 不是用 docker compose 的情況（直接連正式 MySQL）：
+--   mysql --default-character-set=utf8mb4 -u你的帳號 -p -h 你的DB主機 cms < scripts/bootstrap_admin.sql
+--
 -- password_hash 不要用明文或這份檔案裡的範例值，請在自己的終端機執行（不要貼給任何人/AI）：
 --   export JAVA_HOME=/opt/homebrew/opt/openjdk   # java -version 已正常可省略
 --   CP="$HOME/.m2/repository/org/springframework/security/spring-security-crypto/6.5.11/spring-security-crypto-6.5.11.jar:$HOME/.m2/repository/commons-logging/commons-logging/1.3.5/commons-logging-1.3.5.jar"

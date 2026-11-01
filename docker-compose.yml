@@ -1,0 +1,55 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: cms
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/low-memory.cnf:/etc/mysql/conf.d/low-memory.cnf:ro
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      CMS_DB_URL: "jdbc:mysql://mysql:3306/cms?createDatabaseIfNotExist=true&useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Taipei&allowPublicKeyRetrieval=true&useSSL=false"
+      CMS_DB_USERNAME: ${MYSQL_USER}
+      CMS_DB_PASSWORD: ${MYSQL_PASSWORD}
+      CMS_SEED_ENABLED: "false"
+      CMS_CORS_ALLOWED_ORIGINS: ${CMS_CORS_ALLOWED_ORIGINS:-}
+      CMS_APP_BASE_URL: ${CMS_APP_BASE_URL}
+      CMS_SMTP_HOST: ${CMS_SMTP_HOST:-}
+      CMS_SMTP_PORT: ${CMS_SMTP_PORT:-587}
+      CMS_SMTP_USERNAME: ${CMS_SMTP_USERNAME:-}
+      CMS_SMTP_PASSWORD: ${CMS_SMTP_PASSWORD:-}
+      CMS_PASSWORD_RESET_FROM: ${CMS_PASSWORD_RESET_FROM:-}
+    volumes:
+      - uploads-data:/app/uploads
+    mem_limit: 420m
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    volumes:
+      - uploads-data:/usr/share/nginx/html/uploads:ro
+    mem_limit: 48m
+
+volumes:
+  mysql-data:
+  uploads-data:

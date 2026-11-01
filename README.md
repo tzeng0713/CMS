@@ -91,26 +91,39 @@ cd frontend
 npm exec ng serve -- --configuration test-backend --host 127.0.0.1 --port 4301
 ```
 
-## 部署（打包上線前置設定）
+## 部署（Docker Compose，測試階段用 GCP e2-micro 永久免費方案）
 
-正式環境除了上面的 SMTP／`CMS_APP_BASE_URL` 之外，還需要設定：
+`docker-compose.yml` 會啟動三個容器：`mysql`（資料庫）、`backend`（Spring Boot，連到 `mysql`）、
+`frontend`（nginx，服務 Angular 靜態檔案，並把 `/api` 反向代理到 `backend`、`/uploads` 服務合約影像檔）。
+前後端走同一個 nginx 對外，瀏覽器看到的是同源請求，不需要處理 CORS。
 
-```powershell
-$env:CMS_SEED_ENABLED="false"
-$env:CMS_CORS_ALLOWED_ORIGINS="https://cms.example.com"
-$env:CMS_UPLOAD_DIR="/var/cms/uploads/contracts"
+```bash
+cp .env.example .env
+# 編輯 .env：填入 MySQL 密碼、CMS_APP_BASE_URL（你的 VM 外部 IP 或網域）、SMTP 設定
+docker compose up -d --build
 ```
 
-- `CMS_CORS_ALLOWED_ORIGINS`：正式前端網域（可用逗號分隔多個），會加進允許清單，不會取代本機開發用的 `localhost:4200/4301`。
-- `CMS_UPLOAD_DIR`：合約影像的實際存放目錄（建議用絕對路徑，重啟/換機器不會跟著程式的工作目錄跑掉）。沒設定時維持舊行為（相對路徑 `uploads/contracts`）。目前後端沒有提供下載這些檔案的 API，實際對外服務（例如 nginx）要指向同一個目錄。
-- `CMS_SEED_ENABLED=false` 會讓 demo 假資料（manager/supervisor/staff 等帳號、demo 客戶/租約）完全不寫入，但 `role_permissions`（角色）與第一個管理員帳號也不會自動建立，必須先手動建好角色與一個管理員帳號，否則正式環境會沒有人能登入。複製 `scripts/bootstrap_admin.sql.example` 為 `scripts/bootstrap_admin.sql`（已被 .gitignore 排除），依檔案內說明填入真實帳密後在正式資料庫執行一次。
+第一次啟動後，`schema.sql` 會把資料表建出來，但因為 `CMS_SEED_ENABLED=false`（寫在 compose 裡），
+不會有任何角色或帳號，必須手動建第一個管理員帳號：
 
-前端打包正式版之前，記得把 `frontend/src/environments/environment.prod.ts` 的 `apiBaseUrl` 改成正式後端網址，再執行：
-
-```powershell
-cd frontend
-npm run build -- --configuration production
+```bash
+cp scripts/bootstrap_admin.sql.example scripts/bootstrap_admin.sql
+# 依檔案內說明產生密碼雜湊、填入真實姓名/帳號/Email 後：
+docker compose exec -T mysql mysql --default-character-set=utf8mb4 -uroot -p你的root密碼 cms < scripts/bootstrap_admin.sql
 ```
+
+務必加 `--default-character-set=utf8mb4`，否則中文姓名/分館名稱會被雙重編碼存成亂碼（已實測驗證）。
+
+**GCP e2-micro（1GB RAM）注意事項：**
+- 三個容器的記憶體上限（`docker-compose.yml` 裡的 `mem_limit`）已經收緊過（mysql 256m、backend 420m、frontend 48m），實測正常運作時加總約 480MB，但建議額外幫 VM 加一個 swapfile 當安全網，避免瞬間尖峰被 OOM kill：
+  ```bash
+  sudo fallocate -l 1G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
+  echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+  ```
+- GCP 的 e2 系列是 x86_64（amd64），跟 Apple Silicon Mac 本機不同架構；本機測試建置/執行要加 `DOCKER_DEFAULT_PLATFORM=linux/amd64`，VM 上直接跑不需要這個設定。
+- 記得到 GCP 防火牆規則開放 80（跟 443，如果之後加 HTTPS）port。
+
+資料庫資料存在 named volume `mysql-data`，合約影像存在 `uploads-data`，`docker compose down`（不加 `-v`）不會清掉這兩個 volume；只有 `docker compose down -v` 會整個砍掉，使用前要注意。
 
 ## Demo 帳號
 

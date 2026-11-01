@@ -1,0 +1,7 @@
+[mysqld]
+# e2-micro 只有 1GB 記憶體，MySQL 預設設定會吃太多，這裡收緊到測試規模夠用就好。
+innodb_buffer_pool_size=96M
+innodb_log_buffer_size=8M
+performance_schema=OFF
+table_open_cache=128
+max_connections=50

@@ -274,9 +274,17 @@ public class SchemaMigrationRunner implements org.springframework.boot.CommandLi
     private void migrateSalesTargetsBranchNullable() {
         jdbc.execute((ConnectionCallback<Void>) connection -> {
             String database = connection.getMetaData().getDatabaseProductName().toLowerCase();
-            if (database.contains("mysql")) {
-                jdbc.execute("ALTER TABLE sales_targets MODIFY branch_id BIGINT NULL");
+            if (!database.contains("mysql")) {
+                return null;
             }
+            // 全新資料庫是從現在的 schema.sql 建表，sales_targets 本來就沒有 branch_id 欄位，
+            // 只有舊資料庫升級上來時才會有這個欄位要解除 NOT NULL。
+            try (var columns = connection.getMetaData().getColumns(null, null, "sales_targets", "branch_id")) {
+                if (!columns.next()) {
+                    return null;
+                }
+            }
+            jdbc.execute("ALTER TABLE sales_targets MODIFY branch_id BIGINT NULL");
             return null;
         });
     }
