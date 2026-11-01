@@ -28,6 +28,10 @@ spring:
 cms:
   seed:
     enabled: ${CMS_SEED_ENABLED:true}
+  cors:
+    allowed-origins: ${CMS_CORS_ALLOWED_ORIGINS:}
+  upload:
+    dir: ${CMS_UPLOAD_DIR:}
   backup:
     google-oauth-client-id: ${GOOGLE_OAUTH_CLIENT_ID:}
     google-oauth-client-secret: ${GOOGLE_OAUTH_CLIENT_SECRET:}

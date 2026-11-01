@@ -28,6 +28,7 @@ docs/*-use-cases.md
 
 # Local secrets (never commit)
 scripts/env.local.sh
+scripts/bootstrap_admin.sql
 
 # OS/editor files
 .DS_Store

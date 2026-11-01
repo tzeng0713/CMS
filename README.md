@@ -91,6 +91,27 @@ cd frontend
 npm exec ng serve -- --configuration test-backend --host 127.0.0.1 --port 4301
 ```
 
+## 部署（打包上線前置設定）
+
+正式環境除了上面的 SMTP／`CMS_APP_BASE_URL` 之外，還需要設定：
+
+```powershell
+$env:CMS_SEED_ENABLED="false"
+$env:CMS_CORS_ALLOWED_ORIGINS="https://cms.example.com"
+$env:CMS_UPLOAD_DIR="/var/cms/uploads/contracts"
+```
+
+- `CMS_CORS_ALLOWED_ORIGINS`：正式前端網域（可用逗號分隔多個），會加進允許清單，不會取代本機開發用的 `localhost:4200/4301`。
+- `CMS_UPLOAD_DIR`：合約影像的實際存放目錄（建議用絕對路徑，重啟/換機器不會跟著程式的工作目錄跑掉）。沒設定時維持舊行為（相對路徑 `uploads/contracts`）。目前後端沒有提供下載這些檔案的 API，實際對外服務（例如 nginx）要指向同一個目錄。
+- `CMS_SEED_ENABLED=false` 會讓 demo 假資料（manager/supervisor/staff 等帳號、demo 客戶/租約）完全不寫入，但 `role_permissions`（角色）與第一個管理員帳號也不會自動建立，必須先手動建好角色與一個管理員帳號，否則正式環境會沒有人能登入。複製 `scripts/bootstrap_admin.sql.example` 為 `scripts/bootstrap_admin.sql`（已被 .gitignore 排除），依檔案內說明填入真實帳密後在正式資料庫執行一次。
+
+前端打包正式版之前，記得把 `frontend/src/environments/environment.prod.ts` 的 `apiBaseUrl` 改成正式後端網址，再執行：
+
+```powershell
+cd frontend
+npm run build -- --configuration production
+```
+
 ## Demo 帳號
 
 - 主管：`manager / password`

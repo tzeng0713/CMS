@@ -1,0 +1,30 @@
+-- 複製這個檔案為 scripts/bootstrap_admin.sql（該檔名已被 .gitignore 排除，不會進版控），
+-- 填入真實資料後在正式資料庫上執行一次。
+--
+-- 使用情境：CMS_SEED_ENABLED=false 時，demo 假資料（manager/supervisor/staff 等帳號、
+-- demo 客戶/租約）完全不會寫入，但角色（role_permissions）與第一個管理員帳號也不會自動建立。
+-- 這份腳本補上角色資料與一個真正的管理員帳號，執行前請確認後端已經啟動過一次
+-- （讓 schema.sql 建好資料表），且 customers 表仍是空的（代表還沒跑過 demo seed）。
+--
+-- password_hash 不要用明文或這份檔案裡的範例值，請在自己的終端機執行（不要貼給任何人/AI）：
+--   export JAVA_HOME=/opt/homebrew/opt/openjdk   # java -version 已正常可省略
+--   CP="$HOME/.m2/repository/org/springframework/security/spring-security-crypto/6.5.11/spring-security-crypto-6.5.11.jar:$HOME/.m2/repository/commons-logging/commons-logging/1.3.5/commons-logging-1.3.5.jar"
+--   "$JAVA_HOME/bin/jshell" --class-path "$CP"
+-- 進入 jshell 後貼（換成你的真密碼）：
+--   System.out.println(new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder().encode("你的真密碼"));
+-- 印出的雜湊字串貼到下面的 password_hash。
+
+-- 角色：這三個名稱是程式碼寫死查詢用的（例如自助註冊預設指派「一般秘書」），名稱不能改。
+INSERT INTO role_permissions (role_permission_id, role_name, scope) VALUES
+  (1, '主管', '全部分館'),
+  (2, '督導秘書', '跨館查詢客戶與租約；所屬分館編輯；可查對帳'),
+  (3, '一般秘書', '所屬分館客戶、租約及業績；不可查對帳');
+
+-- 分館：先建一筆真實分館，其餘欄位（公司名稱、統編、銀行帳號等）之後可在「分館管理」頁面補。
+INSERT INTO branches (branch_id, branch_name) VALUES (1, '請填你的真實分館名稱');
+
+-- 管理員帳號：staff_name/account/email 換成真實資料，password_hash 換成上面 jshell 印出的雜湊。
+-- 沒有列出 email_verified_at / account_approved_at，會自動套用 schema 的 DEFAULT CURRENT_TIMESTAMP，
+-- 所以這個帳號建好後可以直接登入，不會卡在「帳號審核中」或「請完成 Email 驗證」。
+INSERT INTO staff (staff_id, role_permission_id, branch_id, staff_name, account, email, password_hash)
+VALUES (1, 1, 1, '你的真實姓名', '你的登入帳號', 'your-real-email@example.com', '貼上面jshell印出的雜湊');

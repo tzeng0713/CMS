@@ -4,6 +4,7 @@ import com.example.cms.dto.ContractRequest;
 import com.example.cms.service.support.CmsJdbcSupport;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -22,8 +23,15 @@ import java.util.Map;
 public class ContractService extends CmsJdbcSupport {
     @Autowired(required = false)
     private RoleAccess access;
-    public ContractService(JdbcTemplate jdbc) {
+
+    // 預設維持舊有的相對路徑（相對於程式啟動時的工作目錄），CMS_UPLOAD_DIR 沒設定時行為不變。
+    private final Path leaseImageUploadDir;
+
+    public ContractService(JdbcTemplate jdbc, @Value("${cms.upload.dir:}") String configuredUploadDir) {
         super(jdbc);
+        this.leaseImageUploadDir = configuredUploadDir == null || configuredUploadDir.isBlank()
+                ? Path.of("uploads", "contracts")
+                : Path.of(configuredUploadDir);
     }
 
     public Map<String, Object> contracts(String search, String companyName, String taxId,
@@ -145,7 +153,7 @@ public class ContractService extends CmsJdbcSupport {
         String originalName = file.getOriginalFilename() == null ? "contract-image" : file.getOriginalFilename();
         String safeName = originalName.replaceAll("[^a-zA-Z0-9._-]", "_");
         String fileName = "contract-" + contractId + "-" + System.currentTimeMillis() + "-" + safeName;
-        Path uploadDir = Path.of("uploads", "contracts");
+        Path uploadDir = leaseImageUploadDir;
         Path target = uploadDir.resolve(fileName).normalize();
         try {
             Files.createDirectories(uploadDir);
