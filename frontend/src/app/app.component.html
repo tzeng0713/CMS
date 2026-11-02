@@ -1,3 +1,6 @@
+@if (httpLoading.isLoading()) {
+  <div class="global-loading-bar" role="status" aria-label="載入中"></div>
+}
 @if (!currentUser()) {
   <section class="auth-page">
     <section class="auth-card" [attr.aria-labelledby]="authMode() === 'login' ? 'auth-heading' : null">

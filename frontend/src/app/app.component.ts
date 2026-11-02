@@ -6,6 +6,7 @@ import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
 import html2canvas from 'html2canvas';
 import { forkJoin } from 'rxjs';
 import { BANK_CODES, BankCode } from './core/bank-codes';
+import { LoadingService } from './core/loading.service';
 import {
   CmsApiService,
   AuthUser,
@@ -881,7 +882,11 @@ export class AppComponent implements OnInit, AfterViewInit {
   salesTargetTotalPages = computed(() => Math.max(1, Math.ceil(this.salesTargetTotal() / this.salesTargetPageSize)));
   performanceBonusTotalPages = computed(() => Math.max(1, Math.ceil(this.performanceBonusTotal() / this.performanceBonusPageSize)));
 
-  constructor(private readonly api: CmsApiService, private readonly router: Router) {}
+  constructor(
+    private readonly api: CmsApiService,
+    private readonly router: Router,
+    readonly httpLoading: LoadingService
+  ) {}
 
   showToast(message: string, kind: Toast['kind'] = 'success'): void {
     if (this.toastTimeoutId !== null) {

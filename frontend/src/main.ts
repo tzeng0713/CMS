@@ -1,9 +1,11 @@
-import { provideZoneChangeDetection } from "@angular/core";
+import { inject, provideZoneChangeDetection } from "@angular/core";
 import { bootstrapApplication } from '@angular/platform-browser';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { finalize } from 'rxjs';
 import { provideRouter, Routes } from '@angular/router';
 import { AppComponent } from './app/app.component';
 import { RouteSinkComponent } from './app/route-sink.component';
+import { LoadingService } from './app/core/loading.service';
 
 const routes: Routes = [
   { path: '', redirectTo: 'home', pathMatch: 'full' },
@@ -30,5 +32,16 @@ const routes: Routes = [
 ];
 
 bootstrapApplication(AppComponent, {
-  providers: [provideZoneChangeDetection(),provideHttpClient(withInterceptors([(request, next) => next(request.clone({ withCredentials: true }))])), provideRouter(routes)]
+  providers: [
+    provideZoneChangeDetection(),
+    provideHttpClient(withInterceptors([
+      (request, next) => next(request.clone({ withCredentials: true })),
+      (request, next) => {
+        const loading = inject(LoadingService);
+        loading.start();
+        return next(request).pipe(finalize(() => loading.stop()));
+      }
+    ])),
+    provideRouter(routes)
+  ]
 }).catch((err) => console.error(err));
