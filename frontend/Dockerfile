@@ -5,7 +5,10 @@ WORKDIR /app
 RUN npm install -g npm@11
 COPY package*.json ./
 RUN npm ci
-COPY . .
+# 只複製 npm build 實際需要的檔案，不要整個資料夾一起複製（包含 nginx.conf）——
+# 不然改 nginx.conf 這種跟前端程式碼無關的設定檔，也會讓這層快取失效，逼整個 npm build 重跑一次。
+COPY angular.json tsconfig*.json ./
+COPY src ./src
 RUN npm run build -- --configuration production
 
 FROM nginx:1.27-alpine
