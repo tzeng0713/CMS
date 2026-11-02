@@ -114,6 +114,18 @@ docker compose exec -T mysql mysql --default-character-set=utf8mb4 -uroot -p你�
 
 務必加 `--default-character-set=utf8mb4`，否則中文姓名/分館名稱會被雙重編碼存成亂碼（已實測驗證）。
 
+**限制誰可以連進來（nginx Basic Auth）：**
+
+整站（包含 `/api`）會先要求瀏覽器彈出的帳號密碼才能進，沒有這組密碼的人連 CMS 自己的登入頁都看不到：
+
+```bash
+mkdir -p nginx
+echo "帳號:$(openssl passwd -apr1 '你要設定的共用密碼')" > nginx/.htpasswd
+docker compose up -d --build frontend
+```
+
+`nginx/.htpasswd` 已被 `.gitignore` 排除，不會進版控。這組帳密是所有人共用的一道閘門，跟 CMS 系統本身每個職員各自的帳號密碼是兩回事。
+
 **GCP e2-micro（1GB RAM）注意事項：**
 - 三個容器的記憶體上限（`docker-compose.yml` 裡的 `mem_limit`）已經收緊過（mysql 256m、backend 420m、frontend 48m），實測正常運作時加總約 480MB，但建議額外幫 VM 加一個 swapfile 當安全網，避免瞬間尖峰被 OOM kill：
   ```bash

@@ -48,6 +48,7 @@ services:
       - "80:80"
     volumes:
       - uploads-data:/usr/share/nginx/html/uploads:ro
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd:ro
     mem_limit: 48m
 
 volumes:

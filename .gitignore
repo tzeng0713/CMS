@@ -30,6 +30,7 @@ docs/*-use-cases.md
 scripts/env.local.sh
 scripts/bootstrap_admin.sql
 .env
+nginx/.htpasswd
 
 # OS/editor files
 .DS_Store
