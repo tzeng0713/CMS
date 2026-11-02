@@ -901,6 +901,7 @@ textarea:focus-visible {
   border: 1px solid var(--brand-gold);
   border-radius: 10px;
   background: #fdf8ee;
+  min-width: 0;
 }
 
 .current-period-bar label {
@@ -909,6 +910,8 @@ textarea:focus-visible {
   gap: 4px;
   font-weight: 700;
   color: var(--brand-ink);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .current-period-bar input,
@@ -1370,6 +1373,7 @@ textarea {
   gap: 5px;
   color: #475569;
   font-size: 13px;
+  min-width: 0;
 }
 
 .inline-filter {
@@ -2663,6 +2667,18 @@ textarea.field-invalid:focus {
   border-radius: 8px;
   background: #ffffff;
   overflow: hidden;
+  min-width: 0;
+}
+
+// 年份只需要 4 碼數字，不用吃到全域 input/select 的 180px min-width，
+// 不然窄螢幕上跟旁邊的期別下拉搶空間會把整個卡片撐出去、破版。
+.period-filter-group input {
+  min-width: 0;
+  flex: 0 1 80px;
+  border: 0;
+  border-right: 1px solid #e2e8f0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .period-filter-group select {
@@ -2681,8 +2697,10 @@ textarea.field-invalid:focus {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-.filter-bar input {
+.filter-bar input,
+.filter-bar select {
   width: 100%;
+  min-width: 0;
 }
 
 .filter-actions {
