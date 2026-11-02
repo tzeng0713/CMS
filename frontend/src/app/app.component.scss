@@ -4949,6 +4949,24 @@ $charge-list-slate: #6b6f76;
     grid-template-columns: 1fr;
   }
 
+  // 單欄版面下，規則類型欄位改成直向排列，「顯示全部期間」checkbox 不能再用
+  // 桌面版那種 position: absolute 疊在規則類型下方的做法——欄位變成同一欄
+  // 垂直排列後，絕對定位的 checkbox 不會把後面的「分館」欄位往下推，兩者會疊在一起。
+  .filter-bar.business-bonus-filter-bar {
+    padding-bottom: 12px;
+  }
+
+  .filter-bar.business-bonus-filter-bar .rule-type-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .filter-bar.business-bonus-filter-bar .rule-type-field label.checkbox-label.compact-checkbox {
+    position: static;
+    margin-top: 0;
+  }
+
   .home-summary {
     grid-template-columns: 1fr;
   }
