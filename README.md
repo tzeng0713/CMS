@@ -103,29 +103,6 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-**之後更新：本機建置、推上 GitHub Container Registry，VM 只 pull（不用在 VM 上編譯）**
-
-`docker-compose.yml` 的 `backend`／`frontend` 服務同時有 `image:`（`ghcr.io/joyce103/cms-backend`／`cms-frontend`）跟 `build:` 兩個設定。在效能好的本機跑 `docker compose build` 會自動用 `image:` 那個名稱幫 image 打標籤；VM 只要 `docker compose pull` 把現成的 image 抓下來、`docker compose up -d`（不加 `--build`）就能套用新版，不用再讓 e2-micro 那顆 1 vCPU 去跑 `npm run build`。
-
-本機（第一次要先 `docker login ghcr.io -u 你的GitHub帳號` 並用有 `write:packages` 權限的 Personal Access Token 當密碼）：
-
-```bash
-DOCKER_DEFAULT_PLATFORM=linux/amd64 docker compose build
-docker push ghcr.io/joyce103/cms-backend:latest
-docker push ghcr.io/joyce103/cms-frontend:latest
-```
-
-第一次 push 完後，到 GitHub 個人頁面的 Packages 分頁，把這兩個 package 的可見度改成 **Public**（預設是 Private），VM 才不需要登入就能直接 pull。兩個 Dockerfile 都已經加上 `LABEL org.opencontainers.image.source`，GitHub 會自動把 package 關聯到 `tzeng0713/CMS` 這個 repo，之後任何對這個 repo 有寫入權限的協作者都能直接推新版 image，不用額外加權限。
-
-VM 上更新：
-
-```bash
-cd ~/CMS
-git pull
-docker compose pull
-docker compose up -d
-```
-
 第一次啟動後，`schema.sql` 會把資料表建出來，但因為 `CMS_SEED_ENABLED=false`（寫在 compose 裡），
 不會有任何角色或帳號，必須手動建第一個管理員帳號：
 

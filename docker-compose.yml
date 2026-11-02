@@ -18,7 +18,6 @@ services:
       retries: 10
 
   backend:
-    image: ghcr.io/joyce103/cms-backend:latest
     build: ./backend
     restart: unless-stopped
     depends_on:
@@ -41,7 +40,6 @@ services:
     mem_limit: 420m
 
   frontend:
-    image: ghcr.io/joyce103/cms-frontend:latest
     build: ./frontend
     restart: unless-stopped
     depends_on:
