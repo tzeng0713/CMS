@@ -1,0 +1,51 @@
+name: Build and push images
+
+# push 到 dev/main 時自動在 GitHub 的雲端機器建 image、推到 GitHub Container Registry，
+# VM 不用再自己編譯，只要 docker compose pull 抓現成的 image 就好。
+# 用分支名稱當 image tag（dev → :dev，main → :main），兩個分支不會互相蓋掉對方的 image，
+# 開發環境（VM 的 docker-compose.yml 目前 pull 的是 :dev）跟之後的正式環境可以明確分開。
+# workflow_dispatch 讓你可以在 GitHub 網頁上手動重新觸發一次，不用特地推一個空 commit。
+on:
+  push:
+    branches:
+      - dev
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/cms-backend:${{ github.ref_name }}
+          cache-from: type=gha,scope=backend-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=backend-${{ github.ref_name }}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/cms-frontend:${{ github.ref_name }}
+          cache-from: type=gha,scope=frontend-${{ github.ref_name }}
+          cache-to: type=gha,mode=max,scope=frontend-${{ github.ref_name }}

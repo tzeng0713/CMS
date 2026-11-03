@@ -18,6 +18,7 @@ services:
       retries: 10
 
   backend:
+    image: ghcr.io/tzeng0713/cms-backend:${IMAGE_TAG:-dev}
     build: ./backend
     restart: unless-stopped
     depends_on:
@@ -40,6 +41,7 @@ services:
     mem_limit: 420m
 
   frontend:
+    image: ghcr.io/tzeng0713/cms-frontend:${IMAGE_TAG:-dev}
     build: ./frontend
     restart: unless-stopped
     depends_on:
