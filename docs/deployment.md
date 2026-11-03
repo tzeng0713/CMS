@@ -10,11 +10,21 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-**之後更新：push 到 GitHub 會自動建好 image，VM 只要 pull（不用在 VM 上編譯）**
+**之後更新：壓 tag 才會建置＋上版（不是一 push 就自動上），VM 只要 pull（不用在 VM 上編譯）**
 
-`.github/workflows/build-push.yml` 會在 push 到 `dev`／`main` 時，自動在 GitHub 的雲端機器把 `backend`／`frontend` 兩個 image 建好，推到 GitHub Container Registry。不用在自己電腦或 VM 上編譯，GitHub Actions 對 public repo 完全免費、沒有額度限制；任何對這個 repo 有寫入權限的協作者 push 程式碼都會自動觸發，不用個別申請 Token。
+`.github/workflows/build-push.yml` 不是監聽 push，是監聽**符合格式的 tag**，平常 commit/push 不會觸發任何建置，要明確決定「現在要上版了」才壓 tag：
 
-**image tag 跟著分支名稱走**（`dev` push 出 `:dev`、`main` push 出 `:main`），兩個分支的 image 不會互相蓋掉，可以明確分清楚開發環境跟正式環境。`.env` 裡的 `IMAGE_TAG`（預設 `dev`）決定這台機器要 pull 哪一個：這台測試機維持預設值即可；之後如果拿同一份 `docker-compose.yml` 架設正式環境，只要把那台機器的 `.env` 改成 `IMAGE_TAG=main`，不用另外維護一份 compose 設定。
+```bash
+git checkout dev   # 或 main，看要上哪個環境
+git tag dev-20261103.01   # 格式：<環境>-<YYYYMMDD>.<序號>，同一天重上版序號往上加
+git push origin dev-20261103.01
+```
+
+推上去後，GitHub 的雲端機器會自動把 `backend`／`frontend` 兩個 image 建好，推到 GitHub Container Registry。不用在自己電腦或 VM 上編譯，GitHub Actions 對 public repo 完全免費、沒有額度限制；任何對這個 repo 有寫入權限的協作者都能壓 tag 觸發，不用個別申請 Token。
+
+**image tag 跟著 tag 的環境前綴走**（`dev-*` 推出 `:dev`、`main-*` 推出 `:main`），兩個環境的 image 不會互相蓋掉，可以明確分清楚開發環境跟正式環境。同時也會推一份跟 tag 同名的快照（例如 `:dev-20261103.01`），之後要回滾到某個特定版本，把 VM 的 `.env` 的 `IMAGE_TAG` 改成那個快照標籤即可，不用重新建置。
+
+`.env` 裡的 `IMAGE_TAG`（預設 `dev`）決定這台機器要 pull 哪一個：這台測試機維持預設值即可；之後如果拿同一份 `docker-compose.yml` 架設正式環境，只要把那台機器的 `.env` 改成 `IMAGE_TAG=main`，不用另外維護一份 compose 設定。
 
 第一次設定好後，到 `github.com/tzeng0713` 的 Packages 分頁確認 `cms-backend`／`cms-frontend` 兩個 package 的可見度是 **Public**（GitHub Actions 用內建 token 推送時通常會自動跟著 repo 一樣是 public，保險起見手動確認一次，不是 public 的話 VM pull 會需要先登入）。
 
