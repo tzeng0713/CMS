@@ -949,11 +949,12 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.applyRoute(event.urlAfterRedirects);
       }
     });
-    if (this.router.url === '/') {
-      this.router.navigateByUrl('/home');
-    } else {
-      this.applyRoute(this.router.url);
-    }
+    // 重新整理頁面時，router 解析實際網址（例如 /contracts）需要一點時間，這裡執行的當下
+    // this.router.url 可能還是初始預設值 "/"，不能拿來判斷「使用者是不是真的在首頁」，
+    // 否則會錯把還沒解析完的暫時狀態當成首頁，搶先把網址導回 /home，蓋掉原本的頁面。
+    // 真正解析完成後會觸發上面的 NavigationEnd，到時候 applyRoute 會再修正一次；
+    // 這裡只是讓畫面盡早同步一次目前網址，不需要主動跳轉。
+    this.applyRoute(this.router.url);
     if (this.currentUser() && !this.isAccountPending()) {
       this.refresh();
     }
