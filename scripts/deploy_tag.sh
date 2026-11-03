@@ -37,18 +37,21 @@ fi
 TAG_NAME="${PREFIX}$(printf '%02d' "$NEXT_SEQ")"
 
 echo ""
-echo "即將壓 tag：$TAG_NAME"
+echo "即將：先 push '$ENVIRONMENT' 分支，再壓 tag：$TAG_NAME"
 echo "對應 commit：$(git rev-parse --short HEAD)  $(git log -1 --pretty=%s)"
 echo ""
-read -r -p "確定要壓這個 tag 並 push 觸發部署嗎？(y/N) " CONFIRM
+read -r -p "確定要繼續嗎？(y/N) " CONFIRM
 if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
-  echo "已取消，沒有建立任何 tag。"
+  echo "已取消，沒有 push 分支也沒有建立 tag。"
   exit 0
 fi
+
+echo "==> push 分支 '$ENVIRONMENT'，確保 tag 跟分支指向同一個狀態..."
+git push origin "$ENVIRONMENT"
 
 git tag "$TAG_NAME"
 git push origin "$TAG_NAME"
 
 echo ""
-echo "完成，已推送 $TAG_NAME。"
+echo "完成，已推送分支 '$ENVIRONMENT' 跟 tag $TAG_NAME。"
 echo "到 GitHub 的 Actions 分頁確認建置狀態：https://github.com/tzeng0713/CMS/actions"
