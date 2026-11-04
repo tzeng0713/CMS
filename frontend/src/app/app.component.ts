@@ -3487,9 +3487,60 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.newChargeListForm.customerId = value.customer_id;
         const firstContract = value.contracts?.[0] as Record<string, unknown> | undefined;
         this.newChargeListForm.contractId = firstContract ? Number(firstContract['contract_id']) : null;
+        this.prefillChargeListFromPreviousMonth();
       },
       error: () => this.error.set('無法載入客戶租約資料。')
     });
+  }
+
+  onChargeListContractChange(): void {
+    this.prefillChargeListFromPreviousMonth();
+  }
+
+  onChargeListFeeMonthChange(): void {
+    this.prefillChargeListFromPreviousMonth();
+  }
+
+  private static readonly CHARGE_LIST_PREFILL_MAX_MONTHS_BACK = 12;
+
+  private prefillChargeListFromPreviousMonth(): void {
+    const { contractId, feeMonth } = this.newChargeListForm;
+    if (!contractId || !feeMonth) {
+      return;
+    }
+    this.findPreviousChargeListForPrefill(contractId, feeMonth, 1);
+  }
+
+  private findPreviousChargeListForPrefill(contractId: number, feeMonth: string, monthsBack: number): void {
+    if (monthsBack > AppComponent.CHARGE_LIST_PREFILL_MAX_MONTHS_BACK) {
+      return;
+    }
+    const targetMonth = this.offsetMonthValue(feeMonth, -monthsBack);
+    this.api.chargeLists({ contractId, feeMonth: targetMonth, page: 0, pageSize: 1 }).subscribe({
+      next: (result) => {
+        const previous = result.content[0];
+        if (!previous) {
+          this.findPreviousChargeListForPrefill(contractId, feeMonth, monthsBack + 1);
+          return;
+        }
+        this.newChargeListForm.managementFee = previous.management_fee;
+        this.newChargeListForm.electricityFee = previous.electricity_fee;
+        this.newChargeListForm.printingFee = previous.printing_fee;
+        this.newChargeListForm.meetingRoomFee = previous.meeting_room_fee;
+        this.newChargeListForm.tax = previous.tax;
+        this.newChargeListForm.advancePayment = previous.advance_payment;
+        this.newChargeListForm.repairFee = previous.repair_fee;
+      },
+      error: () => undefined
+    });
+  }
+
+  private offsetMonthValue(feeMonth: string, offset: number): string {
+    const [yearStr, monthStr] = feeMonth.split('-');
+    const year = Number(yearStr);
+    const month = Number(monthStr);
+    const date = new Date(year, month - 1 + offset, 1);
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
   }
 
   chargeListPreviewTotal(form: ChargeListForm): number {
