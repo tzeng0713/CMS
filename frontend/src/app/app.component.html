@@ -2534,7 +2534,12 @@
                       >
                       <label>
                         租約
-                        <select name="newChargeListContract" [(ngModel)]="newChargeListForm.contractId" required>
+                        <select
+                          name="newChargeListContract"
+                          [(ngModel)]="newChargeListForm.contractId"
+                          (ngModelChange)="onChargeListContractChange()"
+                          required
+                          >
                           <option [ngValue]="null">請選擇租約</option>
                           @for (contract of chargeListCustomer.contracts; track contract) {
                             <option [ngValue]="contract['contract_id']">
@@ -2545,7 +2550,13 @@
                       </label>
                       <label>
                         費用月份
-                        <input type="month" name="newChargeListFeeMonth" [(ngModel)]="newChargeListForm.feeMonth" required />
+                        <input
+                          type="month"
+                          name="newChargeListFeeMonth"
+                          [(ngModel)]="newChargeListForm.feeMonth"
+                          (ngModelChange)="onChargeListFeeMonthChange()"
+                          required
+                          />
                       </label>
                       <label>
                         管理費
