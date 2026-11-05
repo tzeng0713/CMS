@@ -1787,32 +1787,34 @@
                     <p>填寫分館、房號與備註。</p>
                   </div>
                 </div>
-                <form class="customer-form" (ngSubmit)="createOffice()">
-                  <label>
-                    房號
-                    <input name="newOfficeNo" [(ngModel)]="newOfficeForm.officeNo" />
-                  </label>
-                  <label>
-                    分館
-                    @if (canEditAllBranches()) {
-                      <select name="newOfficeBranch" [(ngModel)]="newOfficeForm.branchId" required>
-                        <option [ngValue]="null">請選擇分館</option>
-                        @for (branch of branches(); track branch) {
-                          <option [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
-                        }
-                      </select>
-                    } @else {
-                      <input readonly [value]="currentUser()?.branch_name || ''" />
-                    }
-                  </label>
-                  <label class="wide">
-                    備註
-                    <textarea name="newOfficeNotes" rows="2" [(ngModel)]="newOfficeForm.notes"></textarea>
-                  </label>
-                  <div class="form-actions wide">
-                    <button type="submit" [disabled]="saving()">新增辦公室</button>
-                  </div>
-                </form>
+                <div class="rent-edit-panel">
+                  <form class="customer-form" (ngSubmit)="createOffice()">
+                    <label>
+                      房號
+                      <input name="newOfficeNo" [(ngModel)]="newOfficeForm.officeNo" />
+                    </label>
+                    <label>
+                      分館
+                      @if (canEditAllBranches()) {
+                        <select name="newOfficeBranch" [(ngModel)]="newOfficeForm.branchId" required>
+                          <option [ngValue]="null">請選擇分館</option>
+                          @for (branch of branches(); track branch) {
+                            <option [ngValue]="branch.branch_id">{{ branch.branch_name }}</option>
+                          }
+                        </select>
+                      } @else {
+                        <input readonly [value]="currentUser()?.branch_name || ''" />
+                      }
+                    </label>
+                    <label class="wide">
+                      備註
+                      <textarea name="newOfficeNotes" rows="2" [(ngModel)]="newOfficeForm.notes"></textarea>
+                    </label>
+                    <div class="form-actions wide">
+                      <button type="submit" [disabled]="saving()">新增辦公室</button>
+                    </div>
+                  </form>
+                </div>
               </section>
             </section>
           }
@@ -4284,7 +4286,7 @@
                 }
                 @if (canManageBackup()) {
                   <div class="simple-table">
-                    <div class="simple-row header">
+                    <div class="simple-row header backup-row">
                       <span>觸發者</span>
                       <span>時間</span>
                       <span>檔名</span>
@@ -4292,7 +4294,7 @@
                       <span>Drive 連結</span>
                     </div>
                     @for (log of backupLogs(); track log) {
-                      <div class="simple-row">
+                      <div class="simple-row backup-row">
                         <span class="stacked-field">
                           <span class="stacked-field-label">觸發者</span>
                           {{ log.triggered_by_name || '-' }}
