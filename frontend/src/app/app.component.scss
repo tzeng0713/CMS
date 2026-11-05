@@ -833,6 +833,10 @@ h1 {
 }
 
 button {
+  // 沒加 appearance: none 的話，iOS Safari 的按鈕會保留系統原生外觀，
+  // 底色會被系統的藍色調蓋掉，看不到這裡設定的金色底色。
+  -webkit-appearance: none;
+  appearance: none;
   border: 0;
   border-radius: 8px;
   background: var(--brand-gold-strong);
@@ -1027,6 +1031,17 @@ select {
 input:disabled {
   color: #64748b;
   background: #f8fafc;
+}
+
+// iOS Safari renders type="date"/type="month" with its own intrinsic content
+// height that ignores the author-set height/padding above, making it taller
+// than sibling inputs in the same filter row and overflowing the container.
+input[type="date"],
+input[type="month"] {
+  padding: 0 12px;
+  line-height: 38px;
+  -webkit-appearance: none;
+  appearance: none;
 }
 
 textarea {
@@ -1480,6 +1495,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .field-title-row {
@@ -1488,8 +1504,9 @@ textarea {
   font-size: 13px;
 }
 
+.repeatable-field select,
 .repeatable-field input {
-  flex: 1 1 auto;
+  flex: 1 1 140px;
   min-width: 0;
 }
 
@@ -3468,6 +3485,10 @@ $charge-list-slate: #6b6f76;
   grid-template-columns: 100px 140px 1fr 80px;
 }
 
+.backup-row {
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1fr) minmax(160px, 1.4fr) 80px 120px;
+}
+
 .branch-row {
   grid-template-columns: minmax(160px, 1.2fr) minmax(100px, 0.6fr) minmax(200px, 1.6fr) 90px;
 }
@@ -3594,9 +3615,9 @@ $charge-list-slate: #6b6f76;
   gap: 12px;
   margin-bottom: 16px;
   padding: 14px;
-  border: 1px solid #bae6fd;
+  border: 1px solid var(--brand-border);
   border-radius: 8px;
-  background: #f0f9ff;
+  background: #ffffff;
 }
 
 .settle-actions {
@@ -3625,9 +3646,9 @@ $charge-list-slate: #6b6f76;
 .settle-result {
   margin: 12px 0 0;
   padding: 10px 12px;
-  border: 1px solid #bae6fd;
+  border: 1px solid var(--brand-border);
   border-radius: 8px;
-  background: #f0f9ff;
+  background: #ffffff;
   font-size: 13px;
 }
 
@@ -3697,13 +3718,9 @@ $charge-list-slate: #6b6f76;
 .gold-card {
   padding: 22px 24px;
   margin-bottom: 16px;
-  border: 1px solid #e7e1d7;
+  border: 1px solid var(--brand-border);
   border-radius: 10px;
   background: #ffffff;
-}
-
-.gold-card.muted {
-  background: #fdfcf9;
 }
 
 .gold-card .panel-header {
@@ -4086,9 +4103,10 @@ $charge-list-slate: #6b6f76;
 .charge-list-view .selected-customer,
 .refund-view .selected-customer {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: baseline;
-  gap: 10px;
-  max-width: none;
+  gap: 4px 10px;
+  max-width: 100%;
   margin: 0 0 10px 0;
   padding: 8px 14px;
   border: 0;
@@ -4099,6 +4117,9 @@ $charge-list-slate: #6b6f76;
 .charge-list-view .selected-customer strong,
 .refund-view .selected-customer strong {
   color: var(--brand-gold-strong);
+  font-size: 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .charge-list-view .selected-customer span,
@@ -4218,8 +4239,8 @@ $charge-list-slate: #6b6f76;
 }
 
 .simple-row.row-clickable:hover {
-  background: #f0f9ff;
-  border-color: #bae6fd;
+  background: #fbf8f1;
+  border-color: var(--brand-border);
 }
 
 .simple-row.header .sortable {
@@ -4359,6 +4380,7 @@ $charge-list-slate: #6b6f76;
   min-width: 0;
   height: 44px;
   box-sizing: border-box;
+  line-height: 42px;
 }
 
 .compact-date-separator {
@@ -5165,6 +5187,24 @@ $charge-list-slate: #6b6f76;
     gap: 0;
   }
 
+  .office-row.header {
+    display: none;
+  }
+
+  .office-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
+  .backup-row.header {
+    display: none;
+  }
+
+  .backup-row {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+
   .stacked-field.amount-cell {
     text-align: left;
   }
@@ -5184,6 +5224,11 @@ $charge-list-slate: #6b6f76;
 }
 
 @media (max-width: 720px) {
+  .charge-list-view .selected-customer,
+  .refund-view .selected-customer {
+    border-radius: 12px;
+  }
+
   .relation-mode-selector {
     grid-template-columns: 1fr;
   }

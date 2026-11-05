@@ -1121,6 +1121,7 @@ export class AppComponent implements OnInit, AfterViewInit {
         this.searchEfficiencyBonuses();
         break;
       case 'tax-bureau-notices':
+        this.loadStaffSupportData();
         this.loadTaxBureauNoticePreview();
         break;
       case 'data-backup':
@@ -3770,13 +3771,6 @@ export class AppComponent implements OnInit, AfterViewInit {
           group.items.forEach((item) => selected.add(this.taxNoticeItemKey(item)))
         );
         this.taxNoticeSelected.set(selected);
-        const info = { ...this.taxNoticeBranchInfo() };
-        preview.groups.forEach((group) => {
-          if (!info[group.branchId]) {
-            info[group.branchId] = this.loadStoredTaxNoticeBranchInfo(group.branchId);
-          }
-        });
-        this.taxNoticeBranchInfo.set(info);
       },
       error: () => {
         this.taxNoticeLoading.set(false);
@@ -3826,7 +3820,19 @@ export class AppComponent implements OnInit, AfterViewInit {
   }
 
   taxNoticeBranchInfoFor(branchId: number): TaxBureauNoticeBranchInfo {
-    return this.taxNoticeBranchInfo()[branchId] ?? { branchId, taxOfficeName: '', responsiblePerson: '', contactPhone: '' };
+    const existing = this.taxNoticeBranchInfo()[branchId];
+    if (existing) {
+      return existing;
+    }
+    // 受文者／負責人優先直接帶入分館資料裡已填的值；分館沒填的話才讓使用者自己輸入。
+    const branch = this.branches().find((item) => item.branch_id === branchId);
+    const stored = this.loadStoredTaxNoticeBranchInfo(branchId);
+    return {
+      branchId,
+      taxOfficeName: branch?.tax_office_name?.trim() || stored.taxOfficeName,
+      responsiblePerson: branch?.responsible_person?.trim() || stored.responsiblePerson,
+      contactPhone: stored.contactPhone
+    };
   }
 
   updateTaxNoticeBranchInfo(branchId: number, field: 'taxOfficeName' | 'responsiblePerson' | 'contactPhone', value: string): void {
