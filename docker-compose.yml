@@ -19,6 +19,10 @@ services:
 
   backend:
     build: ./backend
+    # 執行階段基底映像（eclipse-temurin:17-jre-alpine）沒有 arm64 版本，
+    # 在 Apple Silicon Mac 上本機建置時明確指定用 amd64（emulate），跟部署的
+    # VM 架構一致；對 x86 機器（VM）本身是原生架構，沒有影響。
+    platform: linux/amd64
     restart: unless-stopped
     depends_on:
       mysql:
@@ -35,6 +39,11 @@ services:
       CMS_SMTP_USERNAME: ${CMS_SMTP_USERNAME:-}
       CMS_SMTP_PASSWORD: ${CMS_SMTP_PASSWORD:-}
       CMS_PASSWORD_RESET_FROM: ${CMS_PASSWORD_RESET_FROM:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REFRESH_TOKEN: ${GOOGLE_OAUTH_REFRESH_TOKEN:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
+      GOOGLE_DRIVE_BACKUP_FOLDER_ID: ${GOOGLE_DRIVE_BACKUP_FOLDER_ID:-}
     volumes:
       - uploads-data:/app/uploads
     mem_limit: 420m
