@@ -849,7 +849,7 @@
                               <div><span>合作夥伴</span><strong>{{ value(contract, 'partner_staff_name') }}</strong></div>
                               <div><span>來源</span><strong>{{ value(contract, 'source_text') }}</strong></div>
                               <div><span>分館</span><strong>{{ value(contract, 'branch_name') }}</strong></div>
-                              <div><span>房號</span><strong>{{ value(contract, 'office_no') }}</strong></div>
+                              <div><span>辦公室號碼</span><strong>{{ value(contract, 'office_no') }}</strong></div>
                               <div><span>付款週期</span><strong>{{ value(contract, 'payment_months') }}</strong></div>
                               <div><span>起租日期</span><strong>{{ value(contract, 'start_date_text') }}</strong></div>
                               <div><span>到期日期</span><strong>{{ value(contract, 'end_date_text') }}</strong></div>
@@ -1732,7 +1732,7 @@
                     </div>
                     <form class="customer-form" (ngSubmit)="saveOfficeEdit()">
                       <label>
-                        房號
+                        辦公室號碼
                         <input name="editOfficeNo" [(ngModel)]="officeEditForm.officeNo" />
                       </label>
                       <label>
@@ -1757,7 +1757,7 @@
                 }
                 <div class="simple-table">
                   <div class="simple-row header office-row">
-                    <span>房號</span>
+                    <span>辦公室號碼</span>
                     <span>分館</span>
                     <span>備註</span>
                     <span>操作</span>
@@ -1784,13 +1784,13 @@
                 <div class="panel-header">
                   <div>
                     <h2>新增辦公室</h2>
-                    <p>填寫分館、房號與備註。</p>
+                    <p>填寫分館、辦公室號碼與備註。</p>
                   </div>
                 </div>
                 <div class="rent-edit-panel">
                   <form class="customer-form" (ngSubmit)="createOffice()">
                     <label>
-                      房號
+                      辦公室號碼
                       <input name="newOfficeNo" [(ngModel)]="newOfficeForm.officeNo" />
                     </label>
                     <label>
